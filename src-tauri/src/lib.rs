@@ -12,6 +12,7 @@
 //! The workspace explorer is local and works regardless of the server.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,9 @@ use store::{
     autonomy_rank, AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem,
     WorkStore,
 };
+
+#[cfg(test)]
+mod gateway_tests;
 
 /// Deserialize an `i64` that may arrive either as a JSON number or as a
 /// JSON string. The Loom gateway (grpc-gateway / protojson) encodes every
@@ -636,6 +640,21 @@ struct ModelListResponse {
 struct ProviderListResponse {
     #[serde(default)]
     providers: Vec<ProviderEntry>,
+    #[serde(default, alias = "activeProvider")]
+    active_provider: String,
+}
+
+impl ProviderListResponse {
+    fn into_entries(self) -> Vec<ProviderEntry> {
+        self.providers
+            .into_iter()
+            .map(|mut entry| {
+                entry.active =
+                    !self.active_provider.is_empty() && entry.name == self.active_provider;
+                entry
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -648,6 +667,101 @@ struct GetArtifactResponse {
 struct GetArtifactContentResponse {
     #[serde(default)]
     content: serde_json::Value,
+    #[serde(default)]
+    encoding: String,
+}
+
+impl GetArtifactContentResponse {
+    fn decode(self) -> Result<String, String> {
+        // protojson always base64-encodes bytes. The handler adds an inner
+        // base64 layer for binary content, so that encoding needs two decodes.
+        let encoded = match self.content {
+            serde_json::Value::String(content) => content,
+            // protojson omits an empty bytes field.
+            serde_json::Value::Null => String::new(),
+            _ => return Err("Artifact content had an unexpected format.".into()),
+        };
+        let mut bytes = decode_base64(&encoded)?;
+        if self.encoding == "base64" {
+            let inner = std::str::from_utf8(&bytes)
+                .map_err(|e| format!("Invalid inner base64 content: {e}"))?;
+            bytes = decode_base64(inner)?;
+        }
+        match String::from_utf8(bytes) {
+            Ok(text) => Ok(text),
+            Err(error) => Ok(encode_base64(error.as_bytes())),
+        }
+    }
+}
+
+// RFC 4648 standard alphabet, as emitted by Go's protojson and artifact handler.
+const BASE64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn decode_base64(encoded: &str) -> Result<Vec<u8>, String> {
+    let invalid = || "Artifact content contains invalid base64.".to_string();
+    if encoded.len() % 4 != 0 {
+        return Err(invalid());
+    }
+    let mut bytes = Vec::with_capacity(encoded.len() / 4 * 3);
+    for (index, chunk) in encoded.as_bytes().chunks_exact(4).enumerate() {
+        let padding = if chunk[2] == b'=' {
+            2
+        } else if chunk[3] == b'=' {
+            1
+        } else {
+            0
+        };
+        if padding > 0 && (chunk[3] != b'=' || (index + 1) * 4 != encoded.len()) {
+            return Err(invalid());
+        }
+        let mut value = 0u32;
+        for (position, byte) in chunk.iter().enumerate() {
+            let digit = if position >= 4 - padding {
+                0
+            } else {
+                BASE64_ALPHABET
+                    .iter()
+                    .position(|candidate| candidate == byte)
+                    .ok_or_else(invalid)? as u32
+            };
+            value = (value << 6) | digit;
+        }
+        // Padding must not hide nonzero trailing bits.
+        if (padding == 2 && value & 0xffff != 0) || (padding == 1 && value & 0xff != 0) {
+            return Err(invalid());
+        }
+        bytes.push((value >> 16) as u8);
+        if padding < 2 {
+            bytes.push((value >> 8) as u8);
+        }
+        if padding == 0 {
+            bytes.push(value as u8);
+        }
+    }
+    Ok(bytes)
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let value = ((chunk[0] as u32) << 16)
+            | ((chunk.get(1).copied().unwrap_or(0) as u32) << 8)
+            | chunk.get(2).copied().unwrap_or(0) as u32;
+        encoded.push(BASE64_ALPHABET[(value >> 18) as usize] as char);
+        encoded.push(BASE64_ALPHABET[((value >> 12) & 63) as usize] as char);
+        encoded.push(if chunk.len() > 1 {
+            BASE64_ALPHABET[((value >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            BASE64_ALPHABET[(value & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    encoded
 }
 
 #[derive(Debug, Deserialize)]
@@ -665,29 +779,29 @@ pub struct SessionDetail {
     pub name: String,
     #[serde(default)]
     pub backend: String,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "createdAt", deserialize_with = "de_i64")]
     pub created_at: i64,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "updatedAt", deserialize_with = "de_i64")]
     pub updated_at: i64,
     #[serde(default)]
     pub state: String,
-    #[serde(default, deserialize_with = "de_i64")]
-    pub total_cost_usd: i64,
-    #[serde(default)]
+    #[serde(default, alias = "totalCostUsd")]
+    pub total_cost_usd: f64,
+    #[serde(default, alias = "conversationCount")]
     pub conversation_count: i32,
     #[serde(default)]
-    pub metadata: std::collections::HashMap<String, String>,
+    pub metadata: HashMap<String, String>,
     #[serde(default, alias = "agentId")]
     pub agent_id: String,
     #[serde(default, alias = "agentName")]
     pub agent_name: String,
-    #[serde(default)]
+    #[serde(default, alias = "startedAt")]
     pub started_at: String,
-    #[serde(default)]
+    #[serde(default, alias = "endedAt")]
     pub ended_at: String,
-    #[serde(default)]
+    #[serde(default, alias = "metadataStatus")]
     pub metadata_status: String,
-    #[serde(default)]
+    #[serde(default, alias = "artifactCount")]
     pub artifact_count: i32,
 }
 
@@ -698,9 +812,9 @@ pub struct ToolDefinition {
     pub name: String,
     #[serde(default)]
     pub description: String,
-    #[serde(default)]
+    #[serde(default, alias = "inputSchemaJson")]
     pub input_schema_json: String,
-    #[serde(default)]
+    #[serde(default, alias = "outputSchemaJson")]
     pub output_schema_json: String,
     #[serde(default)]
     pub backends: Vec<String>,
@@ -721,11 +835,11 @@ pub struct Trace {
     pub id: String,
     #[serde(default, alias = "sessionId")]
     pub session_id: String,
-    #[serde(default)]
+    #[serde(default, alias = "rootSpan")]
     pub root_span: Option<TraceSpan>,
     #[serde(default)]
     pub spans: Vec<TraceSpan>,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "totalDurationMs", deserialize_with = "de_i64")]
     pub total_duration_ms: i64,
 }
 
@@ -734,20 +848,20 @@ pub struct Trace {
 pub struct TraceSpan {
     #[serde(default)]
     pub id: String,
-    #[serde(default)]
+    #[serde(default, alias = "parentId")]
     pub parent_id: String,
     #[serde(default)]
     pub name: String,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "startTimeUs", deserialize_with = "de_i64")]
     pub start_time_us: i64,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "endTimeUs", deserialize_with = "de_i64")]
     pub end_time_us: i64,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "durationUs", deserialize_with = "de_i64")]
     pub duration_us: i64,
     #[serde(default)]
     pub status: String,
     #[serde(default)]
-    pub attributes: std::collections::HashMap<String, String>,
+    pub attributes: HashMap<String, String>,
 }
 
 /// An LLM model (GET /v1/models).
@@ -761,19 +875,19 @@ pub struct ModelInfo {
     pub provider: String,
     #[serde(default)]
     pub capabilities: Vec<String>,
-    #[serde(default)]
+    #[serde(default, alias = "contextWindow")]
     pub context_window: i32,
-    #[serde(default)]
+    #[serde(default, alias = "costPer1mInputUsd")]
     pub cost_per_1m_input_usd: f64,
-    #[serde(default)]
+    #[serde(default, alias = "costPer1mOutputUsd")]
     pub cost_per_1m_output_usd: f64,
     #[serde(default)]
     pub available: bool,
-    #[serde(default)]
+    #[serde(default, alias = "maxOutputTokens")]
     pub max_output_tokens: i32,
-    #[serde(default)]
+    #[serde(default, alias = "isReasoning")]
     pub is_reasoning: bool,
-    #[serde(default)]
+    #[serde(default, alias = "showInDropdown")]
     pub show_in_dropdown: bool,
 }
 
@@ -783,23 +897,33 @@ pub struct ProviderEntry {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
-    pub model: String,
-    #[serde(default)]
+    pub config: LLMConfig,
+    /// Derived from ListProvidersResponse.active_provider, never from an entry.
+    #[serde(skip_deserializing)]
     pub active: bool,
+}
+
+/// Provider fields used by the inspector from the nested LLMConfig message.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LLMConfig {
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub model: String,
 }
 
 /// Artifact stats (GET /v1/artifacts/stats).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactStats {
-    #[serde(default)]
+    #[serde(default, alias = "totalFiles")]
     pub total_files: i32,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "totalSizeBytes", deserialize_with = "de_i64")]
     pub total_size_bytes: i64,
-    #[serde(default)]
+    #[serde(default, alias = "userFiles")]
     pub user_files: i32,
-    #[serde(default)]
+    #[serde(default, alias = "generatedFiles")]
     pub generated_files: i32,
-    #[serde(default)]
+    #[serde(default, alias = "deletedFiles")]
     pub deleted_files: i32,
 }
 
@@ -807,7 +931,61 @@ pub struct ArtifactStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     #[serde(default)]
-    pub config: std::collections::HashMap<String, String>,
+    pub name: String,
+    pub network: Option<NetworkConfig>,
+    pub tls: Option<TlsConfig>,
+    pub behavior: Option<ServerBehavior>,
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+    pub storage: Option<ServerStorageConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkConfig {
+    #[serde(default, alias = "grpcAddress")]
+    pub grpc_address: String,
+    #[serde(default, alias = "httpAddress")]
+    pub http_address: String,
+    #[serde(default, alias = "httpEnabled")]
+    pub http_enabled: bool,
+    #[serde(default, alias = "reflectionEnabled")]
+    pub reflection_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerBehavior {
+    #[serde(default, alias = "maxConcurrentRequests")]
+    pub max_concurrent_requests: i32,
+    #[serde(default, alias = "requestTimeoutSeconds")]
+    pub request_timeout_seconds: i32,
+    #[serde(default, alias = "gracefulShutdown")]
+    pub graceful_shutdown: bool,
+    #[serde(default, alias = "shutdownTimeoutSeconds")]
+    pub shutdown_timeout_seconds: i32,
+    #[serde(default, alias = "corsEnabled")]
+    pub cors_enabled: bool,
+    #[serde(default, alias = "corsAllowedOrigins")]
+    pub cors_allowed_origins: Vec<String>,
+}
+
+/// Only the storage backend is shown; connection credentials stay out of the UI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerStorageConfig {
+    #[serde(default)]
+    pub backend: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct StorageStatusResponse {
+    status: StorageStatus,
 }
 
 /// Storage status (GET /v1/server/storage).
@@ -818,7 +996,9 @@ pub struct StorageStatus {
     #[serde(default)]
     pub healthy: bool,
     #[serde(default)]
-    pub detail: String,
+    pub error: String,
+    #[serde(default, alias = "latencyMs", deserialize_with = "de_i64")]
+    pub latency_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1271,7 +1451,7 @@ async fn list_providers() -> Result<Vec<ProviderEntry>, String> {
         .map_err(|e| e.to_string())??;
     let resp: ProviderListResponse =
         serde_json::from_value(value).map_err(|e| format!("Unexpected providers response: {e}"))?;
-    Ok(resp.providers)
+    Ok(resp.into_entries())
 }
 
 /// Switch the LLM model for a session (POST /v1/sessions/{session_id}:switch-model).
@@ -1348,18 +1528,7 @@ async fn get_artifact_content(
         .map_err(|e| e.to_string())??;
     let resp: GetArtifactContentResponse =
         serde_json::from_value(value).map_err(|e| format!("Unexpected artifact content response: {e}"))?;
-    // content is bytes; try UTF-8 first, fall back to base64 decode
-    match resp.content {
-        serde_json::Value::String(s) => Ok(s),
-        serde_json::Value::Array(bytes) => {
-            let b: Vec<u8> = bytes
-                .into_iter()
-                .filter_map(|v| v.as_u64().map(|n| n as u8))
-                .collect();
-            String::from_utf8(b).map_err(|e| format!("Artifact content is not valid UTF-8: {e}"))
-        }
-        _ => Err("Artifact content had an unexpected format.".to_string()),
-    }
+    resp.decode()
 }
 
 /// Search artifacts (GET /v1/artifacts:search).
@@ -1404,7 +1573,9 @@ async fn get_storage_status() -> Result<StorageStatus, String> {
     let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/storage", None))
         .await
         .map_err(|e| e.to_string())??;
-    serde_json::from_value(value).map_err(|e| format!("Unexpected storage status response: {e}"))
+    let resp: StorageStatusResponse = serde_json::from_value(value)
+        .map_err(|e| format!("Unexpected storage status response: {e}"))?;
+    Ok(resp.status)
 }
 
 #[tauri::command]

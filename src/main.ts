@@ -1944,7 +1944,7 @@ function renderInspectorProviders() {
     const name = document.createElement("strong");
     name.textContent = p.name;
     const model = document.createElement("span");
-    model.textContent = p.model;
+    model.textContent = [p.config.provider, p.config.model].filter(Boolean).join(" · ");
     const active = document.createElement("span");
     active.className = p.active ? "provider-active" : "provider-inactive";
     active.textContent = p.active ? "active" : "inactive";
@@ -1987,7 +1987,7 @@ function renderInspectorServerConfig() {
   const section = document.getElementById("inspector-server-config");
   const content = document.getElementById("inspector-server-config-content");
   if (!section || !content) return;
-  if (!serverConfig || Object.keys(serverConfig.config).length === 0) {
+  if (!serverConfig) {
     section.hidden = true;
     return;
   }
@@ -1995,7 +1995,37 @@ function renderInspectorServerConfig() {
   content.innerHTML = "";
   const dl = document.createElement("dl");
   dl.className = "config-list";
-  for (const [k, v] of Object.entries(serverConfig.config) as [string, string][]) {
+  const rows: [string, string][] = [];
+  const enabled = (value: boolean) => value ? "Enabled" : "Disabled";
+  if (serverConfig.name) rows.push(["Name", serverConfig.name]);
+  if (serverConfig.network) {
+    const network = serverConfig.network;
+    if (network.grpc_address) rows.push(["gRPC address", network.grpc_address]);
+    if (network.http_address) rows.push(["HTTP address", network.http_address]);
+    rows.push(["HTTP gateway", enabled(network.http_enabled)]);
+    rows.push(["gRPC reflection", enabled(network.reflection_enabled)]);
+  }
+  if (serverConfig.tls) {
+    rows.push(["TLS", enabled(serverConfig.tls.enabled)]);
+    if (serverConfig.tls.mode) rows.push(["TLS mode", serverConfig.tls.mode]);
+  }
+  if (serverConfig.behavior) {
+    const behavior = serverConfig.behavior;
+    rows.push(["Max concurrent requests", String(behavior.max_concurrent_requests)]);
+    rows.push(["Request timeout (s)", String(behavior.request_timeout_seconds)]);
+    rows.push(["Graceful shutdown", enabled(behavior.graceful_shutdown)]);
+    rows.push(["Shutdown timeout (s)", String(behavior.shutdown_timeout_seconds)]);
+    rows.push(["CORS", enabled(behavior.cors_enabled)]);
+    if (behavior.cors_allowed_origins.length) {
+      rows.push(["CORS allowed origins", behavior.cors_allowed_origins.join(", ")]);
+    }
+  }
+  if (serverConfig.storage?.backend) rows.push(["Storage backend", serverConfig.storage.backend]);
+  for (const [key, value] of Object.entries(serverConfig.metadata)) {
+    rows.push([`Metadata: ${key}`, value]);
+  }
+  section.hidden = rows.length === 0;
+  for (const [k, v] of rows) {
     const dt = document.createElement("dt");
     dt.textContent = k;
     const dd = document.createElement("dd");
@@ -2021,8 +2051,11 @@ function renderInspectorStorageStatus() {
   const backend = document.createElement("p");
   backend.textContent = `Backend: ${storageStatus.backend}`;
   const detail = document.createElement("p");
-  detail.textContent = storageStatus.detail || "—";
-  content.append(status, backend, detail);
+  detail.textContent = storageStatus.error;
+  detail.hidden = !storageStatus.error;
+  const latency = document.createElement("p");
+  latency.textContent = `Health check latency: ${storageStatus.latency_ms} ms`;
+  content.append(status, backend, latency, detail);
 }
 
 function renderSteps(steps: CollabStep[]) {

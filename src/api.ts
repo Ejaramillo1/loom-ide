@@ -298,7 +298,7 @@ export interface ModelInfo {
 /// A named LLM provider (GET /v1/providers).
 export interface ProviderEntry {
   name: string;
-  model: string;
+  config: { provider: string; model: string };
   active: boolean;
 }
 
@@ -313,14 +313,32 @@ export interface ArtifactStats {
 
 /// Server configuration (GET /v1/server/config).
 export interface ServerConfig {
-  config: Record<string, string>;
+  name: string;
+  network: {
+    grpc_address: string;
+    http_address: string;
+    http_enabled: boolean;
+    reflection_enabled: boolean;
+  } | null;
+  tls: { enabled: boolean; mode: string } | null;
+  behavior: {
+    max_concurrent_requests: number;
+    request_timeout_seconds: number;
+    graceful_shutdown: boolean;
+    shutdown_timeout_seconds: number;
+    cors_enabled: boolean;
+    cors_allowed_origins: string[];
+  } | null;
+  metadata: Record<string, string>;
+  storage: { backend: string } | null;
 }
 
 /// Storage backend status (GET /v1/server/storage).
 export interface StorageStatus {
   backend: string;
   healthy: boolean;
-  detail: string;
+  error: string;
+  latency_ms: number;
 }
 
 const IN_TAURI =
