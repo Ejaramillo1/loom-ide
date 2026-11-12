@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Loom — Human-Centered Development Environment</title>
+  </head>
+  <body>
+    <div id="app">
+      <div class="scene">
+        <!-- ======================= Top bar ======================= -->
+        <header class="topbar">
+          <div class="brand">
+            <span class="brand-ring" aria-hidden="true"></span>
+            <span class="brand-name">Loom</span>
+          </div>
+          <div class="vdiv" aria-hidden="true"></div>
+          <p class="objective">
+            <span class="obj-label">You are working on:</span>
+            <strong id="objective-title">Understand why enabling agent memory increases latency.</strong>
+          </p>
+          <div class="top-right">
+            <span class="status-pill" id="loom-status" title="Loom server status">
+              <span class="status-dot"></span><span id="loom-status-text">Demonstration</span>
+            </span>
+            <button class="icon-btn" id="search-btn" title="Search" aria-label="Search">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
+              </svg>
+            </button>
+            <span class="dot-sep" aria-hidden="true">·</span>
+            <span class="avatar" title="You" aria-label="You"></span>
+          </div>
+        </header>
+
+        <!-- ======================= Main ======================= -->
+        <div class="main">
+          <!-- Left icon rail -->
+          <nav class="rail" aria-label="Sections">
+            <button class="rail-btn active" data-section="work" title="Work">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
+                <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+              </svg>
+            </button>
+            <button class="rail-btn" data-section="code" title="Code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 6L3 12l5 6" /><path d="M16 6l5 6-5 6" />
+              </svg>
+            </button>
+            <button class="rail-btn" data-section="agents" title="Agents">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2.5L21 7.5v9l-9 5-9-5v-9l9-5z" /><path d="M12 12L21 7.5" /><path d="M12 12v9.5" /><path d="M12 12L3 7.5" />
+              </svg>
+            </button>
+            <button class="rail-btn" data-section="evidence" title="Evidence">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-8" /><path d="M22 20H2" />
+              </svg>
+            </button>
+            <button class="rail-btn" data-section="layers" title="Layers">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" />
+              </svg>
+            </button>
+            <button class="rail-btn more" data-section="more" title="More">
+              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+            </button>
+          </nav>
+
+          <!-- Left column: Work list + chat -->
+          <aside class="left-col">
+            <section class="work-panel" aria-label="Work">
+              <h2>Work</h2>
+              <ul id="work-list" class="work-list"></ul>
+              <form id="new-work-form" class="new-work">
+                <span aria-hidden="true">+</span>
+                <input id="new-work-input" type="text" placeholder="New work…" aria-label="New work" autocomplete="off" />
+              </form>
+            </section>
+
+            <section class="chat-panel glass" aria-label="Chat with Loom">
+              <header class="chat-head">
+                <span class="chat-ava" aria-hidden="true"></span>
+                <span class="chat-title">Loom</span>
+                <button class="icon-btn small" title="More options" aria-label="More options">···</button>
+              </header>
+              <div id="chat-log" class="chat-log"></div>
+              <form id="chat-form" class="chat-input">
+                <input id="chat-text" type="text" placeholder="Message Loom…" aria-label="Message Loom" autocomplete="off" />
+                <button type="submit" class="send-btn" aria-label="Send">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4 20-7z" />
+                  </svg>
+                </button>
+              </form>
+            </section>
+          </aside>
+
+          <!-- Center: sphere / mode views -->
+          <section class="center" aria-label="Workspace">
+            <div id="view-experiment" class="view view-experiment">
+              <canvas id="sphere" aria-label="Loom sphere — agent activity"></canvas>
+              <p class="sphere-caption" id="sphere-caption">At rest — nothing is running.</p>
+            </div>
+
+            <div id="view-work" class="view view-work" hidden>
+              <div class="mode-head">
+                <h2>Work</h2>
+                <p>Your work — structured, saved, resumable.</p>
+              </div>
+              <div id="work-cards" class="work-cards"></div>
+            </div>
+
+            <div id="view-code" class="view view-code" hidden>
+              <div class="mode-head">
+                <h2>Code</h2>
+                <p>Notes — design philosophy. A plain editor with saving; syntax colour and a full file tree are honest limits of this desktop prototype.</p>
+              </div>
+              <div class="code-panel glass">
+                <div class="code-tabs">
+                  <span class="code-tab active">Notes — design philosophy</span>
+                  <span class="code-tab">Scratch notes</span>
+                </div>
+                <textarea id="code-editor" spellcheck="false" aria-label="Notes editor"></textarea>
+                <div class="code-foot">
+                  <button id="code-save" class="btn">Save</button>
+                  <button id="code-ask" class="btn ghost">Ask Loom about this</button>
+                  <span id="code-saved" class="saved-note" hidden>Saved ✓</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Right column: collaboration + attention -->
+          <aside class="right-col">
+            <h2 class="right-title">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" />
+              </svg>
+              Agentic Collaboration
+            </h2>
+            <section class="collab-panel glass" aria-label="Agentic collaboration">
+              <header class="agent-head">
+                <span class="agent-ring" aria-hidden="true"></span>
+                <div class="agent-id">
+                  <strong>Research Agent</strong>
+                  <span id="agent-status">Experimenting · 3/5</span>
+                </div>
+                <button class="pause-btn" id="agent-pause" title="Pause agent" aria-label="Pause agent">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+                    <rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" />
+                  </svg>
+                </button>
+              </header>
+              <p class="demo-note" id="demo-note" hidden>Demonstration data — the Loom server does not expose step-by-step execution here yet.</p>
+              <ul id="collab-steps" class="steps"></ul>
+            </section>
+
+            <section class="attention-panel glass" aria-label="Attention">
+              <header class="att-head">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2 12h4l3-8 4 16 3-8h6" />
+                </svg>
+                <span>Attention</span>
+                <span class="att-count"><span class="att-dot"></span><span id="att-count">2</span></span>
+              </header>
+              <ul id="attention-list" class="attention-list"></ul>
+            </section>
+          </aside>
+        </div>
+
+        <!-- Bottom segmented nav -->
+        <nav class="mode-nav glass" aria-label="Mode">
+          <button class="mode-btn" data-mode="code">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M8 6L3 12l5 6" /><path d="M16 6l5 6-5 6" />
+            </svg>
+            Code
+          </button>
+          <button class="mode-btn active" data-mode="experiment">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 3h6" /><path d="M10 3v5.5L4.5 18a2.4 2.4 0 0 0 2.1 3.5h10.8a2.4 2.4 0 0 0 2.1-3.5L14 8.5V3" /><path d="M7.5 14h9" />
+            </svg>
+            Experiment
+          </button>
+          <button class="mode-btn" data-mode="work">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" />
+            </svg>
+            Work
+          </button>
+        </nav>
+
+        <!-- Water reflection band -->
+        <div class="water" aria-hidden="true"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
