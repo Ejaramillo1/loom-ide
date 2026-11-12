@@ -171,6 +171,7 @@ fn set_work_status(id: String, status: String, state: State<AppState>) -> Result
 fn set_work_autonomy(
     id: String,
     autonomy: String,
+    justification: Option<String>,
     state: State<AppState>,
 ) -> Result<WorkItem, String> {
     let requested = autonomy_rank(&autonomy)
@@ -186,6 +187,7 @@ fn set_work_autonomy(
         .into_iter()
         .find(|w| w.id == id)
         .ok_or_else(|| format!("Unknown work item: {id}"))?;
+    let current_rank = autonomy_rank(&item.autonomy).unwrap_or(0);
     if let Some(intent_id) = &item.intent_id {
         if let Some(intent) = intents.get(intent_id) {
             let allowed = autonomy_rank(&intent.autonomy).unwrap_or(2);
@@ -196,6 +198,21 @@ fn set_work_autonomy(
                 ));
             }
         }
+    }
+    // Moving down (tightening) is always instant; moving up requires
+    // justification — the system never grants itself more freedom.
+    if requested > current_rank {
+        let just = justification
+            .as_deref()
+            .unwrap_or("")
+            .trim();
+        if just.is_empty() {
+            return Err(format!(
+                "Raising autonomy from \"{}\" to \"{}\" requires a justification — why is more freedom needed?",
+                item.autonomy, autonomy
+            ));
+        }
+        let _ = work.autonomy_history_push(&id, &autonomy, justification.as_deref().map(|s| s.trim().to_string()));
     }
     work.set_autonomy(&id, &autonomy)
 }
@@ -286,13 +303,30 @@ fn update_intent(
     why: Option<String>,
     autonomy: Option<String>,
     status: Option<String>,
+    justification: Option<String>,
     state: State<AppState>,
 ) -> Result<Intent, String> {
-    state
+    let updated = state
         .intents
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .update(&id, statement, why, autonomy, status)
+        .update(&id, statement, why, autonomy.clone(), status, justification)?;
+    // If the intent's autonomy was lowered, tighten any work items that
+    // now exceed the new ceiling. Moving down is instant — no justification
+    // needed, and the system does it automatically to preserve the rule.
+    if let Some(a) = &autonomy {
+        let new_rank = autonomy_rank(a).unwrap_or(0);
+        let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        for item in work.items() {
+            if item.intent_id.as_deref() == Some(&id) {
+                let item_rank = autonomy_rank(&item.autonomy).unwrap_or(0);
+                if item_rank > new_rank {
+                    let _ = work.set_autonomy(&item.id, a);
+                }
+            }
+        }
+    }
+    Ok(updated)
 }
 
 #[tauri::command]

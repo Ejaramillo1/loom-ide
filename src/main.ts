@@ -69,6 +69,7 @@ import {
   type WorkItem,
   type EvidenceKind,
   evidenceKindLabel,
+  type AutonomyChange,
 } from "./api";
 import { Sphere, type SphereState } from "./sphere";
 
@@ -680,6 +681,177 @@ function readCriterionRows(list: HTMLUListElement): AcceptanceCriterion[] {
 /** Inline editor in the header area (no modal): statement, why,
     acceptance criteria, autonomy, status, plus the read-only version
     history and delete (edit mode only). */
+
+/** ------------------------------------------------------------------
+    Autonomy Dial — the visible dial for human agency.
+
+    Moving down (tightening) is always instant.
+    Moving up (loosening) requires a justification — the system never
+    grants itself more freedom.
+
+    Returns a container with:
+      - current level badge (prominent)
+      - four level buttons (manual → assisted → collaborative → delegated)
+      - clicking a lower level applies immediately
+      - clicking a higher level opens a justification dialog
+      - autonomy history listed below
+    ------------------------------------------------------------------ */
+
+function buildAutonomyDial(
+  current: IntentAutonomy,
+  onChange: (next: IntentAutonomy, justification: string | null) => void,
+  history: AutonomyChange[] = [],
+): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "autonomy-dial";
+
+  // Current level badge — prominent.
+  const currentBadge = document.createElement("div");
+  currentBadge.className = "autonomy-current";
+  const currentLabel = document.createElement("span");
+  currentLabel.className = "autonomy-current-label";
+  currentLabel.textContent = "Autonomy";
+  const currentValue = document.createElement("span");
+  currentValue.className = `autonomy-current-value level-${current}`;
+  currentValue.textContent = `L${AUTONOMY_LEVELS[current].level} · ${AUTONOMY_LEVELS[current].label}`;
+  currentBadge.append(currentLabel, currentValue);
+  root.append(currentBadge);
+
+  // Level buttons.
+  const levels = document.createElement("div");
+  levels.className = "autonomy-levels";
+  const levelKeys = Object.keys(AUTONOMY_LEVELS) as IntentAutonomy[];
+  for (const level of levelKeys) {
+    const entry = AUTONOMY_LEVELS[level];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `autonomy-btn level-${level}` + (level === current ? " active" : "");
+    btn.setAttribute("aria-label", `Set autonomy to ${entry.label}`);
+    btn.textContent = `L${entry.level}`;
+    btn.title = entry.label;
+    const rank = entry.level - 1;
+    const currentRank = AUTONOMY_LEVELS[current].level - 1;
+    btn.addEventListener("click", () => {
+      if (rank === currentRank) return; // no change
+      if (rank < currentRank) {
+        // Moving down: instant, no justification needed.
+        onChange(level, null);
+      } else {
+        // Moving up: open justification dialog.
+        openAutonomyDialog({
+          kind: "work", // set by caller
+          id: "",
+          current,
+          target: level,
+          onApply: (justification) => {
+            onChange(level, justification);
+            closeAutonomyDialog();
+          },
+        });
+      }
+    });
+    levels.append(btn);
+  }
+  root.append(levels);
+
+  // Autonomy history.
+  if (history.length > 0) {
+    const histLabel = document.createElement("p");
+    histLabel.className = "autonomy-hist-label";
+    histLabel.textContent = "Autonomy changes";
+    root.append(histLabel);
+    const histList = document.createElement("ul");
+    histList.className = "autonomy-hist-list";
+    for (const change of history.slice().reverse()) {
+      const li = document.createElement("li");
+      li.className = "autonomy-hist-item";
+      const fromTo = document.createElement("span");
+      fromTo.className = "autonomy-hist-from-to";
+      fromTo.textContent = `L${AUTONOMY_LEVELS[change.from as IntentAutonomy].level} → L${AUTONOMY_LEVELS[change.to as IntentAutonomy].level}`;
+      const when = document.createElement("span");
+      when.className = "autonomy-hist-when";
+      when.textContent = change.at > 0 ? new Date(change.at * 1000).toLocaleString() : "—";
+      li.append(fromTo, when);
+      if (change.justification) {
+        const just = document.createElement("span");
+        just.className = "autonomy-hist-just";
+        just.textContent = `"${change.justification}"`;
+        li.append(just);
+      }
+      histList.append(li);
+    }
+    root.append(histList);
+  }
+
+  return root;
+}
+
+/** Open the autonomy justification dialog (for raising autonomy). */
+function openAutonomyDialog(d: {
+  kind: "intent" | "work";
+  id: string;
+  current: IntentAutonomy;
+  target: IntentAutonomy;
+  onApply: (justification: string | null) => void;
+}): void {
+  const overlay = document.createElement("div");
+  overlay.id = "autonomy-dialog-overlay";
+  overlay.className = "autonomy-dialog-overlay";
+  const currentEntry = AUTONOMY_LEVELS[d.current];
+  const targetEntry = AUTONOMY_LEVELS[d.target];
+  overlay.innerHTML = `
+    <div class="autonomy-dialog">
+      <h3>Increase autonomy?</h3>
+      <p>
+        Moving from L${currentEntry.level} · ${currentEntry.label}
+        to L${targetEntry.level} · ${targetEntry.label}
+        gives the system more freedom. Why is more autonomy needed?
+      </p>
+      <textarea id="autonomy-justification" rows="3" placeholder="Enter your justification…"></textarea>
+      <div class="autonomy-dialog-actions">
+        <button type="button" class="btn ghost" id="autonomy-dialog-cancel">Cancel</button>
+        <button type="button" class="btn" id="autonomy-dialog-apply">Apply</button>
+      </div>
+    </div>
+  `;
+  document.body.append(overlay);
+  const ta = overlay.querySelector("#autonomy-justification") as HTMLTextAreaElement;
+  ta.focus();
+  overlay.querySelector("#autonomy-dialog-cancel")!.addEventListener("click", () => {
+    closeAutonomyDialog();
+  });
+  overlay.querySelector("#autonomy-dialog-apply")!.addEventListener("click", () => {
+    d.onApply(ta.value.trim() || null);
+    closeAutonomyDialog();
+  });
+  // Close on overlay click (but not on inner dialog clicks).
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeAutonomyDialog();
+  });
+}
+
+/** Close the autonomy justification dialog. */
+function closeAutonomyDialog(): void {
+  const overlay = document.getElementById("autonomy-dialog-overlay");
+  if (overlay) overlay.remove();
+}
+
+/** Build the autonomy select field for the intent editor (replaced by dial). */
+function buildAutonomyField(
+  current: IntentAutonomy,
+  history: AutonomyChange[],
+  onChange: (next: IntentAutonomy, justification: string | null) => void,
+): HTMLElement {
+  const field = document.createElement("div");
+  field.className = "intent-field";
+  const label = document.createElement("span");
+  label.className = "intent-field-label";
+  label.textContent = "Autonomy";
+  field.append(label);
+  field.append(buildAutonomyDial(current, onChange, history));
+  return field;
+}
+
 function buildIntentEditor(
   editor: { mode: "create" } | { mode: "edit"; id: string },
 ): HTMLElement {
@@ -750,22 +922,28 @@ function buildIntentEditor(
 
   const row = document.createElement("div");
   row.className = "intent-editor-row";
-  const autonomyField = document.createElement("label");
-  autonomyField.className = "intent-field inline";
-  const autonomyLabelEl = document.createElement("span");
-  autonomyLabelEl.className = "intent-field-label";
-  autonomyLabelEl.textContent = "Autonomy";
-  const autonomySelect = document.createElement("select");
-  autonomySelect.className = "autonomy-select";
-  autonomySelect.setAttribute("aria-label", "Autonomy level");
-  for (const level of ["manual", "assisted", "collaborative", "delegated"] as const) {
-    const opt = document.createElement("option");
-    opt.value = level;
-    opt.textContent = autonomyLabel(level);
-    if ((existing?.autonomy ?? "collaborative") === level) opt.selected = true;
-    autonomySelect.append(opt);
-  }
-  autonomyField.append(autonomyLabelEl, autonomySelect);
+  const autonomyField = buildAutonomyField(
+    existing?.autonomy ?? "collaborative",
+    existing?.autonomy_history ?? [],
+    async (next, justification) => {
+      try {
+        await updateIntent({
+          id: existing!.id,
+          statement: statementInput.value.trim() || existing!.statement,
+          why: whyInput.value.trim() || null,
+          autonomy: next,
+          status: statusSelect.value as "active" | "done",
+          justification,
+        });
+        // Re-render with updated history.
+        intentEditor = { mode: "edit", id: existing!.id };
+        renderIntentHeader();
+      } catch (err) {
+        showFieldError(error, err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+  row.append(autonomyField);
   const statusField = document.createElement("label");
   statusField.className = "intent-field inline";
   const statusLabelEl = document.createElement("span");
@@ -856,8 +1034,10 @@ function buildIntentEditor(
     save.disabled = true;
     const criteria = readCriterionRows(accList);
     const why = whyInput.value.trim();
-    const autonomy = autonomySelect.value as IntentAutonomy;
     const status = statusSelect.value as "active" | "done";
+    // For new intents, autonomy defaults to "collaborative" (set by the
+    // backend). For edits, autonomy is changed via the dial directly.
+    const autonomy = editor.mode === "create" ? "collaborative" : existing!.autonomy;
     try {
       if (editor.mode === "create") {
         const created = await createIntent({ statement, why, acceptance: criteria, autonomy });
@@ -872,7 +1052,6 @@ function buildIntentEditor(
           id: existing.id,
           statement,
           why,
-          autonomy,
           status,
         });
         // Acceptance is a separate call and never bumps the version.
@@ -975,17 +1154,30 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
   const label = document.createElement("label");
   label.className = "ctl-label";
   label.textContent = "Planning mode:";
-  const autonomy = document.createElement("select");
-  autonomy.className = "autonomy-select";
-  autonomy.setAttribute("aria-label", `Planning mode for ${item.title}`);
-  for (const level of ["manual", "assisted", "collaborative", "delegated"] as const) {
-    const opt = document.createElement("option");
-    opt.value = level;
-    opt.textContent = capitalize(level);
-    if (item.autonomy === level) opt.selected = true;
-    autonomy.append(opt);
-  }
-  label.append(autonomy);
+  label.append(
+    buildAutonomyDial(
+      item.autonomy as IntentAutonomy,
+      async (next, justification) => {
+        clearFieldError(error);
+        try {
+          const updated = await setWorkAutonomy(
+            item.id,
+            next as WorkItem["autonomy"],
+            justification,
+          );
+          workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
+          renderWorkList();
+          renderWorkDetail();
+        } catch (err) {
+          showFieldError(
+            error,
+            `Could not save the planning mode: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      },
+      item.autonomy_history ?? [],
+    ),
+  );
 
   const stateBtn = document.createElement("button");
   stateBtn.type = "button";
@@ -997,23 +1189,6 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
   const error = document.createElement("span");
   error.className = "field-error";
   error.hidden = true;
-
-  autonomy.addEventListener("change", async () => {
-    clearFieldError(error);
-    const previous = item.autonomy;
-    try {
-      const updated = await setWorkAutonomy(item.id, autonomy.value as WorkItem["autonomy"]);
-      workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
-      renderWorkList();
-      renderWorkDetail();
-    } catch (err) {
-      autonomy.value = previous;
-      showFieldError(
-        error,
-        `Could not save the planning mode: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  });
 
   stateBtn.addEventListener("click", async () => {
     clearFieldError(error);

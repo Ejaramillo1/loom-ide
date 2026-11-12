@@ -40,6 +40,9 @@ pub struct WorkItem {
     /// none (they are unaffected by intent autonomy rules).
     #[serde(default)]
     pub intent_id: Option<String>,
+    /// History of autonomy changes for this work item, oldest first.
+    #[serde(default)]
+    pub autonomy_history: Vec<AutonomyChange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,6 +85,17 @@ fn default_intent_status() -> String {
 
 fn default_intent_version() -> u32 {
     1
+}
+
+/// A record of an autonomy change: from what level, to what level,
+/// with optional justification (required when raising).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutonomyChange {
+    pub from: String,
+    pub to: String,
+    /// Required when raising autonomy (loosening). Optional when lowering.
+    pub justification: Option<String>,
+    pub at: i64,
 }
 
 /// One acceptance criterion: what "done" means for an intent.
@@ -129,6 +143,10 @@ pub struct Intent {
     /// Snapshots of previous versions, oldest first.
     #[serde(default)]
     pub history: Vec<IntentVersion>,
+    /// History of autonomy changes, oldest first. Each entry records the
+    /// from/to levels and any justification (required when raising).
+    #[serde(default)]
+    pub autonomy_history: Vec<AutonomyChange>,
     #[serde(default)]
     pub created_at: i64,
     #[serde(default)]
@@ -311,6 +329,7 @@ impl IntentStore {
             status: default_intent_status(),
             version: default_intent_version(),
             history: Vec::new(),
+            autonomy_history: Vec::new(),
             created_at: now,
             updated_at: now,
         };
@@ -334,6 +353,7 @@ impl IntentStore {
         why: Option<String>,
         autonomy: Option<String>,
         status: Option<String>,
+        justification: Option<String>,
     ) -> Result<Intent, String> {
         // Validate everything before mutating anything.
         let statement = statement.map(|s| s.trim().to_string());
@@ -383,7 +403,32 @@ impl IntentStore {
         }
         if let Some(a) = &autonomy {
             if *a != intent.autonomy {
+                // Moving down (tightening) is always instant; moving up
+                // (loosening) requires justification — the system never
+                // grants itself more freedom.
+                let old_rank = autonomy_rank(&intent.autonomy).unwrap_or(0);
+                let new_rank = autonomy_rank(a).unwrap_or(0);
+                if new_rank > old_rank {
+                    let just = justification
+                        .as_deref()
+                        .unwrap_or("")
+                        .trim();
+                    if just.is_empty() {
+                        return Err(format!(
+                            "Raising autonomy from \"{}\" to \"{}\" requires a justification — why is more freedom needed?",
+                            intent.autonomy, a
+                        ));
+                    }
+                }
                 content_changed = true;
+                intent.autonomy_history.push(AutonomyChange {
+                    from: intent.autonomy.clone(),
+                    to: a.clone(),
+                    justification: justification
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty()),
+                    at: now_unix_secs(),
+                });
             }
         }
         let status_changed = match &status {
@@ -607,6 +652,7 @@ impl WorkStore {
             success_criteria: Vec::new(),
             artifact_ids: Vec::new(),
             intent_id,
+            autonomy_history: Vec::new(),
         };
         self.items.insert(0, item.clone());
         self.save()?;
@@ -709,5 +755,27 @@ impl WorkStore {
         let out = item.clone();
         self.save()?;
         Ok(out)
+    }
+
+    /// Push an autonomy change record onto a work item's history.
+    pub fn autonomy_history_push(
+        &mut self,
+        id: &str,
+        to: &str,
+        justification: Option<String>,
+    ) -> Result<(), String> {
+        let item = self
+            .items
+            .iter_mut()
+            .find(|w| w.id == id)
+            .ok_or_else(|| format!("Unknown work item: {id}"))?;
+        let from = item.autonomy.clone();
+        item.autonomy_history.push(AutonomyChange {
+            from,
+            to: to.to_string(),
+            justification,
+            at: now_unix_secs(),
+        });
+        Ok(())
     }
 }

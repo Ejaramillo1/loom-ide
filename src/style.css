@@ -815,6 +815,178 @@ body.chat-open .left-col .left-chat {
   height: 34px;
 }
 
+/* ---------- Autonomy Dial (visible dial for human agency) ---------- */
+
+.autonomy-dial {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.autonomy-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.autonomy-current-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.autonomy-current-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.autonomy-levels {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.autonomy-btn {
+  width: 44px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.autonomy-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+}
+
+.autonomy-btn.active {
+  background: #fff;
+  color: var(--ink);
+  border-color: var(--agent-deep);
+  box-shadow: 0 0 0 2px rgba(106, 145, 204, 0.2);
+}
+
+.level-manual { color: var(--muted); }
+.level-assisted { color: var(--muted); }
+.level-collaborative { color: var(--agent-deep); }
+.level-delegated { color: var(--attention-deep); }
+
+/* Autonomy history. */
+.autonomy-hist-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.autonomy-hist-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.autonomy-hist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+}
+
+.autonomy-hist-from-to {
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 60px;
+}
+
+.autonomy-hist-when {
+  color: var(--muted);
+  font-size: 10.5px;
+  margin-left: auto;
+}
+
+.autonomy-hist-just {
+  color: var(--agent-deep);
+  font-style: italic;
+  margin-left: 8px;
+}
+
+/* Autonomy justification dialog. */
+.autonomy-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(41, 39, 37, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.autonomy-dialog {
+  background: var(--reading);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: 24px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: var(--shadow-overlay);
+}
+
+.autonomy-dialog h3 {
+  font-size: 16px;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+
+.autonomy-dialog p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  margin: 0 0 16px;
+}
+
+.autonomy-dialog textarea {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+  resize: vertical;
+  margin-bottom: 16px;
+  font-family: inherit;
+}
+
+.autonomy-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ---------- Button ---------- */
 .btn {
   padding: 8px 16px;
   border-radius: var(--radius-control);

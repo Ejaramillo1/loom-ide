@@ -7,6 +7,23 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+/// The four autonomy levels, least to most permissive. Mirrors the backend.
+export const AUTONOMY_LEVELS: IntentAutonomy[] = [
+  "manual",
+  "assisted",
+  "collaborative",
+  "delegated",
+];
+
+/// A record of an autonomy change: from what level, to what level,
+/// with optional justification (required when raising).
+export interface AutonomyChange {
+  from: string;
+  to: string;
+  justification: string | null;
+  at: number;
+}
+
 export interface WorkItem {
   id: string;
   title: string;
@@ -23,6 +40,8 @@ export interface WorkItem {
   intent_id?: string | null;
   success_criteria?: string[];
   artifact_ids?: string[];
+  /// History of autonomy changes for this work item, oldest first.
+  autonomy_history?: AutonomyChange[];
 }
 
 export interface AcceptanceCriterion {
@@ -51,6 +70,8 @@ export interface Intent {
   history: IntentVersion[];
   created_at: number;
   updated_at: number;
+  /// History of autonomy changes, oldest first.
+  autonomy_history: AutonomyChange[];
 }
 
 export interface IntentsList {
@@ -389,6 +410,7 @@ function createLocalIntent(
     status: "active",
     version: 1,
     history: [],
+    autonomy_history: [],
     created_at: now,
     updated_at: now,
   };
@@ -456,6 +478,7 @@ export async function setWorkStatus(
 export async function setWorkAutonomy(
   id: string,
   autonomy: WorkItem["autonomy"],
+  justification?: string | null,
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
     const items = localWorkItems().map((w) =>
@@ -464,7 +487,7 @@ export async function setWorkAutonomy(
     saveLocalWorkItems(items);
     return items.find((w) => w.id === id)!;
   }
-  return invoke<WorkItem>("set_work_autonomy", { id, autonomy });
+  return invoke<WorkItem>("set_work_autonomy", { id, autonomy, justification });
 }
 
 export async function setWorkSession(
@@ -513,6 +536,7 @@ export async function updateIntent(args: {
   why?: string | null;
   autonomy?: IntentAutonomy | null;
   status?: "active" | "done" | null;
+  justification?: string | null;
 }): Promise<Intent> {
   if (!IN_TAURI) {
     const list = localIntents();
@@ -549,6 +573,28 @@ export async function updateIntent(args: {
       updated.version = current.version + 1;
       updated.updated_at = nowUnix();
     }
+    // Autonomy history: record the change with justification when raising.
+    if (args.autonomy != null && args.autonomy !== current.autonomy) {
+      const oldRank = AUTONOMY_LEVELS.indexOf(current.autonomy);
+      const newRank = AUTONOMY_LEVELS.indexOf(args.autonomy);
+      if (newRank > oldRank) {
+        const just = args.justification?.trim();
+        if (!just) {
+          throw new Error(
+            `Raising autonomy from "${current.autonomy}" to "${args.autonomy}" requires a justification — why is more freedom needed?`,
+          );
+        }
+      }
+      updated.autonomy_history = [
+        ...(current.autonomy_history ?? []),
+        {
+          from: current.autonomy,
+          to: args.autonomy,
+          justification: args.justification?.trim() || null,
+          at: nowUnix(),
+        },
+      ];
+    }
     updated.statement = newStatement;
     updated.why = newWhy;
     updated.autonomy = newAutonomy;
@@ -566,6 +612,7 @@ export async function updateIntent(args: {
     why: args.why ?? null,
     autonomy: args.autonomy ?? null,
     status: args.status ?? null,
+    justification: args.justification ?? null,
   });
 }
 
