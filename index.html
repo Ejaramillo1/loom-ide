@@ -33,6 +33,9 @@
             <button class="header-btn" id="context-toggle" type="button" aria-controls="right-col" aria-expanded="false">
               Context
             </button>
+            <button class="header-btn" id="chat-toggle" type="button" aria-controls="chat-panel" aria-expanded="false">
+              Conversation
+            </button>
             <span class="status-pill" id="loom-status" title="Loom server status">
               <span class="status-dot"></span><span id="loom-status-text">Checking Loom…</span>
             </span>
@@ -50,7 +53,7 @@
 
         <!-- ======================= Main (row 2) ======================= -->
         <div class="main">
-          <!-- Left pane: work catalogue + Conversation (always live) -->
+          <!-- Left pane: work catalogue + Conversation (on demand) -->
           <aside class="left-col" id="left-col" aria-label="Work catalogue">
             <section class="work-panel" aria-label="Work">
               <div class="pane-head">
@@ -65,9 +68,10 @@
               </form>
             </section>
 
-            <!-- Conversation: always visible below the work list, never a
-                 drawer or a tab. The input is always there, ready to type. -->
-            <section class="chat-panel left-chat" aria-label="Conversation">
+            <!-- Conversation: on demand below the work list, never a
+                 drawer or a tab. Closed by default; the Conversation
+                 toggle in the header opens it. -->
+            <section class="chat-panel left-chat" id="chat-panel" aria-label="Conversation">
               <div class="pane-head">
                 <h2>Conversation</h2>
                 <button class="icon-btn small" id="chat-menu-btn" type="button" title="More options" aria-label="More options">···</button>
@@ -187,7 +191,7 @@
           </section>
 
           <!-- Right inspector: Context only (the chat lives in the
-               left column now, always visible). -->
+               left column, opened on demand). -->
           <aside class="right-col" id="right-col" aria-label="Inspector">
             <div class="pane-head">
               <h2>Context</h2>

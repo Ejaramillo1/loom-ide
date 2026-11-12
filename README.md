@@ -20,10 +20,10 @@ whitespace.
 
 Three rows, no absolute positioning:
 
-- **Header (~56px)** — current objective, Work and Context toggles,
+- **Header (~56px)** — current objective, Work, Context, and Conversation toggles,
   a search input that filters the work list, and the Loom status pill.
 - **Main (flexible)** — icon rail (48px), work catalogue (~260px)
-  with the Conversation always live below the work list, center floor
+  with the Conversation available on demand below the work list, center floor
   (min ~520px), right inspector (~280px, Context only).
 - **Footer (~56px)** — the mode switcher, in normal flow:
   **Experiment · Work · Code · Agents · Evidence · Layers · Artifacts**.
@@ -35,9 +35,10 @@ scrolling bodies and never clip.
 the right inspector behind the labeled **Context** toggle. < ~1100px
 also moves the left catalogue behind the **Work** toggle. The
 Conversation is not a drawer or a tab: it lives in the left column
-directly below the work list, and it is always visible and ready to
-type — in every mode, at every width. Below ~1100px it travels with
-the left drawer, so it is reached through the **Work** toggle there.
+directly below the work list, opened on demand with the
+**Conversation** toggle in the header and closed by default, in every
+mode, at every width. Below ~1100px it travels with the left drawer,
+so opening it there opens the drawer too.
 An unsent message is saved as you type, so it survives closing the
 drawer and restarting the app. Drawers close with Escape and return
 focus to the control that opened them. Drawers span only the main
@@ -72,7 +73,8 @@ transparent; that was a misunderstanding and was reverted.)
   notes, saved locally, both starting empty) plus the workspace
   explorer: a read-only tree over the Loom workspace directory
   (`~/.loom`), click a text file to open it. "Ask about this note"
-  sends the note to Loom through the always-visible Conversation.
+  sends the note to Loom through the Conversation (opening it first
+  if it is closed).
 - **Agents** — the agents from `GET /v1/agents`: name, status dot,
   uptime, active sessions, message count. Empty ("No agents running")
   only when the server reports none.

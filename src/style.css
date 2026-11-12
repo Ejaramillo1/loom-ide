@@ -333,6 +333,14 @@ select {
   font-weight: 600;
 }
 
+/* The Conversation toggle is always shown: the panel is closed by
+   default at every width, so the toggle is the way to open it. (The
+   Work and Context toggles only appear at drawer widths, where the
+   panels they control hide behind a drawer.) */
+#chat-toggle {
+  display: inline-flex;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -562,17 +570,23 @@ select {
   color: var(--muted);
 }
 
-/* ---------- Conversation, always live in the left column ---------- */
+/* ---------- Conversation, on demand in the left column ---------- */
 /* The chat sits directly below the work list, not in a drawer or a
-   tab: it is always rendered and the input is always ready to type.
-   The work list keeps the flexible share of the column; the chat keeps
-   a fixed share (clamped so it stays usable at short window heights). */
-.left-col .work-panel {
+   tab. It is closed by default, so the work list takes the full
+   column while it is closed. When open, the work list keeps a fixed
+   share of the column and the chat keeps the rest (clamped so it
+   stays usable at short window heights). */
+.left-col .left-chat {
+  display: none;
+}
+
+body.chat-open .left-col .work-panel {
   flex: 0 0 36%;
   min-height: 120px;
 }
 
-.left-col .left-chat {
+body.chat-open .left-col .left-chat {
+  display: flex;
   flex: 1 1 auto;
   min-height: 320px;
   border-top: 1px solid rgba(221, 213, 208, 0.7);

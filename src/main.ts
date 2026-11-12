@@ -1699,7 +1699,7 @@ function updateScrim() {
 }
 
 // The inspector holds Context only now. The chat lives in the left
-// column and is always visible, so there is no tab to switch and no
+// column and opens on demand, so there is no tab to switch and no
 // inspector state for the conversation.
 function openInspector(opener?: HTMLElement) {
   if (opener) lastFocus = opener;
@@ -1722,13 +1722,59 @@ function closeInspector() {
   }
 }
 
-/** The chat lives in the left column and is always visible; this just
-    brings it into view (opening the left drawer on narrow screens) and
-    focuses the message box. */
-function focusChat(from?: HTMLElement) {
-  if (isLeftDrawer()) {
-    openLeftDrawer(from);
+// ---------------------------------------------------------------------------
+// Conversation panel — on demand, closed by default
+// ---------------------------------------------------------------------------
+
+const CHAT_OPEN_KEY = "loom-ide-tauri:chat-open";
+
+/** Whether the Conversation panel is open. Closed by default: the work
+    objects are the record, and the chat is a way to create and discuss
+    them, not the place they live. */
+let chatOpen = false;
+
+function loadChatOpen() {
+  try {
+    const raw = localStorage.getItem(CHAT_OPEN_KEY);
+    if (!raw) return;
+    const value = JSON.parse(raw) as unknown;
+    if (typeof value === "boolean") chatOpen = value;
+  } catch {
+    /* ignore */
   }
+}
+
+function saveChatOpen() {
+  try {
+    localStorage.setItem(CHAT_OPEN_KEY, JSON.stringify(chatOpen));
+  } catch {
+    /* ignore */
+  }
+}
+
+function applyChatOpen() {
+  document.body.classList.toggle("chat-open", chatOpen);
+  $("#chat-toggle").setAttribute("aria-expanded", String(chatOpen));
+}
+
+/** Show or hide the Conversation panel in place. Opening it on narrow
+    screens also opens the left drawer, so the panel is reachable there.
+    Hiding it changes nothing about the conversation: the session
+    binding, the per-work cache, and the draft are all untouched. */
+function setChatOpen(open: boolean, opener?: HTMLElement) {
+  chatOpen = open;
+  saveChatOpen();
+  applyChatOpen();
+  if (open && isLeftDrawer()) {
+    openLeftDrawer(opener);
+  }
+}
+
+/** The chat lives in the left column and opens on demand; this opens
+    it (and the left drawer on narrow screens) and focuses the message
+    box. */
+function focusChat(from?: HTMLElement) {
+  setChatOpen(true, from);
   ($("#chat-text") as HTMLInputElement).focus();
 }
 
@@ -3282,6 +3328,11 @@ async function init() {
       }
     }
   });
+  $("#chat-toggle").addEventListener("click", (e) => {
+    // A real toggle at every width: the Conversation panel is closed by
+    // default, so this is the way to open it on wide screens too.
+    setChatOpen(!chatOpen, e.currentTarget as HTMLElement);
+  });
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
   $("#right-close").addEventListener("click", () => closeInspector());
   $("#scrim").addEventListener("click", () => closeLeftDrawer());
@@ -3389,6 +3440,8 @@ async function init() {
   renderInspectorContext();
 
   // Workspace views.
+  loadChatOpen();
+  applyChatOpen();
   loadLayers();
   applyLayerClasses();
   renderAgents();
