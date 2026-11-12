@@ -272,6 +272,73 @@ to `http://localhost:5006`; start the Loom server first
 npm run dev      # http://localhost:1420
 ```
 
+## Tests and automated checks
+
+After the local hook is enabled, commits run the fast checks below.
+GitHub Actions (`.github/workflows/ci.yml`) runs the full offline suite
+on pushes and pull requests targeting `tauri-prototype`.
+
+**On commit** — the pre-commit hook (`.githooks/pre-commit`) runs the
+fast gates for the files you actually changed: `npm run build` when
+frontend files changed, `cargo fmt --check` + `cargo check` when Rust
+files changed. Docs-only changes pass straight through. One-time setup
+per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Bypass in a genuine emergency only (`git commit --no-verify`); CI still
+runs on push.
+
+**On push** — CI runs both jobs: frontend (`npm ci`, `npm run build`,
+`npm test`) and backend (`cargo fmt --check`, `cargo clippy`, `cargo
+check`, `cargo test`). Clippy currently reports without failing the
+build: the tree has existing production style lints (including collapsible
+`if let` blocks and `&PathBuf` signatures). Once those are fixed,
+tighten it to `cargo clippy -- -D warnings`.
+
+**Run the gates by hand:**
+
+```bash
+npm test                                   # frontend tests (vitest)
+npm run build                              # typecheck + bundle
+cargo test --manifest-path src-tauri/Cargo.toml --locked --lib   # Rust tests
+cargo clippy --manifest-path src-tauri/Cargo.toml --locked
+cargo fmt --check --manifest-path src-tauri/Cargo.toml
+```
+
+**What the tests cover.** Rust: the three stores (work, intent,
+experiment) and their rules (version bumps and snapshots, the autonomy
+dial's raise-needs-justification and intent ceiling, delete-refuses-
+when-referenced, atomic save/load round trips, corrupt-file handling),
+plus the Loom wire format (gateway-shaped JSON: camelCase keys, int64
+as strings, bytes as base64) for every response struct. Frontend: the
+`api.ts` pure helpers and the localStorage fallback, which mirrors the
+core autonomy rules. Workspace tests cover real file/folder creation,
+collisions, dotfiles, invalid names and destination containment in isolated
+temporary directories. Test fixtures are never used as application data.
+
+The browser fallback still differs from the backend in some cases: lowering
+an intent does not yet tighten its work items, and a blank intent update
+keeps the old statement instead of rejecting it. These are not parity
+guarantees made by the current suite. DOM rendering and the pending UI race
+fixes also need separate end-to-end coverage.
+
+The live gateway smoke test is ignored in normal runs because CI has no Loom
+server. To run it against an existing server on localhost:5006:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --locked --lib \
+  gateway_tests::live_gateway_responses_parse -- --ignored --exact
+```
+
+It checks configuration, storage health, models, tools, providers, and session
+detail when a session exists. Populated provider activation, trace shapes and
+both artifact-content encoding layers have offline contract tests; the live
+smoke test does not exercise workflow execution, chat, traces or artifact
+content retrieval.
+
 ## Project layout
 
 ```

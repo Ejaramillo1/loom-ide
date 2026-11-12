@@ -1,0 +1,46 @@
+#!/bin/sh
+# Loom IDE pre-commit hook: run the fast gates for what actually changed.
+#
+# Setup (once per clone):
+#   git config core.hooksPath .githooks
+#
+# Bypass in a genuine emergency only (the CI workflow still runs on push):
+#   git commit --no-verify
+#
+# The hook is fast on purpose: it checks which files are staged and runs
+# only the relevant gates. Docs-only changes pass straight through. The
+# full test suite (including cargo test) runs in CI.
+
+set -eu
+
+changed=$(git diff --cached --name-only --diff-filter=ACMRD)
+
+frontend_changed=$(printf '%s\n' "$changed" | grep -E '^(src/|index\.html|package\.json|package-lock\.json|vite(st)?\.config\.|tsconfig)' || true)
+rust_changed=$(printf '%s\n' "$changed" | grep -E '^src-tauri/' || true)
+
+if [ -z "$frontend_changed" ] && [ -z "$rust_changed" ]; then
+  echo "pre-commit: only docs or other files changed, nothing to check."
+  exit 0
+fi
+
+fail() {
+  echo "pre-commit: FAILED — $1"
+  echo "Fix it, stage the fix, and commit again."
+  exit 1
+}
+
+if [ -n "$frontend_changed" ]; then
+  echo "pre-commit: frontend files changed — running npm run build (tsc + vite)..."
+  if [ ! -d node_modules ]; then
+    npm ci || fail "npm ci"
+  fi
+  npm run build || fail "npm run build"
+fi
+
+if [ -n "$rust_changed" ]; then
+  echo "pre-commit: Rust files changed — running cargo fmt --check and cargo check..."
+  cargo fmt --check --manifest-path src-tauri/Cargo.toml || fail "cargo fmt --check (run: cargo fmt --manifest-path src-tauri/Cargo.toml)"
+  cargo check --manifest-path src-tauri/Cargo.toml --locked || fail "cargo check"
+fi
+
+echo "pre-commit: all gates passed."

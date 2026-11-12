@@ -417,11 +417,18 @@ function createLocalIntent(
   acceptance: AcceptanceCriterion[] = [],
   autonomy?: IntentAutonomy | null,
 ): Intent {
+  // Mirror the backend: the statement is required and the level must be
+  // one of the four.
+  const trimmed = statement.trim();
+  if (trimmed === "") throw new Error("Intent statement cannot be empty");
+  if (autonomy != null && !AUTONOMY_LEVELS.includes(autonomy)) {
+    throw new Error(`Unknown autonomy level: ${autonomy}`);
+  }
   const list = localIntents();
   const now = nowUnix();
   const intent: Intent = {
     id: `intent-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-    statement: statement.trim(),
+    statement: trimmed,
     why: why?.trim() ? why.trim() : null,
     acceptance: normalizeCriteria(acceptance),
     autonomy: autonomy ?? "collaborative",
@@ -452,20 +459,28 @@ export async function addWorkItem(
   if (!IN_TAURI) {
     // Mirror the backend: no work without an intent. An explicit intent
     // wins, then the active one, then a one-line intent from the title.
+    // The work inherits the resolved intent's autonomy.
+    const list = localIntents();
     let resolvedId = intentId ?? null;
-    if (!resolvedId) {
-      const list = localIntents();
+    let resolvedAutonomy: IntentAutonomy = "collaborative";
+    if (resolvedId) {
+      const explicit = list.intents.find((i) => i.id === resolvedId);
+      if (explicit) resolvedAutonomy = explicit.autonomy;
+    } else {
       const active = list.intents.find((i) => i.id === list.active_intent_id);
-      resolvedId = active
-        ? active.id
-        : createLocalIntent(title).id;
+      if (active) {
+        resolvedId = active.id;
+        resolvedAutonomy = active.autonomy;
+      } else {
+        resolvedId = createLocalIntent(title).id;
+      }
     }
     const items = localWorkItems();
     const item: WorkItem = {
       id: `work-${Date.now()}`,
       title,
       status: "paused",
-      autonomy: "collaborative",
+      autonomy: resolvedAutonomy,
       updated_label: "Now",
       updated_at: nowUnix(),
       intent_id: resolvedId,
@@ -499,11 +514,44 @@ export async function setWorkAutonomy(
   justification?: string | null,
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
-    const items = localWorkItems().map((w) =>
-      w.id === id ? { ...w, autonomy } : w,
-    );
-    saveLocalWorkItems(items);
-    return items.find((w) => w.id === id)!;
+    // Mirror the backend command: ceiling first, then justification on
+    // raise, history recorded only when raising.
+    const items = localWorkItems();
+    const item = items.find((w) => w.id === id);
+    if (!item) throw new Error(`Unknown work item: ${id}`);
+    const requested = AUTONOMY_LEVELS.indexOf(autonomy);
+    if (requested < 0) throw new Error(`Unknown autonomy level: ${autonomy}`);
+    const list = localIntents();
+    const intent = item.intent_id
+      ? list.intents.find((i) => i.id === item.intent_id)
+      : undefined;
+    if (intent) {
+      const allowed = AUTONOMY_LEVELS.indexOf(intent.autonomy);
+      if (requested > allowed) {
+        throw new Error(
+          `Cannot raise this work item to "${autonomy}": its intent allows at most "${intent.autonomy}". Loosen the intent's autonomy first, or pick a lower level for this work item.`,
+        );
+      }
+    }
+    const currentRank = AUTONOMY_LEVELS.indexOf(item.autonomy);
+    let updated: WorkItem = { ...item, autonomy, updated_at: nowUnix() };
+    if (requested > currentRank) {
+      const just = justification?.trim();
+      if (!just) {
+        throw new Error(
+          `Raising autonomy from "${item.autonomy}" to "${autonomy}" requires a justification — why is more freedom needed?`,
+        );
+      }
+      updated = {
+        ...updated,
+        autonomy_history: [
+          ...(item.autonomy_history ?? []),
+          { from: item.autonomy, to: autonomy, justification: just, at: nowUnix() },
+        ],
+      };
+    }
+    saveLocalWorkItems(items.map((w) => (w.id === id ? updated : w)));
+    return updated;
   }
   return invoke<WorkItem>("set_work_autonomy", { id, autonomy, justification });
 }

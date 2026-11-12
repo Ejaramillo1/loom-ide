@@ -183,6 +183,7 @@ fn new_intent_id() -> String {
     format!("intent-{nanos}-{n}")
 }
 
+#[derive(Debug)]
 pub struct IntentStore {
     path: PathBuf,
     active_intent_id: Option<String>,
@@ -285,9 +286,7 @@ impl IntentStore {
     }
 
     pub fn active(&self) -> Option<Intent> {
-        self.active_intent_id
-            .as_ref()
-            .and_then(|id| self.get(id))
+        self.active_intent_id.as_ref().and_then(|id| self.get(id))
     }
 
     /// Create an intent. The statement is required and non-empty; `why`
@@ -377,11 +376,7 @@ impl IntentStore {
         // Outer None = leave unchanged; Some(None) = clear; Some(Some) = set.
         let why = why.map(|s| {
             let t = s.trim().to_string();
-            if t.is_empty() {
-                None
-            } else {
-                Some(t)
-            }
+            if t.is_empty() { None } else { Some(t) }
         });
 
         let intent = self
@@ -409,10 +404,7 @@ impl IntentStore {
                 let old_rank = autonomy_rank(&intent.autonomy).unwrap_or(0);
                 let new_rank = autonomy_rank(a).unwrap_or(0);
                 if new_rank > old_rank {
-                    let just = justification
-                        .as_deref()
-                        .unwrap_or("")
-                        .trim();
+                    let just = justification.as_deref().unwrap_or("").trim();
                     if just.is_empty() {
                         return Err(format!(
                             "Raising autonomy from \"{}\" to \"{}\" requires a justification — why is more freedom needed?",
@@ -531,6 +523,7 @@ impl IntentStore {
     }
 }
 
+#[derive(Debug)]
 pub struct WorkStore {
     path: PathBuf,
     items: Vec<WorkItem>,
@@ -777,5 +770,723 @@ impl WorkStore {
             at: now_unix_secs(),
         });
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::AtomicU64;
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    /// A fresh temp dir per test, removed on drop. Tests run in parallel
+    /// in one process, so each dir is unique (pid + tag + counter).
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new(tag: &str) -> Self {
+            let n = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join("loom-ide-tests").join(format!(
+                "{}-{}-{}",
+                std::process::id(),
+                tag,
+                n
+            ));
+            fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+
+        fn file(&self, name: &str) -> PathBuf {
+            self.path.join(name)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn acc(text: &str, done: bool) -> AcceptanceCriterion {
+        AcceptanceCriterion {
+            text: text.to_string(),
+            done,
+        }
+    }
+
+    fn work_file_json(items: serde_json::Value) -> String {
+        serde_json::to_string(&items).unwrap()
+    }
+
+    // ------------------------------------------------------------------
+    // autonomy_rank
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn autonomy_rank_orders_the_four_levels() {
+        assert_eq!(autonomy_rank("manual"), Some(0));
+        assert_eq!(autonomy_rank("assisted"), Some(1));
+        assert_eq!(autonomy_rank("collaborative"), Some(2));
+        assert_eq!(autonomy_rank("delegated"), Some(3));
+    }
+
+    #[test]
+    fn autonomy_rank_rejects_unknown_levels() {
+        assert_eq!(autonomy_rank("autonomous"), None);
+        assert_eq!(autonomy_rank(""), None);
+        assert_eq!(autonomy_rank("Manual"), None);
+    }
+
+    // ------------------------------------------------------------------
+    // WorkStore
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn work_add_starts_paused_collaborative_with_unique_ids() {
+        let dir = TempDir::new("work-add");
+        let mut store = WorkStore::load(dir.file("work.json")).unwrap();
+        let a = store.add("  Fix the thing  ".to_string(), None).unwrap();
+        let b = store
+            .add("Second".to_string(), Some("intent-1".to_string()))
+            .unwrap();
+        assert_ne!(a.id, b.id);
+        assert!(a.id.starts_with("work-"));
+        assert_eq!(a.title, "Fix the thing");
+        assert_eq!(a.status, "paused");
+        assert_eq!(a.autonomy, "collaborative");
+        assert_eq!(a.intent_id, None);
+        assert_eq!(b.intent_id.as_deref(), Some("intent-1"));
+        assert!(a.updated_at > 0);
+    }
+
+    #[test]
+    fn work_add_rejects_empty_title() {
+        let dir = TempDir::new("work-add-empty");
+        let mut store = WorkStore::load(dir.file("work.json")).unwrap();
+        assert!(store.add("".to_string(), None).is_err());
+        assert!(store.add("   ".to_string(), None).is_err());
+        assert_eq!(store.items().len(), 0);
+    }
+
+    #[test]
+    fn work_set_status_validates() {
+        let dir = TempDir::new("work-status");
+        let mut store = WorkStore::load(dir.file("work.json")).unwrap();
+        let item = store.add("T".to_string(), None).unwrap();
+        assert_eq!(
+            store.set_status(&item.id, "active").unwrap().status,
+            "active"
+        );
+        assert_eq!(
+            store.set_status(&item.id, "paused").unwrap().status,
+            "paused"
+        );
+        assert!(store.set_status(&item.id, "done").is_err());
+        assert!(store.set_status(&item.id, "").is_err());
+        assert!(store.set_status("no-such-id", "active").is_err());
+    }
+
+    #[test]
+    fn work_set_autonomy_validates_levels() {
+        let dir = TempDir::new("work-autonomy");
+        let mut store = WorkStore::load(dir.file("work.json")).unwrap();
+        let item = store.add("T".to_string(), None).unwrap();
+        for level in ["manual", "assisted", "collaborative", "delegated"] {
+            assert_eq!(store.set_autonomy(&item.id, level).unwrap().autonomy, level);
+        }
+        // L5 Autonomous is out of scope and must be rejected.
+        assert!(store.set_autonomy(&item.id, "autonomous").is_err());
+        assert!(store.set_autonomy(&item.id, "").is_err());
+        assert!(store.set_autonomy("no-such-id", "manual").is_err());
+    }
+
+    #[test]
+    fn work_set_session_sets_and_clears() {
+        let dir = TempDir::new("work-session");
+        let mut store = WorkStore::load(dir.file("work.json")).unwrap();
+        let item = store.add("T".to_string(), None).unwrap();
+        let with = store
+            .set_session(&item.id, Some("sess-1".to_string()))
+            .unwrap();
+        assert_eq!(with.session_id.as_deref(), Some("sess-1"));
+        // Whitespace-only clears, exactly like None.
+        let cleared = store
+            .set_session(&item.id, Some("   ".to_string()))
+            .unwrap();
+        assert_eq!(cleared.session_id, None);
+        let cleared2 = store.set_session(&item.id, None).unwrap();
+        assert_eq!(cleared2.session_id, None);
+    }
+
+    #[test]
+    fn work_set_success_criteria_trims_and_drops_empties() {
+        let dir = TempDir::new("work-criteria");
+        let mut store = WorkStore::load(dir.file("work.json")).unwrap();
+        let item = store.add("T".to_string(), None).unwrap();
+        let out = store
+            .set_success_criteria(
+                &item.id,
+                vec![
+                    " Done ".to_string(),
+                    "".to_string(),
+                    "   ".to_string(),
+                    "Later".to_string(),
+                ],
+            )
+            .unwrap();
+        assert_eq!(out.success_criteria, vec!["Done", "Later"]);
+    }
+
+    #[test]
+    fn work_set_artifacts_trims_and_drops_empties() {
+        let dir = TempDir::new("work-artifacts");
+        let mut store = WorkStore::load(dir.file("work.json")).unwrap();
+        let item = store.add("T".to_string(), None).unwrap();
+        let out = store
+            .set_artifacts(
+                &item.id,
+                vec![" art-1 ".to_string(), "".to_string(), "art-2".to_string()],
+            )
+            .unwrap();
+        assert_eq!(out.artifact_ids, vec!["art-1", "art-2"]);
+    }
+
+    #[test]
+    fn work_autonomy_history_push_records_from_and_to() {
+        let dir = TempDir::new("work-history");
+        let mut store = WorkStore::load(dir.file("work.json")).unwrap();
+        let item = store.add("T".to_string(), None).unwrap();
+        assert_eq!(item.autonomy, "collaborative");
+        // The push records from the item's CURRENT autonomy; the caller
+        // then applies the change (this mirrors the set_work_autonomy
+        // command: push first, set_autonomy second).
+        store
+            .autonomy_history_push(&item.id, "manual", None)
+            .unwrap();
+        store.set_autonomy(&item.id, "manual").unwrap();
+        store
+            .autonomy_history_push(
+                &item.id,
+                "delegated",
+                Some("needed for the demo".to_string()),
+            )
+            .unwrap();
+        store.set_autonomy(&item.id, "delegated").unwrap();
+        let item = store.items().into_iter().find(|w| w.id == item.id).unwrap();
+        assert_eq!(item.autonomy_history.len(), 2);
+        assert_eq!(item.autonomy_history[0].from, "collaborative");
+        assert_eq!(item.autonomy_history[0].to, "manual");
+        assert_eq!(item.autonomy_history[0].justification, None);
+        assert!(item.autonomy_history[0].at > 0);
+        assert_eq!(item.autonomy_history[1].from, "manual");
+        assert_eq!(item.autonomy_history[1].to, "delegated");
+        assert_eq!(
+            item.autonomy_history[1].justification.as_deref(),
+            Some("needed for the demo")
+        );
+        assert!(
+            store
+                .autonomy_history_push("no-such-id", "manual", None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn work_save_load_round_trip_preserves_everything() {
+        let dir = TempDir::new("work-roundtrip");
+        let path = dir.file("work.json");
+        let id;
+        {
+            let mut store = WorkStore::load(path.clone()).unwrap();
+            let item = store
+                .add("T".to_string(), Some("intent-9".to_string()))
+                .unwrap();
+            id = item.id.clone();
+            store.set_session(&id, Some("sess-7".to_string())).unwrap();
+            store
+                .set_success_criteria(&id, vec!["Done".to_string()])
+                .unwrap();
+            store.set_autonomy(&id, "manual").unwrap();
+        }
+        let store = WorkStore::load(path).unwrap();
+        let items = store.items();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, id);
+        assert_eq!(items[0].title, "T");
+        assert_eq!(items[0].intent_id.as_deref(), Some("intent-9"));
+        assert_eq!(items[0].session_id.as_deref(), Some("sess-7"));
+        assert_eq!(items[0].success_criteria, vec!["Done"]);
+        assert_eq!(items[0].autonomy, "manual");
+    }
+
+    #[test]
+    fn work_load_missing_file_starts_empty_and_creates_it() {
+        let dir = TempDir::new("work-missing");
+        let path = dir.file("work.json");
+        assert!(!path.exists());
+        let store = WorkStore::load(path.clone()).unwrap();
+        assert!(store.items().is_empty());
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn work_load_corrupt_file_moves_it_aside_and_errors() {
+        let dir = TempDir::new("work-corrupt");
+        let path = dir.file("work.json");
+        fs::write(&path, "this is not json{{{").unwrap();
+        let err = WorkStore::load(path.clone()).unwrap_err();
+        assert!(err.contains("corrupt"), "error was: {err}");
+        assert!(!path.exists(), "corrupt file must be moved aside, not kept");
+        let backup = fs::read_dir(&dir.path)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .find(|n| n.starts_with("work.json.corrupt-"));
+        assert!(backup.is_some(), "no .corrupt- backup found");
+    }
+
+    #[test]
+    fn work_load_dedups_duplicate_ids_keeping_the_first() {
+        let dir = TempDir::new("work-dedup");
+        let path = dir.file("work.json");
+        let first = serde_json::json!({
+            "id": "work-1", "title": "First", "status": "paused",
+            "autonomy": "collaborative", "updated_label": "Now", "updated_at": 10
+        });
+        let dup = serde_json::json!({
+            "id": "work-1", "title": "Duplicate", "status": "active",
+            "autonomy": "manual", "updated_label": "Now", "updated_at": 20
+        });
+        fs::write(&path, work_file_json(serde_json::json!([first, dup]))).unwrap();
+        let store = WorkStore::load(path.clone()).unwrap();
+        assert_eq!(store.items().len(), 1);
+        assert_eq!(store.items()[0].title, "First");
+        // The deduped file is written back.
+        let reloaded = WorkStore::load(path).unwrap();
+        assert_eq!(reloaded.items().len(), 1);
+    }
+
+    #[test]
+    fn work_load_legacy_item_without_new_fields_uses_defaults() {
+        let dir = TempDir::new("work-legacy");
+        let path = dir.file("work.json");
+        // Written before intents / sessions / history existed.
+        let legacy = serde_json::json!([{
+            "id": "work-old", "title": "Old", "status": "active",
+            "autonomy": "manual", "updated_label": "2h"
+        }]);
+        fs::write(&path, work_file_json(legacy)).unwrap();
+        let store = WorkStore::load(path).unwrap();
+        let item = &store.items()[0];
+        assert_eq!(item.updated_at, 0);
+        assert_eq!(item.session_id, None);
+        assert_eq!(item.intent_id, None);
+        assert!(item.success_criteria.is_empty());
+        assert!(item.autonomy_history.is_empty());
+    }
+
+    // ------------------------------------------------------------------
+    // IntentStore
+    // ------------------------------------------------------------------
+
+    fn intent_path(dir: &TempDir) -> PathBuf {
+        dir.file("intents.json")
+    }
+
+    #[test]
+    fn intent_create_sets_defaults_and_first_becomes_active() {
+        let dir = TempDir::new("intent-create");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let intent = store
+            .create(
+                "  Ship v1  ".to_string(),
+                Some("  because users need it  ".to_string()),
+                vec![acc(" Done ", false), acc("", true), acc("  ", false)],
+                None,
+            )
+            .unwrap();
+        assert_eq!(intent.statement, "Ship v1");
+        assert_eq!(intent.why.as_deref(), Some("because users need it"));
+        assert_eq!(intent.acceptance.len(), 1);
+        assert_eq!(intent.acceptance[0].text, "Done");
+        assert_eq!(intent.autonomy, "collaborative");
+        assert_eq!(intent.status, "active");
+        assert_eq!(intent.version, 1);
+        assert!(intent.history.is_empty());
+        assert!(intent.autonomy_history.is_empty());
+        assert!(intent.created_at > 0);
+        assert_eq!(store.active_id().as_deref(), Some(intent.id.as_str()));
+    }
+
+    #[test]
+    fn intent_create_rejects_empty_statement_and_unknown_autonomy() {
+        let dir = TempDir::new("intent-create-err");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        assert!(store.create("".to_string(), None, vec![], None).is_err());
+        assert!(store.create("   ".to_string(), None, vec![], None).is_err());
+        assert!(
+            store
+                .create(
+                    "Ok".to_string(),
+                    None,
+                    vec![],
+                    Some("autonomous".to_string())
+                )
+                .is_err()
+        );
+        assert_eq!(store.list().1.len(), 0);
+    }
+
+    #[test]
+    fn intent_create_second_does_not_become_active() {
+        let dir = TempDir::new("intent-create-second");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let first = store
+            .create("First".to_string(), None, vec![], None)
+            .unwrap();
+        let second = store
+            .create(
+                "Second".to_string(),
+                None,
+                vec![],
+                Some("manual".to_string()),
+            )
+            .unwrap();
+        assert_eq!(second.autonomy, "manual");
+        assert_eq!(store.active_id().as_deref(), Some(first.id.as_str()));
+    }
+
+    #[test]
+    fn intent_update_statement_bumps_version_and_snapshots() {
+        let dir = TempDir::new("intent-update");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let intent = store
+            .create("Old".to_string(), Some("why".to_string()), vec![], None)
+            .unwrap();
+        let updated = store
+            .update(&intent.id, Some("New".to_string()), None, None, None, None)
+            .unwrap();
+        assert_eq!(updated.version, 2);
+        assert_eq!(updated.statement, "New");
+        assert_eq!(updated.history.len(), 1);
+        assert_eq!(updated.history[0].version, 1);
+        assert_eq!(updated.history[0].statement, "Old");
+        assert_eq!(updated.history[0].why.as_deref(), Some("why"));
+    }
+
+    #[test]
+    fn intent_update_status_only_does_not_bump_version() {
+        let dir = TempDir::new("intent-status");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let intent = store.create("S".to_string(), None, vec![], None).unwrap();
+        let updated = store
+            .update(&intent.id, None, None, None, Some("done".to_string()), None)
+            .unwrap();
+        assert_eq!(updated.status, "done");
+        assert_eq!(updated.version, 1);
+        assert!(updated.history.is_empty());
+    }
+
+    #[test]
+    fn intent_update_noop_changes_nothing() {
+        let dir = TempDir::new("intent-noop");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let intent = store.create("S".to_string(), None, vec![], None).unwrap();
+        let same = store
+            .update(&intent.id, None, None, None, None, None)
+            .unwrap();
+        assert_eq!(same.version, 1);
+        assert!(same.history.is_empty());
+        let same2 = store
+            .update(
+                &intent.id,
+                Some("S".to_string()),
+                None,
+                Some("collaborative".to_string()),
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(same2.version, 1);
+        assert!(same2.history.is_empty());
+    }
+
+    #[test]
+    fn intent_update_why_clear_and_rejects() {
+        let dir = TempDir::new("intent-why");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let intent = store
+            .create("S".to_string(), Some("old why".to_string()), vec![], None)
+            .unwrap();
+        // Some("") clears the why; the version bumps (content changed).
+        let cleared = store
+            .update(&intent.id, None, Some("".to_string()), None, None, None)
+            .unwrap();
+        assert_eq!(cleared.why, None);
+        assert_eq!(cleared.version, 2);
+        // An empty statement is rejected and changes nothing.
+        assert!(
+            store
+                .update(&intent.id, Some("   ".to_string()), None, None, None, None)
+                .is_err()
+        );
+        assert_eq!(store.get(&intent.id).unwrap().version, 2);
+        assert!(
+            store
+                .update(
+                    &intent.id,
+                    None,
+                    None,
+                    Some("bogus".to_string()),
+                    None,
+                    None
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .update(
+                    &intent.id,
+                    None,
+                    None,
+                    None,
+                    Some("archived".to_string()),
+                    None
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .update("no-such-id", Some("x".to_string()), None, None, None, None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn intent_raise_requires_justification_lower_is_instant() {
+        let dir = TempDir::new("intent-dial");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let intent = store
+            .create("S".to_string(), None, vec![], Some("manual".to_string()))
+            .unwrap();
+        // Raising with no justification fails.
+        assert!(
+            store
+                .update(
+                    &intent.id,
+                    None,
+                    None,
+                    Some("delegated".to_string()),
+                    None,
+                    None
+                )
+                .is_err()
+        );
+        // Raising with a blank justification fails too.
+        assert!(
+            store
+                .update(
+                    &intent.id,
+                    None,
+                    None,
+                    Some("delegated".to_string()),
+                    None,
+                    Some("   ".to_string())
+                )
+                .is_err()
+        );
+        // Raising with a real justification works and records history.
+        let raised = store
+            .update(
+                &intent.id,
+                None,
+                None,
+                Some("delegated".to_string()),
+                None,
+                Some("the task is routine now".to_string()),
+            )
+            .unwrap();
+        assert_eq!(raised.autonomy, "delegated");
+        assert_eq!(raised.version, 2);
+        assert_eq!(raised.autonomy_history.len(), 1);
+        assert_eq!(raised.autonomy_history[0].from, "manual");
+        assert_eq!(raised.autonomy_history[0].to, "delegated");
+        assert_eq!(
+            raised.autonomy_history[0].justification.as_deref(),
+            Some("the task is routine now")
+        );
+        // Lowering is instant, no justification needed, history recorded
+        // with no justification.
+        let lowered = store
+            .update(
+                &intent.id,
+                None,
+                None,
+                Some("manual".to_string()),
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(lowered.autonomy, "manual");
+        assert_eq!(lowered.autonomy_history.len(), 2);
+        assert_eq!(lowered.autonomy_history[1].from, "delegated");
+        assert_eq!(lowered.autonomy_history[1].to, "manual");
+        assert_eq!(lowered.autonomy_history[1].justification, None);
+    }
+
+    #[test]
+    fn intent_set_acceptance_does_not_bump_version() {
+        let dir = TempDir::new("intent-acceptance");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let intent = store
+            .create("S".to_string(), None, vec![acc("Old", false)], None)
+            .unwrap();
+        let updated = store
+            .set_acceptance(
+                &intent.id,
+                vec![acc(" New ", true), acc("", false), acc("Later", false)],
+            )
+            .unwrap();
+        assert_eq!(updated.version, 1);
+        assert!(updated.history.is_empty());
+        assert_eq!(updated.acceptance.len(), 2);
+        assert_eq!(updated.acceptance[0].text, "New");
+        assert!(updated.acceptance[0].done);
+        assert!(store.set_acceptance("no-such-id", vec![]).is_err());
+    }
+
+    #[test]
+    fn intent_set_active_switches_and_rejects_unknown() {
+        let dir = TempDir::new("intent-active");
+        let mut store = IntentStore::load(intent_path(&dir)).unwrap();
+        let first = store
+            .create("First".to_string(), None, vec![], None)
+            .unwrap();
+        let second = store
+            .create("Second".to_string(), None, vec![], None)
+            .unwrap();
+        assert_eq!(store.active_id().as_deref(), Some(first.id.as_str()));
+        store.set_active(&second.id).unwrap();
+        assert_eq!(store.active_id().as_deref(), Some(second.id.as_str()));
+        assert!(store.set_active("no-such-id").is_err());
+    }
+
+    #[test]
+    fn intent_delete_refuses_when_work_references_it() {
+        let dir = TempDir::new("intent-delete");
+        let mut intents = IntentStore::load(intent_path(&dir)).unwrap();
+        let mut work = WorkStore::load(dir.file("work.json")).unwrap();
+        let a = intents.create("A".to_string(), None, vec![], None).unwrap();
+        let b = intents.create("B".to_string(), None, vec![], None).unwrap();
+        work.add("job".to_string(), Some(a.id.clone())).unwrap();
+        let err = intents.delete(&a.id, &work).unwrap_err();
+        assert!(err.contains("1 work item"), "error was: {err}");
+        assert!(intents.get(&a.id).is_some());
+        // Unreferenced intent deletes fine.
+        assert!(intents.delete(&b.id, &work).unwrap());
+        assert!(intents.get(&b.id).is_none());
+        assert!(intents.delete("no-such-id", &work).is_err());
+    }
+
+    #[test]
+    fn intent_delete_clears_active_pointer() {
+        let dir = TempDir::new("intent-delete-active");
+        let mut intents = IntentStore::load(intent_path(&dir)).unwrap();
+        let work = WorkStore::load(dir.file("work.json")).unwrap();
+        let a = intents.create("A".to_string(), None, vec![], None).unwrap();
+        assert_eq!(intents.active_id().as_deref(), Some(a.id.as_str()));
+        intents.delete(&a.id, &work).unwrap();
+        assert_eq!(intents.active_id(), None);
+    }
+
+    #[test]
+    fn intent_save_load_round_trip_preserves_versions_and_history() {
+        let dir = TempDir::new("intent-roundtrip");
+        let path = intent_path(&dir);
+        let id;
+        {
+            let mut store = IntentStore::load(path.clone()).unwrap();
+            let intent = store
+                .create(
+                    "S".to_string(),
+                    Some("why".to_string()),
+                    vec![acc("A", false)],
+                    None,
+                )
+                .unwrap();
+            id = intent.id.clone();
+            store
+                .update(&id, Some("S2".to_string()), None, None, None, None)
+                .unwrap();
+            store
+                .update(
+                    &id,
+                    None,
+                    None,
+                    Some("delegated".to_string()),
+                    None,
+                    Some("routine now".to_string()),
+                )
+                .unwrap();
+        }
+        let store = IntentStore::load(path).unwrap();
+        let intent = store.get(&id).unwrap();
+        assert_eq!(intent.version, 3);
+        assert_eq!(intent.statement, "S2");
+        assert_eq!(intent.history.len(), 2);
+        assert_eq!(intent.history[0].statement, "S");
+        assert_eq!(intent.history[1].statement, "S2");
+        assert_eq!(intent.autonomy_history.len(), 1);
+        assert_eq!(intent.autonomy, "delegated");
+        assert_eq!(store.active_id().as_deref(), Some(id.as_str()));
+    }
+
+    #[test]
+    fn intent_load_missing_file_starts_empty_and_creates_it() {
+        let dir = TempDir::new("intent-missing");
+        let path = intent_path(&dir);
+        assert!(!path.exists());
+        let store = IntentStore::load(path.clone()).unwrap();
+        assert!(store.list().1.is_empty());
+        assert_eq!(store.active_id(), None);
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn intent_load_corrupt_file_moves_it_aside_and_errors() {
+        let dir = TempDir::new("intent-corrupt");
+        let path = intent_path(&dir);
+        fs::write(&path, "garbage{{{").unwrap();
+        let err = IntentStore::load(path.clone()).unwrap_err();
+        assert!(err.contains("corrupt"), "error was: {err}");
+        assert!(!path.exists());
+        let backup = fs::read_dir(&dir.path)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .find(|n| n.starts_with("intents.json.corrupt-"));
+        assert!(backup.is_some(), "no .corrupt- backup found");
+    }
+
+    #[test]
+    fn intent_load_dedups_and_drops_dangling_active_pointer() {
+        let dir = TempDir::new("intent-load-cleanup");
+        let path = intent_path(&dir);
+        let file = serde_json::json!({
+            "active_intent_id": "missing",
+            "intents": [
+                {"id": "i-1", "statement": "One", "version": 1},
+                {"id": "i-1", "statement": "Dupe", "version": 1},
+                {"id": "i-2", "statement": "Two", "version": 1}
+            ]
+        });
+        fs::write(&path, serde_json::to_string(&file).unwrap()).unwrap();
+        let store = IntentStore::load(path).unwrap();
+        assert_eq!(store.list().1.len(), 2);
+        assert_eq!(store.list().1[0].statement, "One");
+        assert_eq!(store.active_id(), None);
     }
 }

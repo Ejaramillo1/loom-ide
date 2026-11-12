@@ -1,0 +1,54 @@
+# Runs on every push to tauri-prototype and every pull request targeting
+# it. Two jobs: the frontend (typecheck + build + vitest) and the backend
+# (fmt + clippy + check + cargo test). A new push cancels the in-progress
+# run for the same branch.
+name: CI
+
+on:
+  push:
+    branches: [tauri-prototype]
+  pull_request:
+    branches: [tauri-prototype]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (typecheck + build + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  backend:
+    name: Backend (fmt + clippy + check + tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libssl-dev \
+            libasound2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+      # Clippy reports but does not fail the build yet: the tree carries
+      # existing style lints in production code the round-2 fixes touch.
+      # Once those are fixed, tighten this to `cargo clippy -- -D warnings`.
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --locked
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked --lib

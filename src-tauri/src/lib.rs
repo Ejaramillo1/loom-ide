@@ -24,8 +24,8 @@ mod experiment;
 use experiment::{Experiment, ExperimentStore};
 mod store;
 use store::{
-    autonomy_rank, AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem,
-    WorkStore,
+    AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem, WorkStore,
+    autonomy_rank,
 };
 
 #[cfg(test)]
@@ -180,8 +180,8 @@ fn set_work_autonomy(
     justification: Option<String>,
     state: State<AppState>,
 ) -> Result<WorkItem, String> {
-    let requested = autonomy_rank(&autonomy)
-        .ok_or_else(|| format!("Unknown autonomy level: {autonomy}"))?;
+    let requested =
+        autonomy_rank(&autonomy).ok_or_else(|| format!("Unknown autonomy level: {autonomy}"))?;
     // Lock order is ALWAYS intents first, then work (never the reverse).
     let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
     let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
@@ -208,17 +208,18 @@ fn set_work_autonomy(
     // Moving down (tightening) is always instant; moving up requires
     // justification — the system never grants itself more freedom.
     if requested > current_rank {
-        let just = justification
-            .as_deref()
-            .unwrap_or("")
-            .trim();
+        let just = justification.as_deref().unwrap_or("").trim();
         if just.is_empty() {
             return Err(format!(
                 "Raising autonomy from \"{}\" to \"{}\" requires a justification — why is more freedom needed?",
                 item.autonomy, autonomy
             ));
         }
-        let _ = work.autonomy_history_push(&id, &autonomy, justification.as_deref().map(|s| s.trim().to_string()));
+        let _ = work.autonomy_history_push(
+            &id,
+            &autonomy,
+            justification.as_deref().map(|s| s.trim().to_string()),
+        );
     }
     work.set_autonomy(&id, &autonomy)
 }
@@ -1528,8 +1529,8 @@ async fn get_artifact_content(
     let value = tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
         .await
         .map_err(|e| e.to_string())??;
-    let resp: GetArtifactContentResponse =
-        serde_json::from_value(value).map_err(|e| format!("Unexpected artifact content response: {e}"))?;
+    let resp: GetArtifactContentResponse = serde_json::from_value(value)
+        .map_err(|e| format!("Unexpected artifact content response: {e}"))?;
     resp.decode()
 }
 
@@ -1554,27 +1555,30 @@ async fn search_artifacts(query: String) -> Result<Vec<Artifact>, String> {
 /// Get artifact storage statistics (GET /v1/artifacts/stats).
 #[tauri::command]
 async fn get_artifact_stats() -> Result<ArtifactStats, String> {
-    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/artifacts/stats", None))
-        .await
-        .map_err(|e| e.to_string())??;
+    let value =
+        tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/artifacts/stats", None))
+            .await
+            .map_err(|e| e.to_string())??;
     serde_json::from_value(value).map_err(|e| format!("Unexpected artifact stats response: {e}"))
 }
 
 /// Get server configuration (GET /v1/server/config).
 #[tauri::command]
 async fn get_server_config() -> Result<ServerConfig, String> {
-    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/config", None))
-        .await
-        .map_err(|e| e.to_string())??;
+    let value =
+        tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/config", None))
+            .await
+            .map_err(|e| e.to_string())??;
     serde_json::from_value(value).map_err(|e| format!("Unexpected server config response: {e}"))
 }
 
 /// Get storage backend status (GET /v1/server/storage).
 #[tauri::command]
 async fn get_storage_status() -> Result<StorageStatus, String> {
-    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/storage", None))
-        .await
-        .map_err(|e| e.to_string())??;
+    let value =
+        tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/storage", None))
+            .await
+            .map_err(|e| e.to_string())??;
     let resp: StorageStatusResponse = serde_json::from_value(value)
         .map_err(|e| format!("Unexpected storage status response: {e}"))?;
     Ok(resp.status)
@@ -1903,4 +1907,124 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------------------
+    // de_i64: the gateway sends every int64 as a JSON string.
+    // ------------------------------------------------------------------
+
+    #[derive(Debug, Deserialize)]
+    struct I64Holder {
+        #[serde(default, deserialize_with = "de_i64")]
+        v: i64,
+    }
+
+    fn parse_i64(json: &str) -> Result<i64, String> {
+        serde_json::from_str::<I64Holder>(json)
+            .map(|h| h.v)
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn de_i64_accepts_number_and_string_forms() {
+        assert_eq!(parse_i64(r#"{"v": 42}"#).unwrap(), 42);
+        assert_eq!(parse_i64(r#"{"v": "3600"}"#).unwrap(), 3600);
+        assert_eq!(parse_i64(r#"{"v": -5}"#).unwrap(), -5);
+        assert_eq!(parse_i64(r#"{"v": "-5"}"#).unwrap(), -5);
+        assert_eq!(parse_i64(r#"{"v": 0}"#).unwrap(), 0);
+    }
+
+    #[test]
+    fn de_i64_rejects_floats_bools_and_garbage() {
+        // A float must fail: this is the trap that mistyped total_cost_usd
+        // fell into (proto double read through de_i64).
+        assert!(parse_i64(r#"{"v": 0.05}"#).is_err());
+        assert!(parse_i64(r#"{"v": true}"#).is_err());
+        assert!(parse_i64(r#"{"v": "abc"}"#).is_err());
+        assert!(parse_i64(r#"{"v": null}"#).is_err());
+        // Out of range for i64.
+        assert!(parse_i64(r#"{"v": 18446744073709551615}"#).is_err());
+    }
+
+    #[test]
+    fn de_i64_missing_key_defaults_to_zero() {
+        assert_eq!(parse_i64(r#"{}"#).unwrap(), 0);
+    }
+
+    // ------------------------------------------------------------------
+    // percent_encode (ids interpolated into request paths)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn percent_encode_keeps_unreserved_and_escapes_the_rest() {
+        assert_eq!(percent_encode("abc-_.~123"), "abc-_.~123");
+        assert_eq!(percent_encode("hello world"), "hello%20world");
+        assert_eq!(percent_encode("a/b?c=d&e"), "a%2Fb%3Fc%3Dd%26e");
+        assert_eq!(percent_encode("sess:1"), "sess%3A1");
+        assert_eq!(percent_encode(""), "");
+    }
+
+    // ------------------------------------------------------------------
+    // Wire format: gateway-shaped JSON (camelCase keys, int64 as strings).
+    // Existing response structs retain their gateway compatibility. The
+    // newer response shapes and content decoding are tested in gateway_tests.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn session_parses_gateway_json_camel_and_snake_case() {
+        let camel = r#"{"id":"s-1","name":"Main","state":"active","agentId":"a-1","agentName":"Weaver","updatedAt":"1720000000","conversationCount":3}"#;
+        let s: Session = serde_json::from_str(camel).unwrap();
+        assert_eq!(s.id, "s-1");
+        assert_eq!(s.agent_id, "a-1");
+        assert_eq!(s.agent_name, "Weaver");
+        assert_eq!(s.updated_at, 1_720_000_000);
+        assert_eq!(s.conversation_count, 3);
+        // protojson also accepts the proto field names; the aliases must
+        // not break that.
+        let snake = r#"{"id":"s-1","agent_id":"a-1","agent_name":"Weaver","updated_at":"1720000000","conversation_count":3}"#;
+        let s2: Session = serde_json::from_str(snake).unwrap();
+        assert_eq!(s2.agent_id, "a-1");
+        assert_eq!(s2.updated_at, 1_720_000_000);
+    }
+
+    #[test]
+    fn agent_parses_gateway_json() {
+        let json = r#"{"id":"a-1","name":"Weaver","status":"active","uptimeSeconds":"3600","activeSessions":2,"totalMessages":"123"}"#;
+        let a: Agent = serde_json::from_str(json).unwrap();
+        assert_eq!(a.uptime_seconds, 3600);
+        assert_eq!(a.active_sessions, 2);
+        assert_eq!(a.total_messages, 123);
+    }
+
+    #[test]
+    fn workflow_execution_parses_gateway_json() {
+        let json = r#"{"id":"e-1","status":"completed","startedAt":"1720000000","completedAt":"1720000300","error":"","result":{"merged_output":"ok"}}"#;
+        let e: WorkflowExecution = serde_json::from_str(json).unwrap();
+        assert_eq!(e.started_at, 1_720_000_000);
+        assert_eq!(e.completed_at, 1_720_000_300);
+        assert!(e.result.is_some());
+    }
+
+    #[test]
+    fn artifact_parses_gateway_json() {
+        let json = r#"{"id":"art-1","name":"notes.md","purpose":"notes","source":"session","createdAt":"1720000000","sessionId":"s-1"}"#;
+        let a: Artifact = serde_json::from_str(json).unwrap();
+        assert_eq!(a.created_at, 1_720_000_000);
+        assert_eq!(a.session_id, "s-1");
+    }
+
+    #[test]
+    fn sessions_and_agents_wrappers_parse() {
+        let sessions = r#"{"sessions":[{"id":"s-1","updatedAt":"1720000000"}]}"#;
+        let r: SessionsResponse = serde_json::from_str(sessions).unwrap();
+        assert_eq!(r.sessions.len(), 1);
+        assert_eq!(r.sessions[0].updated_at, 1_720_000_000);
+        let agents = r#"{"agents":[{"id":"a-1","uptimeSeconds":"60"}]}"#;
+        let r: AgentsResponse = serde_json::from_str(agents).unwrap();
+        assert_eq!(r.agents[0].uptime_seconds, 60);
+    }
 }
