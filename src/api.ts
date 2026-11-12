@@ -181,20 +181,35 @@ export async function getAttention(): Promise<AttentionItem[]> {
 
 export async function getLoomStatus(): Promise<LoomStatus> {
   if (!IN_TAURI) {
-    return {
-      online: false,
-      url: "http://localhost:5006",
-      detail: "Not running under Tauri — showing demonstration data.",
-    };
+    try {
+      await loomRequest("/health");
+      return { online: true, url: "/api/loom", detail: "Loom HTTP service is healthy." };
+    } catch (error) {
+      return { online: false, url: "/api/loom", detail: String(error) };
+    }
   }
   return invoke<LoomStatus>("get_loom_status");
 }
 
+async function loomRequest(path: string, body?: object): Promise<any> {
+  const response = await fetch(`/api/loom${path}`, {
+    method: body ? "POST" : "GET",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(body ? 180000 : 5000),
+  });
+  const value = await response.json();
+  if (!response.ok) throw new Error(value.message || value.error || `Loom returned HTTP ${response.status}`);
+  return value;
+}
+
 export async function askLoom(message: string): Promise<ChatReply> {
-  if (!IN_TAURI) {
-    return demoReply(message);
-  }
-  return invoke<ChatReply>("ask_loom", { message });
+  if (IN_TAURI) return invoke<ChatReply>("ask_loom", { message });
+  const value = await loomRequest("/v1/weave", { query: message });
+  const text = [value.response, value.text, value.content, value.reply, value.message]
+    .find(value => typeof value === "string" && value.trim());
+  if (!text) throw new Error("Loom returned an empty response. Check its agent configuration.");
+  return { text, source: "live", card: null };
 }
 
 /** The same honest demo fallback the Rust backend uses. */

@@ -1,0 +1,15 @@
+{
+  "id": "unk_60c5a5df3ecb35e6",
+  "revision": 2,
+  "question": "What exact Loom HTTP execution, status, tracing and authentication interfaces can this app use? Existing raw /v1/weave request is unverified; retain explicit demonstration until verified.",
+  "severity": "high",
+  "domain": "general",
+  "status": "resolved",
+  "probes": [
+    "Inspect upstream README, API proto and authentication documentation",
+    "Check whether a configured local Loom service exists"
+  ],
+  "evidence_for": [],
+  "evidence_against": [],
+  "resolution": "Verified the interface from /home/ed/work/loom/proto/loom/v1/loom.proto (WeaveRequest/Response, streaming and agent routes) and pkg/server/http.go (/health and SSE). POST /v1/weave accepts query and returns text with optional session/trace IDs. Adapter covers loopback HTTP chat; streaming, session continuity, authenticated desktop deployments and execution updates remain unsupported and documented in docs/loom-integration.md. Runtime connectivity could not be established because local sockets are restricted. Demonstration labels remain visible regardless of chat health."
+}

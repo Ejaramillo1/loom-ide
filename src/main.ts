@@ -679,7 +679,7 @@ function addChatMessage(
     src.textContent =
       reply.source === "live"
         ? "Live — answered by the Loom server"
-        : "Demonstration — the Loom server is not running";
+        : "Demonstration — example conversation";
     msg.append(src);
   }
 
@@ -719,7 +719,7 @@ async function sendChat(text: string) {
     }, 3000);
   } catch (err) {
     typing.remove();
-    addChatMessage("loom", "Something went wrong reaching Loom. Please try again.");
+    addChatMessage("loom", `Could not reach Loom: ${err instanceof Error ? err.message : String(err)}. Start the Loom service and send your message again.`);
     setSphereState("idle");
     console.error(err);
   }
@@ -947,7 +947,7 @@ async function init() {
   $("#loom-status-text").textContent = status.online ? "Live" : "Demonstration";
   pill.classList.toggle("live", status.online);
   pill.title = status.detail;
-  $("#demo-note").hidden = status.online;
+  $("#demo-note").hidden = false;
 
   // Chat
   seedChat();

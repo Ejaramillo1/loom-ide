@@ -1,0 +1,43 @@
+{
+  "revision": 4,
+  "brief": {
+    "question": "Refine the existing Loom IDE to match both supplied references and make its workspace functional with verified Loom integration.",
+    "targets": [],
+    "constraints": [
+      "Preserve existing Tauri application",
+      "No upstream edits or pushes",
+      "No dev servers",
+      "References are identical visual benchmark"
+    ],
+    "done_when": "Build and rebuild checks pass; workspace, chat, editor and experiment flows work; unsupported live capabilities clearly labeled."
+  },
+  "plan": [
+    {
+      "title": "Study the references and existing experience",
+      "status": "done"
+    },
+    {
+      "title": "Refine the atmosphere and layout",
+      "status": "done"
+    },
+    {
+      "title": "Complete workspace and experiment interactions",
+      "status": "blocked",
+      "why": "Existing interactions compile; runtime interaction verification is unavailable because browser host and approved native capture are unavailable."
+    },
+    {
+      "title": "Verify Loom connection boundaries",
+      "status": "done",
+      "why": "Interface verified against local Loom protocol and HTTP source; runtime connection remains unavailable in restricted environment."
+    },
+    {
+      "title": "Check the build and refine the result",
+      "status": "blocked",
+      "why": "Frontend, desktop and rebuild_check pass. Fresh screenshot comparison cannot be completed with unavailable browser host and native capture approval."
+    }
+  ],
+  "hypotheses": [],
+  "findings": [],
+  "handoff": "Resumed saved project in root (craft.json app_in_root=true); app/ contains the browser Loom bridge. Opened both reference/picture-1.png and picture-2.png; identical benchmark. npm run build passed, Tauri cargo build passed, rebuild_check passed Rust build/tests. Refined desktop proportions/background and increased sphere contours; fixed misleading hiding of demo collaboration on healthy chat and example source label. Documented source-verified Loom HTTP boundary in docs/loom-integration.md; unknown resolved from local proto and HTTP source, not live execution. Local socket access denied. Native_window_capture was refused because approval policy never; CUA browser host unavailable, snap Chromium cannot create runtime folder in restricted filesystem. NO fresh screenshot was captured, NO rendered comparison completed. Remaining: capture actual Tauri screen at 1671x941, compare sphere/layout to references, exercise workspace/chat/editor/experiment flows. No dev servers, commits, upstream edits or pushes.",
+  "updated": "2026-11-12T02:25:57Z"
+}
