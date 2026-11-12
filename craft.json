@@ -6,10 +6,10 @@
     "kind": "none"
   },
   "stack": "React + TypeScript (Vite)",
-  "status": "ready",
-  "note": "Ready: all 2 checks pass.",
+  "status": "building",
+  "note": "Improving the build…",
   "created_ms": 1794437251285,
-  "updated_ms": 1794450366435,
+  "updated_ms": 1794454902251,
   "checks": [
     {
       "round": 1,
@@ -28,13 +28,31 @@
       "note": "`cargo test --quiet` passed.",
       "artifacts": [],
       "at_ms": 1794450357726
+    },
+    {
+      "round": 2,
+      "check": "build",
+      "passed": true,
+      "similarity": null,
+      "note": "`cargo build --quiet` passed.",
+      "artifacts": [],
+      "at_ms": 1794451371400
+    },
+    {
+      "round": 2,
+      "check": "own-tests",
+      "passed": true,
+      "similarity": null,
+      "note": "`cargo test --quiet` passed.",
+      "artifacts": [],
+      "at_ms": 1794451371636
     }
   ],
-  "agent_session": "01a1cd90-edf1-71f0-9659-00343e385622",
+  "agent_session": "01a1cda2-5723-7da0-894b-ba50dbf1cdf1",
   "agent_session_by": "codex",
   "agent_session_deep": true,
   "allowed_actions": [],
-  "last_reply": "I’ll check the saved progress and reference pictures, finish what’s left, then rebuild and compare the result with the original.\nThe saved app has most interactions in place, but its Loom connection still needs verification. I’ve opened both reference pictures; I’m using the Craft Anything workflow to check that connection and finish the build.\nThe frontend build passes. Loom’s local source confirms the chat endpoint and response format; I also found that the screen needs closer spacing and finer sphere lines to match the references. I’m refining those details and checking the desktop build.\nI refined the desktop spacing, background, and sphere lines, and fixed the demo labels so simulated activity stays clearly marked. The frontend and desktop builds pass. Screenshot comparison is blocked here: native capture requires unavailable approval, and the browser host is unavailable.\nI refined the layout and glowing sphere using both reference pictures, fixed demonstration labels, and verified Loom’s connection requirements. The app builds successfully and rebuild_check passes. Fresh screenshot comparison remains blocked because screen capture permission and the browser host are unavailable.",
+  "last_reply": "I’ll check the app and reference pictures, make the local-opening instructions clear, then rebuild and compare the result.\nI added a local launcher and simple instructions in app/. The build and rebuild_check pass; I’m checking whether another capture tool can provide the screenshot, since the browser preview is unavailable.\nAdded a launcher: from the project folder, run `bash app/open-local.sh` to open Loom locally. The build and rebuild_check pass. I reviewed both reference pictures, but fresh screenshot comparison was blocked by unavailable browser access and capture permission.",
   "asset_budget_usd": 5.0,
   "generate_assets": false,
   "app_in_root": true,

@@ -1,16 +1,35 @@
 import "./style.css";
 import {
+  addExperiment,
+  addExperimentArm,
   addWorkItem,
   askLoom,
+  chooseExperimentArm,
+  createSession,
   getAttention,
   getCollaboration,
+  getExperiments,
   getLoomStatus,
+  getSessionHistory,
   getWorkItems,
+  listAgents,
+  listDirectory,
+  listSessions,
+  listWorkspace,
+  readFile,
+  setExperimentArmResult,
+  setExperimentArmStatus,
   setWorkAutonomy,
+  setWorkSession,
   setWorkStatus,
+  type Agent,
   type AttentionItem,
   type ChatReply,
   type CollabStep,
+  type DirEntry,
+  type Experiment,
+  type ExperimentArm,
+  type Session,
   type WorkItem,
 } from "./api";
 import { Sphere, type SphereState } from "./sphere";
@@ -72,6 +91,12 @@ let loomReachable = false;
 let loomVerified = false;
 let collabSteps: CollabStep[] = [];
 let attentionItems: AttentionItem[] = [];
+let sessions: Session[] = [];
+let selectedSessionId: string | null = null;
+let agents: Agent[] = [];
+let selectedAgentId: string | null = null;
+let experiments: Experiment[] = [];
+let selectedExperimentId: string | null = null;
 let lastFocus: HTMLElement | null = null;
 const layerOn: Record<string, boolean> = {
   light: true,
@@ -173,6 +198,7 @@ function selectWork(id: string) {
   renderWorkList();
   renderWorkDetail();
   renderInspectorContext();
+  syncSessionToWork();
 }
 
 // ---------------------------------------------------------------------------
@@ -395,16 +421,41 @@ function renderSteps(steps: CollabStep[]) {
   const list = $("#collab-steps");
   list.innerHTML = "";
   if (steps.length === 0) {
-    const li = document.createElement("li");
-    li.className = "step";
-    const label = document.createElement("span");
-    label.className = "step-label";
-    label.textContent = "No agents running";
-    li.append(label);
-    list.append(li);
-    $("#agent-status").textContent = "No agents running";
+    // No step-level execution data: show the registered agents honestly.
+    if (agents.length === 0) {
+      const li = document.createElement("li");
+      li.className = "step";
+      const label = document.createElement("span");
+      label.className = "step-label";
+      label.textContent = loomReachable ? "No agents registered" : "Loom offline";
+      li.append(label);
+      list.append(li);
+      $("#agent-status").textContent = "No agents running";
+      const prog = $("#agent-progress");
+      if (prog) prog.textContent = "";
+      return;
+    }
+    const running = agents.filter((a) => a.status === "running").length;
+    $("#agent-status").textContent =
+      running > 0
+        ? `${running} of ${agents.length} agents running`
+        : `${agents.length} agent${agents.length === 1 ? "" : "s"} · none running`;
     const prog = $("#agent-progress");
     if (prog) prog.textContent = "";
+    for (const a of agents) {
+      const li = document.createElement("li");
+      li.className = `step ${a.status === "running" ? "active" : ""}`;
+      const mark = document.createElement("span");
+      mark.className = "mark";
+      const label = document.createElement("span");
+      label.className = "step-label";
+      label.textContent = a.name;
+      const status = document.createElement("span");
+      status.className = "step-pct";
+      status.textContent = a.status;
+      li.append(mark, label, status);
+      list.append(li);
+    }
     return;
   }
   // "Step 3 of 5" is not the same as "2 of 5 completed": the active
@@ -554,18 +605,57 @@ function closeDrawers() {
 // Agents view — empty until the Loom server exposes live agents
 // ---------------------------------------------------------------------------
 
+function agentDetail(a: Agent): string {
+  const parts: string[] = [];
+  if (a.status === "running" && a.uptime_seconds > 0) {
+    const h = Math.floor(a.uptime_seconds / 3600);
+    const m = Math.floor((a.uptime_seconds % 3600) / 60);
+    parts.push(h > 0 ? `Up ${h}h ${m}m` : `Up ${m}m`);
+  }
+  if (a.active_sessions > 0) {
+    parts.push(
+      `${a.active_sessions} active session${a.active_sessions === 1 ? "" : "s"}`,
+    );
+  }
+  parts.push(
+    `${a.total_messages} message${a.total_messages === 1 ? "" : "s"} processed`,
+  );
+  return parts.join(" · ");
+}
+
 function renderAgents() {
   const list = $("#agents-list");
   list.innerHTML = "";
-  const empty = document.createElement("div");
-  empty.className = "flat-row empty-row";
-  const title = document.createElement("strong");
-  title.textContent = "No agents running";
-  const text = document.createElement("p");
-  text.textContent =
-    "No agents are running in this workspace yet. Agents appear here when the Loom server exposes them.";
-  empty.append(title, text);
-  list.append(empty);
+  if (agents.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "flat-row empty-row";
+    const title = document.createElement("strong");
+    title.textContent = loomReachable ? "No agents registered" : "Loom offline";
+    const text = document.createElement("p");
+    text.textContent = loomReachable
+      ? "No agents are registered with the Loom server yet. When you send a message, the answering agent appears here."
+      : "The Loom server is not reachable, so no agents are visible.";
+    empty.append(title, text);
+    list.append(empty);
+    return;
+  }
+  for (const a of agents) {
+    const row = document.createElement("div");
+    row.className = "flat-row agent-row";
+    const head = document.createElement("div");
+    head.className = "ev-head";
+    const dot = document.createElement("span");
+    dot.className = `agent-dot ${a.status}`;
+    dot.title = a.status;
+    const name = document.createElement("strong");
+    name.textContent = a.name;
+    head.append(dot, name);
+    const detail = document.createElement("p");
+    detail.className = "agent-detail";
+    detail.textContent = agentDetail(a);
+    row.append(head, detail);
+    list.append(row);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -741,6 +831,7 @@ function addChatMessage(
   who: "user" | "loom",
   text: string,
   reply?: ChatReply,
+  live = true,
 ) {
   hideChatHint();
   const log = $("#chat-log");
@@ -777,7 +868,7 @@ function addChatMessage(
     msg.append(card);
   }
 
-  if (who === "loom") {
+  if (who === "loom" && live) {
     const src = document.createElement("span");
     src.className = "chat-source";
     src.textContent = "Live — answered by the Loom server";
@@ -806,6 +897,7 @@ async function sendChat(text: string) {
   const clean = text.trim();
   if (!clean) return;
   addChatMessage("user", clean);
+  if (selectedWorkId) cacheChatMessage(selectedWorkId, "user", clean);
   setSphereState("processing");
 
   const log = $("#chat-log");
@@ -816,11 +908,26 @@ async function sendChat(text: string) {
   log.scrollTop = log.scrollHeight;
 
   try {
-    const reply = await askLoom(clean);
+    const reply = await askLoom(
+      clean,
+      selectedSessionId ?? undefined,
+      selectedAgentId ?? undefined,
+    );
     typing.remove();
     loomVerified = true;
     renderStatusPill();
     addChatMessage("loom", reply.text, reply);
+    if (selectedWorkId) cacheChatMessage(selectedWorkId, "loom", reply.text);
+    // Refresh agent activity: the answering agent's counters just changed.
+    await refreshAgents();
+    // Adopt the session the server reports (it may have auto-created one).
+    if (reply.session_id) {
+      selectedSessionId = reply.session_id;
+      if (!sessions.some((s) => s.id === reply.session_id)) {
+        await refreshSessions();
+      }
+      renderSessionBar();
+    }
     setSphereState("completed");
     window.setTimeout(() => {
       if (sphereState === "completed") setSphereState("idle");
@@ -839,7 +946,702 @@ async function sendChat(text: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Modes (one shared navigation state: rail + footer stay in sync)
+// Sessions + agents — the conversation's session concept. Sessions and agents
+// come from the Loom server; when it is offline the selects stay honest
+// ("Loom offline") and sending a message surfaces the connection error.
+// ---------------------------------------------------------------------------
+
+const SESSION_KEY = "loom-ide-tauri:session";
+const AGENT_KEY = "loom-ide-tauri:agent";
+
+function sessionLabel(s: Session): string {
+  const name = s.name?.trim();
+  if (name) {
+    const agent = s.agent_name?.trim();
+    return agent && agent !== name ? `${name} — ${agent}` : name;
+  }
+  return `Session ${s.id.slice(0, 8)}`;
+}
+
+function renderSessionBar() {
+  const sel = $("#session-select") as HTMLSelectElement;
+  const previous = selectedSessionId ?? sel.value;
+  sel.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent =
+    sessions.length === 0
+      ? loomReachable
+        ? "No sessions yet"
+        : "Loom offline"
+      : "No session";
+  sel.append(none);
+  for (const s of sessions) {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = sessionLabel(s);
+    sel.append(opt);
+  }
+  const want = sessions.some((s) => s.id === previous) ? previous : "";
+  sel.value = want;
+  selectedSessionId = want || null;
+  sel.disabled = sessions.length === 0;
+}
+
+function renderAgentBar() {
+  const sel = $("#agent-select") as HTMLSelectElement;
+  const previous = selectedAgentId ?? sel.value;
+  sel.innerHTML = "";
+  const def = document.createElement("option");
+  def.value = "";
+  def.textContent =
+    agents.length === 0
+      ? loomReachable
+        ? "Default agent"
+        : "Loom offline"
+      : "Default agent";
+  sel.append(def);
+  for (const a of agents) {
+    const opt = document.createElement("option");
+    opt.value = a.name || a.id;
+    opt.textContent =
+      a.status && a.status !== "running" ? `${a.name} (${a.status})` : a.name;
+    sel.append(opt);
+  }
+  const want = agents.some((a) => (a.name || a.id) === previous) ? previous : "";
+  sel.value = want;
+  selectedAgentId = want || null;
+  sel.disabled = agents.length === 0;
+}
+
+async function refreshSessions() {
+  try {
+    sessions = await listSessions();
+  } catch {
+    sessions = [];
+  }
+  renderSessionBar();
+}
+
+async function refreshAgents() {
+  try {
+    agents = await listAgents();
+  } catch {
+    agents = [];
+  }
+  renderAgentBar();
+  renderAgents();
+}
+
+// ---------------------------------------------------------------------------
+// Work ↔ session binding. Each work item owns one Loom session; selecting a
+// work item switches the conversation to that session and loads its history.
+// ---------------------------------------------------------------------------
+
+/** Clear the conversation log (keeps the unsent draft intact). */
+function clearChat() {
+  const log = $("#chat-log");
+  log.innerHTML = "";
+  showChatHint();
+}
+
+// ---------------------------------------------------------------------------
+// Chat conversation cache. Each work item owns its conversation; the cache
+// keeps it across work switches (and restarts, via localStorage). The Loom
+// session history is fetched only when there is no cached copy.
+// ---------------------------------------------------------------------------
+
+interface CachedChatMsg {
+  who: "user" | "loom";
+  text: string;
+}
+
+const CHAT_CACHE_KEY = "loom-ide-tauri:chat-cache";
+const chatCache = new Map<string, CachedChatMsg[]>();
+
+function loadChatCache() {
+  try {
+    const raw = localStorage.getItem(CHAT_CACHE_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw) as Record<string, CachedChatMsg[]>;
+      for (const [k, v] of Object.entries(obj)) chatCache.set(k, v);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function saveChatCache() {
+  try {
+    const obj: Record<string, CachedChatMsg[]> = {};
+    for (const [k, v] of chatCache) obj[k] = v;
+    localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(obj));
+  } catch {
+    /* ignore */
+  }
+}
+
+function cacheChatMessage(workId: string, who: "user" | "loom", text: string) {
+  const msgs = chatCache.get(workId) ?? [];
+  msgs.push({ who, text });
+  chatCache.set(workId, msgs);
+  saveChatCache();
+}
+
+function renderChatMessages(msgs: CachedChatMsg[]) {
+  const log = $("#chat-log");
+  log.innerHTML = "";
+  if (msgs.length === 0) {
+    showChatHint();
+    return;
+  }
+  for (const m of msgs) {
+    addChatMessage(m.who, m.text, undefined, false);
+  }
+}
+
+/** Show the conversation for a work item: the cached copy first, the Loom
+    session history only when there is no cache for that work yet. */
+function loadChatForWork(workId: string | null, sessionId: string | null) {
+  const cached = workId ? chatCache.get(workId) : undefined;
+  if (cached && cached.length > 0) {
+    renderChatMessages(cached);
+    return;
+  }
+  if (sessionId) {
+    loadChatHistory(sessionId, workId);
+  } else {
+    clearChat();
+  }
+}
+
+async function loadChatHistory(sessionId: string, workId: string | null) {
+  const log = $("#chat-log");
+  log.innerHTML = "";
+  try {
+    const messages = await getSessionHistory(sessionId);
+    const msgs: CachedChatMsg[] = messages
+      .filter((m) => m.content && m.content.trim())
+      .map((m) => ({
+        who: m.role === "user" ? "user" : "loom",
+        text: m.content,
+      }));
+    if (workId) {
+      chatCache.set(workId, msgs);
+      saveChatCache();
+    }
+    renderChatMessages(msgs);
+  } catch {
+    showChatHint();
+  }
+}
+
+/** Follow the selected work item's session: switch the session selector,
+    switch the agent to the session's agent, and show that conversation. */
+function syncSessionToWork() {
+  const item = workItems.find((w) => w.id === selectedWorkId);
+  const sid = item?.session_id ?? null;
+  if (sid) {
+    selectedSessionId = sid;
+    const sess = sessions.find((s) => s.id === sid);
+    if (sess?.agent_id) {
+      selectedAgentId = sess.agent_id;
+      renderAgentBar();
+    }
+    renderSessionBar();
+    loadChatForWork(selectedWorkId, sid);
+  } else {
+    selectedSessionId = null;
+    renderSessionBar();
+    clearChat();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Workspace explorer — a read-only tree over the Loom workspace (~/.loom).
+// Lists all its directories and files; clicking a text file opens it in the
+// editor read-only. Independent of the Loom server.
+// ---------------------------------------------------------------------------
+
+const dirCache = new Map<string, DirEntry[]>();
+const expandedDirs = new Set<string>();
+let openFilePath: string | null = null;
+
+function renderFileTree() {
+  const tree = $("#file-tree");
+  tree.innerHTML = "";
+  const root = dirCache.get("") ?? [];
+  if (root.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "tree-empty";
+    empty.textContent = "No files found in the workspace.";
+    tree.append(empty);
+    return;
+  }
+  appendTreeNodes(tree, root, 0);
+}
+
+function appendTreeNodes(parent: HTMLElement, entries: DirEntry[], depth: number) {
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "tree-row";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tree-btn" + (entry.is_dir ? "" : " tree-file");
+    btn.style.paddingLeft = `${8 + depth * 14}px`;
+    const chev = document.createElement("span");
+    chev.className = "tree-chev";
+    chev.textContent = entry.is_dir ? (expandedDirs.has(entry.path) ? "▾" : "▸") : "";
+    const name = document.createElement("span");
+    name.className = "tree-name";
+    name.textContent = entry.is_dir ? `${entry.name}/` : entry.name;
+    btn.append(chev, name);
+    if (entry.path === openFilePath) btn.classList.add("selected");
+    if (entry.is_dir) {
+      btn.addEventListener("click", () => toggleDir(entry.path));
+    } else {
+      btn.addEventListener("click", () => openFile(entry.path));
+    }
+    row.append(btn);
+    parent.append(row);
+    if (entry.is_dir && expandedDirs.has(entry.path)) {
+      appendTreeNodes(parent, dirCache.get(entry.path) ?? [], depth + 1);
+    }
+  }
+}
+
+async function toggleDir(path: string) {
+  if (expandedDirs.has(path)) {
+    expandedDirs.delete(path);
+    renderFileTree();
+    return;
+  }
+  expandedDirs.add(path);
+  if (!dirCache.has(path)) {
+    try {
+      dirCache.set(path, await listDirectory(path));
+    } catch {
+      dirCache.set(path, []);
+      expandedDirs.delete(path);
+      renderFileTree();
+      return;
+    }
+  }
+  renderFileTree();
+}
+
+async function openFile(path: string) {
+  const editor = $("#code-editor") as HTMLTextAreaElement;
+  const pathEl = $("#code-path");
+  try {
+    const text = await readFile(path);
+    editor.value = text;
+    editor.readOnly = true;
+    openFilePath = path;
+    pathEl.textContent = path;
+    pathEl.classList.remove("error");
+    pathEl.hidden = false;
+    ($("#code-save") as HTMLButtonElement).disabled = true;
+    for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
+      tab.classList.remove("active");
+    }
+    renderFileTree();
+  } catch (err) {
+    pathEl.textContent = `Could not open: ${err instanceof Error ? err.message : String(err)}`;
+    pathEl.classList.add("error");
+    pathEl.hidden = false;
+  }
+}
+
+async function loadWorkspaceTree() {
+  const tree = $("#file-tree");
+  try {
+    dirCache.set("", await listWorkspace());
+  } catch (err) {
+    dirCache.set("", []);
+    tree.innerHTML = "";
+    const empty = document.createElement("p");
+    empty.className = "tree-empty";
+    empty.textContent = `Could not read the workspace: ${err instanceof Error ? err.message : String(err)}`;
+    tree.append(empty);
+    return;
+  }
+  renderFileTree();
+}
+
+// ---------------------------------------------------------------------------
+// Experiments — the human's experimental designs, run through Loom.
+// Arms run as real weave calls in the current work session; an arm's result
+// is only ever the reply text a real run returned.
+// ---------------------------------------------------------------------------
+
+function replaceExperiment(updated: Experiment) {
+  experiments = experiments.map((e) => (e.id === updated.id ? updated : e));
+}
+
+function expStatusLabel(e: Experiment): string {
+  if (e.status === "running") return "Running";
+  if (e.status === "decided") return "Decided";
+  return "Draft";
+}
+
+function selectExperiment(id: string | null) {
+  selectedExperimentId = id;
+  renderExperiments();
+}
+
+function renderExperiments() {
+  const list = $("#exp-list");
+  list.innerHTML = "";
+  if (experiments.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "exp-empty";
+    empty.textContent = "No experiments yet.";
+    list.append(empty);
+  } else {
+    for (const e of experiments) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "exp-row" + (e.id === selectedExperimentId ? " selected" : "");
+      const title = document.createElement("span");
+      title.className = "exp-row-title";
+      title.textContent = e.title;
+      const status = document.createElement("span");
+      status.className = `exp-status ${e.status}`;
+      status.textContent = expStatusLabel(e);
+      btn.append(title, status);
+      btn.addEventListener("click", () => selectExperiment(e.id));
+      li.append(btn);
+      list.append(li);
+    }
+  }
+  renderExperimentDetail();
+}
+
+function expField(label: string, text: string): HTMLElement {
+  const sec = document.createElement("div");
+  sec.className = "exp-field";
+  const h = document.createElement("h4");
+  h.className = "exp-sub";
+  h.textContent = label;
+  const p = document.createElement("p");
+  p.textContent = text;
+  sec.append(h, p);
+  return sec;
+}
+
+function renderExperimentDetail() {
+  const wrap = $("#exp-detail");
+  wrap.innerHTML = "";
+  const exp = experiments.find((e) => e.id === selectedExperimentId);
+  if (!exp) {
+    const empty = document.createElement("div");
+    empty.className = "exp-detail-empty";
+    const title = document.createElement("strong");
+    title.textContent = "No experiment selected";
+    const text = document.createElement("p");
+    text.textContent =
+      "Create an experiment to state a question, define arms, and compare real results.";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn";
+    btn.textContent = "New experiment";
+    btn.addEventListener("click", () => openNewExperimentForm());
+    empty.append(title, text, btn);
+    wrap.append(empty);
+    return;
+  }
+
+  const head = document.createElement("div");
+  head.className = "exp-head";
+  const title = document.createElement("h3");
+  title.textContent = exp.title;
+  const status = document.createElement("span");
+  status.className = `exp-status ${exp.status}`;
+  status.textContent = expStatusLabel(exp);
+  head.append(title, status);
+  wrap.append(head);
+
+  wrap.append(expField("Question", exp.question || "Not stated yet."));
+  wrap.append(expField("Hypothesis", exp.hypothesis || "Not stated yet."));
+
+  const armsTitle = document.createElement("h4");
+  armsTitle.className = "exp-sub";
+  armsTitle.textContent = "Arms";
+  wrap.append(armsTitle);
+  if (exp.arms.length === 0) {
+    const none = document.createElement("p");
+    none.className = "empty";
+    none.textContent = "No arms yet. An arm is one configuration to test.";
+    wrap.append(none);
+  } else {
+    for (const arm of exp.arms) {
+      wrap.append(buildArmRow(exp, arm));
+    }
+  }
+
+  wrap.append(buildAddArmForm(exp));
+
+  const doneArms = exp.arms.filter((a) => a.status === "done");
+  if (exp.decision) {
+    const decided = exp.arms.find((a) => a.id === exp.decision);
+    const dec = document.createElement("div");
+    dec.className = "exp-decision decided";
+    const label = document.createElement("strong");
+    label.textContent = `Decision: ${decided?.label ?? exp.decision}`;
+    dec.append(label);
+    wrap.append(dec);
+  } else if (doneArms.length >= 2) {
+    const dec = document.createElement("div");
+    dec.className = "exp-decision";
+    const label = document.createElement("strong");
+    label.textContent = "Decision required — choose a configuration";
+    dec.append(label);
+    const row = document.createElement("div");
+    row.className = "exp-decision-options";
+    for (const arm of doneArms) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn";
+      btn.textContent = `Choose ${arm.label}`;
+      btn.addEventListener("click", () => decideExperiment(exp.id, arm.id));
+      row.append(btn);
+    }
+    dec.append(row);
+    wrap.append(dec);
+  }
+}
+
+function buildArmRow(exp: Experiment, arm: ExperimentArm): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "arm-row";
+  const head = document.createElement("div");
+  head.className = "arm-head";
+  const label = document.createElement("strong");
+  label.textContent = arm.label;
+  const status = document.createElement("span");
+  status.className = `exp-status ${arm.status}`;
+  status.textContent =
+    arm.status === "defined" ? "Defined" : arm.status === "running" ? "Running…" : "Done";
+  head.append(label, status);
+  row.append(head);
+
+  if (arm.config) {
+    const cfg = document.createElement("p");
+    cfg.className = "arm-config";
+    cfg.textContent = arm.config;
+    row.append(cfg);
+  }
+
+  if (arm.result) {
+    const result = document.createElement("pre");
+    result.className = "arm-result";
+    result.textContent = arm.result;
+    row.append(result);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "arm-actions";
+  const run = document.createElement("button");
+  run.type = "button";
+  run.className = "btn";
+  run.textContent = arm.status === "done" ? "Run again" : "Run arm";
+  run.disabled = !loomReachable || arm.status === "running";
+  run.title = loomReachable
+    ? "Runs this arm as a real Loom request in the current session."
+    : "The Loom server is offline — an arm run needs it.";
+  run.addEventListener("click", () => runExperimentArm(exp, arm));
+  actions.append(run);
+  row.append(actions);
+  return row;
+}
+
+function buildAddArmForm(exp: Experiment): HTMLElement {
+  const form = document.createElement("form");
+  form.className = "add-arm";
+  const labelInput = document.createElement("input");
+  labelInput.type = "text";
+  labelInput.placeholder = "Arm label (e.g. Baseline)";
+  labelInput.setAttribute("aria-label", "Arm label");
+  const cfgInput = document.createElement("input");
+  cfgInput.type = "text";
+  cfgInput.placeholder = "What makes it different (e.g. memory off)";
+  cfgInput.setAttribute("aria-label", "Arm configuration");
+  const add = document.createElement("button");
+  add.type = "submit";
+  add.className = "btn ghost";
+  add.textContent = "Add arm";
+  form.append(labelInput, cfgInput, add);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const label = labelInput.value.trim();
+    if (!label) return;
+    try {
+      const updated = await addExperimentArm(exp.id, label, cfgInput.value);
+      replaceExperiment(updated);
+      renderExperiments();
+    } catch (err) {
+      addChatError(
+        `Could not add the arm: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
+  return form;
+}
+
+function openNewExperimentForm() {
+  const wrap = $("#exp-detail");
+  wrap.innerHTML = "";
+  const form = document.createElement("form");
+  form.className = "new-exp";
+  const heading = document.createElement("h3");
+  heading.textContent = "New experiment";
+  const titleInput = document.createElement("input");
+  titleInput.type = "text";
+  titleInput.placeholder = "Title (e.g. Memory latency)";
+  titleInput.setAttribute("aria-label", "Experiment title");
+  const questionInput = document.createElement("textarea");
+  questionInput.rows = 2;
+  questionInput.placeholder =
+    "Question (e.g. Why does enabling agent memory increase latency?)";
+  questionInput.setAttribute("aria-label", "Experiment question");
+  const hypothesisInput = document.createElement("textarea");
+  hypothesisInput.rows = 2;
+  hypothesisInput.placeholder = "Hypothesis (your best guess)";
+  hypothesisInput.setAttribute("aria-label", "Experiment hypothesis");
+  const create = document.createElement("button");
+  create.type = "submit";
+  create.className = "btn";
+  create.textContent = "Create experiment";
+  form.append(heading, titleInput, questionInput, hypothesisInput, create);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = titleInput.value.trim();
+    if (!title) return;
+    try {
+      const created = await addExperiment(
+        title,
+        questionInput.value,
+        hypothesisInput.value,
+      );
+      experiments = [created, ...experiments];
+      selectedExperimentId = created.id;
+      renderExperiments();
+    } catch (err) {
+      addChatError(
+        `Could not create the experiment: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
+  wrap.append(form);
+}
+
+async function decideExperiment(expId: string, armId: string) {
+  try {
+    const updated = await chooseExperimentArm(expId, armId);
+    replaceExperiment(updated);
+    renderExperiments();
+    setSphereState("attention");
+    window.setTimeout(() => {
+      if (sphereState === "attention") setSphereState("idle");
+    }, 3000);
+  } catch (err) {
+    addChatError(
+      `Could not record the decision: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/** Run one arm as a real Loom request in the current session. */
+async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
+  if (!loomReachable) {
+    addChatError("The Loom server is offline — an arm run needs it.");
+    return;
+  }
+  try {
+    const running = await setExperimentArmStatus(exp.id, arm.id, "running");
+    replaceExperiment(running);
+    renderExperiments();
+  } catch (err) {
+    addChatError(
+      `Could not start the arm: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  const prompt = [
+    `Experiment: ${exp.title}`,
+    `Question: ${exp.question || "(not stated)"}`,
+    `Hypothesis: ${exp.hypothesis || "(not stated)"}`,
+    `Run this arm and report its results: ${arm.label}${arm.config ? ` — ${arm.config}` : ""}`,
+  ].join("\n");
+
+  addChatMessage("user", `Run experiment arm: ${arm.label}`);
+  if (selectedWorkId) {
+    cacheChatMessage(selectedWorkId, "user", `Run experiment arm: ${arm.label}`);
+  }
+  setSphereState("executing");
+  const log = $("#chat-log");
+  const typing = document.createElement("div");
+  typing.className = "typing";
+  typing.textContent = "Loom is running the arm…";
+  log.append(typing);
+  log.scrollTop = log.scrollHeight;
+
+  try {
+    const reply = await askLoom(
+      prompt,
+      selectedSessionId ?? undefined,
+      selectedAgentId ?? undefined,
+    );
+    typing.remove();
+    loomVerified = true;
+    renderStatusPill();
+    addChatMessage("loom", reply.text, reply);
+    if (selectedWorkId) cacheChatMessage(selectedWorkId, "loom", reply.text);
+    await refreshAgents();
+    // Adopt the session the server reports (it may have auto-created one).
+    if (reply.session_id) {
+      selectedSessionId = reply.session_id;
+      if (!sessions.some((s) => s.id === reply.session_id)) {
+        await refreshSessions();
+      }
+      renderSessionBar();
+      if (selectedWorkId) {
+        try {
+          const linked = await setWorkSession(selectedWorkId, reply.session_id);
+          workItems = workItems.map((w) => (w.id === linked.id ? linked : w));
+        } catch {
+          /* link is best-effort */
+        }
+      }
+    }
+    const done = await setExperimentArmResult(exp.id, arm.id, reply.text);
+    replaceExperiment(done);
+    renderExperiments();
+    setSphereState("completed");
+    window.setTimeout(() => {
+      if (sphereState === "completed") setSphereState("idle");
+    }, 3000);
+  } catch (err) {
+    typing.remove();
+    try {
+      const reverted = await setExperimentArmStatus(exp.id, arm.id, "defined");
+      replaceExperiment(reverted);
+      renderExperiments();
+    } catch {
+      /* leave as is */
+    }
+    addChatError(
+      `The arm run failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    setSphereState("idle");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Modes (the footer mode switcher is the single navigation control)
 // ---------------------------------------------------------------------------
 
 const ALL_VIEWS: Mode[] = [
@@ -853,8 +1655,6 @@ const ALL_VIEWS: Mode[] = [
 ];
 
 function closeMenus() {
-  const railMenu = $("#rail-menu");
-  if (railMenu) railMenu.hidden = true;
   const chatMenu = $("#chat-menu");
   if (chatMenu) chatMenu.hidden = true;
 }
@@ -889,13 +1689,6 @@ function setMode(next: Mode) {
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.classList.toggle("active", btn.dataset.mode === next);
   }
-  for (const btn of document.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
-    const section = btn.dataset.section;
-    btn.classList.toggle(
-      "active",
-      section === next || (next === "artifacts" && section === "more"),
-    );
-  }
   for (const id of ALL_VIEWS) {
     const el = document.getElementById(`view-${id}`);
     if (el) el.hidden = id !== next;
@@ -926,6 +1719,12 @@ function noteKey(kind: NoteKind): string {
 function loadNote() {
   const editor = $("#code-editor") as HTMLTextAreaElement;
   editor.value = localStorage.getItem(noteKey(currentNote)) ?? "";
+  editor.readOnly = false;
+  openFilePath = null;
+  const pathEl = $("#code-path");
+  pathEl.hidden = true;
+  pathEl.classList.remove("error");
+  ($("#code-save") as HTMLButtonElement).disabled = false;
 }
 
 function saveNote() {
@@ -965,7 +1764,7 @@ function initCodeEditor() {
   });
   $("#code-ask").addEventListener("click", async () => {
     focusChat();
-    await sendChat(`About this note: ${editor.value.slice(0, 280)}`);
+    await sendChat(`About this text: ${editor.value.slice(0, 280)}`);
   });
 }
 
@@ -978,26 +1777,6 @@ async function init() {
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
   }
-  // Rail: every button opens its view; More opens its menu.
-  for (const btn of document.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const section = btn.dataset.section;
-      if (section === "more") {
-        const menu = $("#rail-menu");
-        menu.hidden = !menu.hidden;
-        return;
-      }
-      setMode(section as Mode);
-    });
-  }
-  // More menu: Artifacts opens the Artifacts tab, Documents the Documents tab.
-  for (const item of document.querySelectorAll<HTMLButtonElement>("#rail-menu button")) {
-    item.addEventListener("click", () => {
-      setArtifactTab(item.dataset.atab as "artifacts" | "documents");
-      setMode("artifacts");
-    });
-  }
   // Artifact tabs.
   for (const tab of document.querySelectorAll<HTMLButtonElement>("#artifact-tabs .tab")) {
     tab.addEventListener("click", () => {
@@ -1007,10 +1786,6 @@ async function init() {
   // Clicking anywhere else closes the popover menus.
   document.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
-    if (!target.closest("#rail-menu") && !target.closest(".rail-btn.more")) {
-      const railMenu = $("#rail-menu");
-      if (railMenu) railMenu.hidden = true;
-    }
     if (!target.closest("#chat-menu") && !target.closest("#chat-menu-btn")) {
       const chatMenu = $("#chat-menu");
       if (chatMenu) chatMenu.hidden = true;
@@ -1031,6 +1806,9 @@ async function init() {
       }
     }
   });
+
+  // Header: the objective banner opens the selected work in the Work view.
+  $("#objective-btn").addEventListener("click", () => setMode("work"));
 
   // Header toggles.
   $("#work-toggle").addEventListener("click", (e) => {
@@ -1074,6 +1852,10 @@ async function init() {
     const log = $("#chat-log");
     log.innerHTML = "";
     showChatHint();
+    if (selectedWorkId) {
+      chatCache.delete(selectedWorkId);
+      saveChatCache();
+    }
     closeMenus();
   });
 
@@ -1095,6 +1877,17 @@ async function init() {
       const item = await addWorkItem(title);
       workItems = [item, ...workItems];
       input.value = "";
+      // Give the new work its own Loom session when the server is up.
+      if (loomReachable) {
+        try {
+          const created = await createSession(title, selectedAgentId ?? undefined);
+          sessions = [created, ...sessions.filter((s) => s.id !== created.id)];
+          const linked = await setWorkSession(item.id, created.id);
+          workItems = workItems.map((w) => (w.id === linked.id ? linked : w));
+        } catch {
+          // The work item still exists; the session is best-effort.
+        }
+      }
       selectWork(item.id);
     } catch (err) {
       // Inline error on the form itself; the list keeps its state.
@@ -1120,11 +1913,84 @@ async function init() {
   renderLayers();
   renderArtifacts();
 
+  // Experiments (local definitions; arms run through real Loom calls).
+  try {
+    experiments = await getExperiments();
+  } catch {
+    experiments = [];
+  }
+  selectedExperimentId = experiments[0]?.id ?? null;
+  renderExperiments();
+  $("#exp-new").addEventListener("click", () => openNewExperimentForm());
+
   // Loom server status: "Server reachable" is the TCP probe;
   // "Connected to Loom" only after a verified live reply.
   const status = await getLoomStatus();
   loomReachable = status.online;
   renderStatusPill();
+
+  // Sessions + agents (from the Loom server). The selected work item's
+  // session is the source of truth for the conversation; switch to it.
+  await refreshAgents();
+  await refreshSessions();
+  loadChatCache();
+  syncSessionToWork();
+
+  $("#session-select").addEventListener("change", async (e) => {
+    const v = (e.target as HTMLSelectElement).value;
+    selectedSessionId = v || null;
+    if (v) localStorage.setItem(SESSION_KEY, v);
+    else localStorage.removeItem(SESSION_KEY);
+    // Keep the work item linked to the chosen session.
+    if (selectedWorkId) {
+      try {
+        const updated = await setWorkSession(selectedWorkId, v || null);
+        workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
+      } catch {
+        /* link is best-effort */
+      }
+    }
+    if (v) loadChatHistory(v, selectedWorkId);
+    else clearChat();
+  });
+  $("#agent-select").addEventListener("change", (e) => {
+    const v = (e.target as HTMLSelectElement).value;
+    selectedAgentId = v || null;
+    if (v) localStorage.setItem(AGENT_KEY, v);
+    else localStorage.removeItem(AGENT_KEY);
+  });
+  $("#session-new").addEventListener("click", async () => {
+    try {
+      const created = await createSession(undefined, selectedAgentId ?? undefined);
+      sessions = [created, ...sessions.filter((s) => s.id !== created.id)];
+      selectedSessionId = created.id;
+      localStorage.setItem(SESSION_KEY, created.id);
+      renderSessionBar();
+      if (selectedWorkId) {
+        try {
+          const updated = await setWorkSession(selectedWorkId, created.id);
+          workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
+        } catch {
+          /* link is best-effort */
+        }
+      }
+      clearChat();
+      focusChat();
+    } catch (err) {
+      addChatError(
+        `Could not start a session: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
+
+  // Workspace explorer (local filesystem; independent of the server).
+  $("#file-tree-refresh").addEventListener("click", () => {
+    dirCache.delete("");
+    expandedDirs.clear();
+    openFilePath = null;
+    loadWorkspaceTree();
+  });
+  loadWorkspaceTree();
 
   // Chat starts empty, with a short hint. A draft typed earlier is
   // restored, so closing the panel never loses an unsent message.

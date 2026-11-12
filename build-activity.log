@@ -391,3 +391,40 @@
 02:26:06 done  Check own-tests: `cargo test --quiet` passed.
 02:26:06 stage Ready: all 2 checks pass.
 02:26:06 stage Ready: all 2 checks pass.
+--- Craft Anything 0.6.0: a run started 2026-11-12 02:42:10 UTC ---
+02:42:10 stage Getting the builder ready…
+02:42:10 stage Improving the build…
+02:42:10 note  Asking Codex…
+02:42:17 said  I’ll check the app and reference pictures, make the local-opening instructions clear, then rebuild and compare the result.
+02:42:19 note  Running: /bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g 'package.json' -g '*' app reference | head -80"
+02:42:19 note  Running: /bin/bash -lc 'cat /home/ed/.agents/skills/craft-anything/SKILL.md'
+02:42:24 note  Running: /bin/bash -lc 'ls -la; cat app/loom-backend.mjs'
+02:42:29 note  Running: /bin/bash -lc 'cat package.json vite.config.ts HOW_TO_OPEN.md; ls src; cat craft.json'
+02:42:35 note  Running: /bin/bash -lc "cat run.sh; rg -n 'open|local|npm|1420' README.md; ls checks; rg --files /tmp | rg 'playwright|screenshot' | head; rg -n 'screenshot|browser' checks -g '*.json' | head"
+02:42:48 note  Running: /bin/bash -lc 'npm run build'
+02:42:50 start rebuild check
+02:42:50 stage The builder is checking its work…
+02:42:50 stage Checking its work (1 of 2): build…
+02:42:51 stage Checking its work (2 of 2): own-tests…
+02:42:51 stage The builder checked its work: all 2 checks pass.
+02:42:51 done  rebuild check (1 s): {"content":[{"text":"{\"result\":{\"project\":\"/home/ed/loom-ide-tauri\",\"report\":\"build: passed — `cargo build --quiet` passed.\\nown-tests: passed — `cargo test --quiet` passed.\\nThis would pas
+02:42:54 start js
+02:42:55 FAIL  js: {"_meta":{"codex/nodeReplExecutionDurationMs":371,"codex/telemetry":{"error_code":"browser_error"}},"content":[{"text":"The browser access host is unavailable","type":"text"},{"text":"## Computer Use\
+02:42:57 start js
+02:42:57 done  js: {"content":[{"text":"Completion summary received.","type":"text"}],"structured_content":null}
+02:43:00 said  I added a local launcher and simple instructions in app/. The build and rebuild_check pass; I’m checking whether another capture tool can provide the screenshot, since the browser preview is unavailable.
+02:43:02 note  Running: /bin/bash -lc 'bash -n app/open-local.sh; git diff --stat'
+02:43:06 start web page screenshot take
+02:43:07 FAIL  web page screenshot take: Codex blocked web_page_screenshot_take: it can't ask for approval here. Fix: run `craft-anything-cli setup --client codex --yes`, then retry. See docs/codex.md.
+02:43:09 said  Added a launcher: from the project folder, run `bash app/open-local.sh` to open Loom locally. The build and rebuild_check pass. I reviewed both reference pictures, but fresh screenshot comparison was blocked by unavailable browser access and capture permission.
+02:43:11 note  The builder's turn ended (403907 tokens in, 1393 out)
+02:43:11 stage Checking the build…
+02:43:11 note  Nothing the check looks at has changed since it last worked, so its results stand.
+02:43:11 done  Check build: `cargo build --quiet` passed.
+02:43:11 done  Check own-tests: `cargo test --quiet` passed.
+02:43:11 stage Ready: all 2 checks pass.
+02:43:11 stage Ready: all 2 checks pass.
+--- Craft Anything 0.6.0: a run started 2026-11-12 03:41:42 UTC ---
+03:41:42 stage Getting the builder ready…
+03:41:42 stage Improving the build…
+03:41:42 note  Reading the investigation so far…

@@ -19,6 +19,9 @@ pub struct WorkItem {
     pub autonomy: String,
     /// Human label: "Now" | "2h" | "4h" ...
     pub updated_label: String,
+    /// The Loom conversation session associated with this work (if any).
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +93,7 @@ impl WorkStore {
             status: "paused".to_string(),
             autonomy: "collaborative".to_string(),
             updated_label: "Now".to_string(),
+            session_id: None,
         };
         self.items.insert(0, item.clone());
         self.save()?;
@@ -122,6 +126,23 @@ impl WorkStore {
             .find(|w| w.id == id)
             .ok_or_else(|| format!("Unknown work item: {id}"))?;
         item.autonomy = autonomy.to_string();
+        let out = item.clone();
+        self.save()?;
+        Ok(out)
+    }
+
+    /// Associate (or clear) the Loom session for a work item. An empty
+    /// `session_id` clears the association.
+    pub fn set_session(&mut self, id: &str, session_id: Option<String>) -> Result<WorkItem, String> {
+        let normalized = session_id
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let item = self
+            .items
+            .iter_mut()
+            .find(|w| w.id == id)
+            .ok_or_else(|| format!("Unknown work item: {id}"))?;
+        item.session_id = normalized;
         let out = item.clone();
         self.save()?;
         Ok(out)

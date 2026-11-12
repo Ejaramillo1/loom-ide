@@ -13,6 +13,8 @@ export interface WorkItem {
   status: "active" | "paused";
   autonomy: "manual" | "assisted" | "collaborative" | "delegated";
   updated_label: string;
+  // The Loom session associated with this work item (if any).
+  session_id?: string | null;
 }
 
 export interface CollabStep {
@@ -45,6 +47,56 @@ export interface ChatReply {
   // The backend only ever sends "live". There is no demo reply.
   source: "live";
   card: ChatCard | null;
+  // Set when the server reports which session the reply belongs to.
+  session_id?: string | null;
+}
+
+export interface Session {
+  id: string;
+  name: string;
+  state: string;
+  agent_id: string;
+  agent_name: string;
+  updated_at: number;
+  conversation_count: number;
+}
+
+export interface Agent {
+  id: string;
+  name: string;
+  status: string;
+  uptime_seconds: number;
+  active_sessions: number;
+  total_messages: number;
+}
+
+export interface DirEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+}
+
+export interface HistoryMessage {
+  role: string;
+  content: string;
+}
+
+export interface ExperimentArm {
+  id: string;
+  label: string;
+  config: string;
+  status: "defined" | "running" | "done";
+  result: string;
+}
+
+export interface Experiment {
+  id: string;
+  title: string;
+  question: string;
+  hypothesis: string;
+  status: "draft" | "running" | "decided";
+  arms: ExperimentArm[];
+  decision?: string | null;
 }
 
 const IN_TAURI =
@@ -125,6 +177,20 @@ export async function setWorkAutonomy(
   return invoke<WorkItem>("set_work_autonomy", { id, autonomy });
 }
 
+export async function setWorkSession(
+  id: string,
+  sessionId: string | null,
+): Promise<WorkItem> {
+  if (!IN_TAURI) {
+    const items = localWorkItems().map((w) =>
+      w.id === id ? { ...w, session_id: sessionId } : w,
+    );
+    saveLocalWorkItems(items);
+    return items.find((w) => w.id === id)!;
+  }
+  return invoke<WorkItem>("set_work_session", { id, sessionId });
+}
+
 // The Loom server does not expose step-by-step execution or attention
 // items yet, so these return empty until it does. No seed data.
 export async function getCollaboration(): Promise<CollabStep[]> {
@@ -163,11 +229,100 @@ async function loomRequest(path: string, body?: object): Promise<any> {
 
 // Throws when the Loom server cannot be reached or answers without
 // usable text. The caller shows the error; nothing invents a reply.
-export async function askLoom(message: string): Promise<ChatReply> {
-  if (IN_TAURI) return invoke<ChatReply>("ask_loom", { message });
-  const value = await loomRequest("/v1/weave", { query: message });
-  const text = [value.response, value.text, value.content, value.reply, value.message]
+export async function askLoom(
+  message: string,
+  sessionId?: string,
+  agentId?: string,
+): Promise<ChatReply> {
+  if (IN_TAURI) {
+    return invoke<ChatReply>("ask_loom", { message, sessionId, agentId });
+  }
+  const body: Record<string, string> = { query: message };
+  if (sessionId) body.session_id = sessionId;
+  if (agentId) body.agent_id = agentId;
+  const value = await loomRequest("/v1/weave", body);
+  const text = [value.text, value.response, value.content, value.reply, value.message]
     .find(value => typeof value === "string" && value.trim());
   if (!text) throw new Error("Loom returned an empty response. Check its agent configuration.");
   return { text, source: "live", card: null };
+}
+
+// ---- Sessions + agents (real Loom server; fail honestly when offline) ----
+
+export async function listSessions(): Promise<Session[]> {
+  return invoke<Session[]>("list_sessions");
+}
+
+export async function createSession(
+  name?: string,
+  agentId?: string,
+): Promise<Session> {
+  return invoke<Session>("create_session", { name, agentId });
+}
+
+export async function listAgents(): Promise<Agent[]> {
+  return invoke<Agent[]>("list_agents");
+}
+
+export async function getSessionHistory(sessionId: string): Promise<HistoryMessage[]> {
+  return invoke<HistoryMessage[]>("get_session_history", { sessionId });
+}
+
+// ---- Workspace explorer (local filesystem; works without the server) ----
+
+export async function listWorkspace(): Promise<DirEntry[]> {
+  return invoke<DirEntry[]>("list_workspace");
+}
+
+export async function listDirectory(path: string): Promise<DirEntry[]> {
+  return invoke<DirEntry[]>("list_directory", { path });
+}
+
+export async function readFile(path: string): Promise<string> {
+  return invoke<string>("read_file", { path });
+}
+
+// ---- Experiments (local definitions; arms run through real Loom calls) ----
+
+export async function getExperiments(): Promise<Experiment[]> {
+  return invoke<Experiment[]>("get_experiments");
+}
+
+export async function addExperiment(
+  title: string,
+  question: string,
+  hypothesis: string,
+): Promise<Experiment> {
+  return invoke<Experiment>("add_experiment", { title, question, hypothesis });
+}
+
+export async function addExperimentArm(
+  id: string,
+  label: string,
+  config: string,
+): Promise<Experiment> {
+  return invoke<Experiment>("add_experiment_arm", { id, label, config });
+}
+
+export async function setExperimentArmStatus(
+  id: string,
+  armId: string,
+  status: string,
+): Promise<Experiment> {
+  return invoke<Experiment>("set_experiment_arm_status", { id, armId, status });
+}
+
+export async function setExperimentArmResult(
+  id: string,
+  armId: string,
+  result: string,
+): Promise<Experiment> {
+  return invoke<Experiment>("set_experiment_arm_result", { id, armId, result });
+}
+
+export async function chooseExperimentArm(
+  id: string,
+  armId: string,
+): Promise<Experiment> {
+  return invoke<Experiment>("choose_experiment_arm", { id, armId });
 }

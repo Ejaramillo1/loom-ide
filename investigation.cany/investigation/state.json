@@ -1,43 +1,65 @@
 {
-  "revision": 4,
+  "revision": 12,
   "brief": {
-    "question": "Refine the existing Loom IDE to match both supplied references and make its workspace functional with verified Loom integration.",
-    "targets": [],
-    "constraints": [
-      "Preserve existing Tauri application",
-      "No upstream edits or pushes",
-      "No dev servers",
-      "References are identical visual benchmark"
+    "question": "Explain how the open Loom project works: architecture, execution flow, main components and boundaries.",
+    "targets": [
+      "/home/ed/work/loom"
     ],
-    "done_when": "Build and rebuild checks pass; workspace, chat, editor and experiment flows work; unsupported live capabilities clearly labeled."
+    "constraints": [
+      "Static analysis only; do not run code.",
+      "Use MCP evidence; distinguish observations and inferences.",
+      "Prior UI refinement task is historical context, not this question."
+    ],
+    "done_when": "Concise architecture and flow explanation backed by evidence, with unknowns."
   },
   "plan": [
     {
-      "title": "Study the references and existing experience",
-      "status": "done"
-    },
-    {
-      "title": "Refine the atmosphere and layout",
-      "status": "done"
-    },
-    {
-      "title": "Complete workspace and experiment interactions",
-      "status": "blocked",
-      "why": "Existing interactions compile; runtime interaction verification is unavailable because browser host and approved native capture are unavailable."
-    },
-    {
-      "title": "Verify Loom connection boundaries",
+      "title": "Inspect target overview and entry documentation",
       "status": "done",
-      "why": "Interface verified against local Loom protocol and HTTP source; runtime connection remains unavailable in restricted environment."
+      "why": "Partial source inventory: 931 files, size-limited; docs identified, contents not read."
     },
     {
-      "title": "Check the build and refine the result",
+      "title": "Trace main components and execution flow",
       "status": "blocked",
-      "why": "Frontend, desktop and rebuild_check pass. Fresh screenshot comparison cannot be completed with unavailable browser host and native capture approval."
+      "why": "Available source importer does not parse Go bodies; text reader requires builder context. No list_toolsets/enable_toolset callable in live list."
+    },
+    {
+      "title": "Record findings and explain limitations",
+      "status": "done",
+      "why": "Recorded observed file structure, inferred architecture and explicit open question."
     }
   ],
-  "hypotheses": [],
-  "findings": [],
-  "handoff": "Resumed saved project in root (craft.json app_in_root=true); app/ contains the browser Loom bridge. Opened both reference/picture-1.png and picture-2.png; identical benchmark. npm run build passed, Tauri cargo build passed, rebuild_check passed Rust build/tests. Refined desktop proportions/background and increased sphere contours; fixed misleading hiding of demo collaboration on healthy chat and example source label. Documented source-verified Loom HTTP boundary in docs/loom-integration.md; unknown resolved from local proto and HTTP source, not live execution. Local socket access denied. Native_window_capture was refused because approval policy never; CUA browser host unavailable, snap Chromium cannot create runtime folder in restricted filesystem. NO fresh screenshot was captured, NO rendered comparison completed. Remaining: capture actual Tauri screen at 1671x941, compare sphere/layout to references, exercise workspace/chat/editor/experiment flows. No dev servers, commits, upstream edits or pushes.",
-  "updated": "2026-11-12T02:25:57Z"
+  "hypotheses": [
+    {
+      "id": "hyp_1",
+      "claim": "Loom is a Go agent orchestration system with terminal UI, configurable tools/backends and persistent conversation state.",
+      "prediction": "Entry points should initialize configuration, provider/backend and session stores, then route requests through an agent tool-call loop.",
+      "status": "testing",
+      "supporting": [
+        "ev_9d0bef30a39ddbcd1cd218156e54f8a48b18e0db54b0bc4c854f2b961874f8a0"
+      ],
+      "contradicting": [],
+      "notes": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "fnd_1",
+      "statement": "The partial Loom source inventory includes Go packages for agent configuration/registry/context/memory/session storage, TUI adapters, MCP/Supabase/Teradata backends, artifacts, collaboration and generated protobuf/gRPC gateway files. This establishes file presence, not implementation behavior.",
+      "evidence_ids": [
+        "ev_9d0bef30a39ddbcd1cd218156e54f8a48b18e0db54b0bc4c854f2b961874f8a0"
+      ],
+      "confidence": "observed"
+    },
+    {
+      "id": "fnd_2",
+      "statement": "The filenames suggest a Go agent orchestration architecture: a terminal interface fronts configurable agents with tool/backend integrations, memory/session handling and workflow patterns. Exact initialization and request flow remain unverified because source text could not be read with available investigation tools.",
+      "evidence_ids": [
+        "ev_9d0bef30a39ddbcd1cd218156e54f8a48b18e0db54b0bc4c854f2b961874f8a0"
+      ],
+      "confidence": "inferred"
+    }
+  ],
+  "handoff": "Current question: explain open target /home/ed/work/loom, not historical Tauri UI refinement. Static only. app_source_import inventoried 931 files, partial due 12MB/200KB limits: ev_9d0bef30a39ddbcd1cd218156e54f8a48b18e0db54b0bc4c854f2b961874f8a0. Path-only browse ev_332c738e891b0f76ebaf91eeb15ae5bc3751fb04af0a2286af0b9b2be50c39d2. fnd_1 observed file structure, fnd_2 inferred agent architecture; hyp_1 remains unverified. build_file_read absolute README failed feature_missing: tools only while building. Do not repeat or start a build just to read. No source text or runtime behavior verified. Tool list contains no list_toolsets/enable_toolset. Next need MCP source-text capability to inspect README/go.mod/entrypoints/agent execution/server handlers; then replace filename-level inference with exact flow. Historical handoff mentioned Tauri builds but has no evidence and is not proof for current target.",
+  "updated": "2026-11-12T03:39:32Z"
 }

@@ -1,11 +1,13 @@
 # Brief
 
-**Question:** Refine the existing Loom IDE to match both supplied references and make its workspace functional with verified Loom integration.
+**Question:** Explain how the open Loom project works: architecture, execution flow, main components and boundaries.
+
+**Targets:**
+- /home/ed/work/loom
 
 **Constraints:**
-- Preserve existing Tauri application
-- No upstream edits or pushes
-- No dev servers
-- References are identical visual benchmark
+- Static analysis only; do not run code.
+- Use MCP evidence; distinguish observations and inferences.
+- Prior UI refinement task is historical context, not this question.
 
-**Done when:** Build and rebuild checks pass; workspace, chat, editor and experiment flows work; unsupported live capabilities clearly labeled.
+**Done when:** Concise architecture and flow explanation backed by evidence, with unknowns.

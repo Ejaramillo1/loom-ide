@@ -22,10 +22,10 @@
             <span class="brand-name">Loom</span>
           </div>
           <div class="vdiv" aria-hidden="true"></div>
-          <p class="objective">
+          <button class="objective" id="objective-btn" type="button" title="Open this work">
             <span class="obj-label">You are working on:</span>
             <strong id="objective-title">No work selected</strong>
-          </p>
+          </button>
           <div class="top-right">
             <button class="header-btn" id="work-toggle" type="button" aria-controls="left-col" aria-expanded="false">
               Work
@@ -50,43 +50,6 @@
 
         <!-- ======================= Main (row 2) ======================= -->
         <div class="main">
-          <!-- Left icon rail -->
-          <nav class="rail" aria-label="Sections">
-            <button class="rail-btn active" data-section="work" type="button" title="Work">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
-                <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
-              </svg>
-            </button>
-            <button class="rail-btn" data-section="code" type="button" title="Code">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M8 6L3 12l5 6" /><path d="M16 6l5 6-5 6" />
-              </svg>
-            </button>
-            <button class="rail-btn" data-section="agents" type="button" title="Agents">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2.5L21 7.5v9l-9 5-9-5v-9l9-5z" /><path d="M12 12L21 7.5" /><path d="M12 12v9.5" /><path d="M12 12L3 7.5" />
-              </svg>
-            </button>
-            <button class="rail-btn" data-section="evidence" type="button" title="Evidence">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                <path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-8" /><path d="M22 20H2" />
-              </svg>
-            </button>
-            <button class="rail-btn" data-section="layers" type="button" title="Layers">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" />
-              </svg>
-            </button>
-            <button class="rail-btn more" data-section="more" type="button" title="More">
-              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
-            </button>
-            <div class="rail-menu" id="rail-menu" hidden>
-              <button type="button" data-goto="artifacts" data-atab="artifacts">Artifacts</button>
-              <button type="button" data-goto="artifacts" data-atab="documents">Documents</button>
-            </div>
-          </nav>
-
           <!-- Left pane: work catalogue + Conversation (always live) -->
           <aside class="left-col" id="left-col" aria-label="Work catalogue">
             <section class="work-panel" aria-label="Work">
@@ -112,6 +75,15 @@
               <div class="chat-menu" id="chat-menu" hidden>
                 <button type="button" id="chat-clear">Clear chat</button>
               </div>
+              <div class="session-bar">
+                <select id="session-select" class="session-select" aria-label="Session" title="Conversation session">
+                  <option value="">No session</option>
+                </select>
+                <button class="icon-btn small" id="session-new" type="button" title="New session" aria-label="New session">＋</button>
+                <select id="agent-select" class="agent-select" aria-label="Agent" title="Agent">
+                  <option value="">Default agent</option>
+                </select>
+              </div>
               <div id="chat-log" class="chat-log"></div>
               <form id="chat-form" class="chat-input">
                 <input id="chat-text" type="text" placeholder="Message Loom…" aria-label="Message Loom" autocomplete="off" />
@@ -127,8 +99,21 @@
           <!-- Center: workspace -->
           <section class="center" aria-label="Workspace">
             <div id="view-experiment" class="view view-experiment">
-              <canvas id="sphere" aria-label="Loom sphere — agent activity"></canvas>
-              <p class="sphere-caption" id="sphere-caption">At rest — nothing is running.</p>
+              <div class="mode-head">
+                <h2>Experiment</h2>
+                <p>Design experiments, run their arms through Loom, and choose from real evidence.</p>
+              </div>
+              <div class="exp-layout">
+                <aside class="exp-side" aria-label="Experiments">
+                  <div class="exp-sphere">
+                    <canvas id="sphere" aria-label="Loom sphere — agent activity"></canvas>
+                    <p class="sphere-caption" id="sphere-caption">At rest — nothing is running.</p>
+                  </div>
+                  <button class="btn" id="exp-new" type="button">New experiment</button>
+                  <ul id="exp-list" class="exp-list"></ul>
+                </aside>
+                <div id="exp-detail" class="exp-detail"></div>
+              </div>
             </div>
 
             <div id="view-work" class="view view-work" hidden>
@@ -138,18 +123,28 @@
             <div id="view-code" class="view view-code" hidden>
               <div class="mode-head">
                 <h2>Code</h2>
-                <p>Notes. A plain editor with saving; syntax colour and a full file tree are honest limits of this desktop prototype.</p>
+                <p>Workspace files on the left, notes on the right. Notes save locally; workspace files open read-only.</p>
               </div>
-              <div class="code-panel">
-                <div class="code-tabs">
-                  <button type="button" class="code-tab active" data-note="design">Design philosophy</button>
-                  <button type="button" class="code-tab" data-note="scratch">Scratch notes</button>
-                </div>
-                <textarea id="code-editor" spellcheck="false" aria-label="Notes editor"></textarea>
-                <div class="code-foot">
-                  <button id="code-save" class="btn" type="button">Save</button>
-                  <button id="code-ask" class="btn ghost" type="button">Ask Loom about this</button>
-                  <span id="code-saved" class="saved-note" hidden>Saved ✓</span>
+              <div class="code-split">
+                <aside class="file-tree" aria-label="Workspace files">
+                  <div class="file-tree-head">
+                    <span>Workspace</span>
+                    <button class="icon-btn small" id="file-tree-refresh" type="button" title="Refresh" aria-label="Refresh workspace">↻</button>
+                  </div>
+                  <div id="file-tree" class="file-tree-body"></div>
+                </aside>
+                <div class="code-panel">
+                  <div class="code-tabs">
+                    <button type="button" class="code-tab active" data-note="design">Design philosophy</button>
+                    <button type="button" class="code-tab" data-note="scratch">Scratch notes</button>
+                  </div>
+                  <div id="code-path" class="code-path" hidden></div>
+                  <textarea id="code-editor" spellcheck="false" aria-label="Notes editor"></textarea>
+                  <div class="code-foot">
+                    <button id="code-save" class="btn" type="button">Save</button>
+                    <button id="code-ask" class="btn ghost" type="button">Ask Loom about this</button>
+                    <span id="code-saved" class="saved-note" hidden>Saved ✓</span>
+                  </div>
                 </div>
               </div>
             </div>
