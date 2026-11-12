@@ -92,7 +92,7 @@ switcher — show the same current destination.
 
 ## What it is
 
-- **Backend (Rust, `src-tauri/`)** — Tauri 2 commands (30):
+- **Backend (Rust, `src-tauri/`)** — Tauri 2 commands (36):
   - Work: `get_work_items` / `add_work_item` / `set_work_status` /
     `set_work_autonomy` / `set_work_session` /
     `set_work_success_criteria` / `set_work_artifacts` — work items
@@ -100,6 +100,21 @@ switcher — show the same current destination.
     like the existing eframe app. The store starts empty; work items
     come from the user creating them. Saves are atomic (temp file +
     fsync + rename); a corrupt file is moved aside, never overwritten.
+  - Intents: `get_intents` / `create_intent` / `update_intent` /
+    `set_intent_acceptance` / `set_active_intent` / `delete_intent` —
+    an Intent is what the person wants, why, what "done" means
+    (acceptance checklist), and how much freedom the system has.
+    Persisted in `<app-data>/loom-ide/intents.json` with the same
+    atomic-save and corrupt-file protection as work items. One intent
+    owns many work items; the active intent is pinned at the top of
+    the workspace. No work exists without an intent: creating work
+    with no active intent auto-creates a one-line intent from its
+    title. Work inherits its intent's autonomy, and a work item's
+    autonomy can never be raised above its intent's level. Editing an
+    intent's statement, why, or autonomy bumps its version and keeps
+    the previous version in history; ticking acceptance criteria does
+    not bump the version. An intent with work attached cannot be
+    deleted until that work is moved or removed.
   - Experiments: `get_experiments` / `add_experiment` /
     `add_experiment_arm` / `set_experiment_arm_status` /
     `set_experiment_arm_result` / `choose_experiment_arm` /

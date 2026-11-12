@@ -22,7 +22,10 @@ use tauri::{AppHandle, Manager, State};
 mod experiment;
 use experiment::{Experiment, ExperimentStore};
 mod store;
-use store::{AttentionItem, CollabStep, WorkItem, WorkStore};
+use store::{
+    autonomy_rank, AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem,
+    WorkStore,
+};
 
 /// Deserialize an `i64` that may arrive either as a JSON number or as a
 /// JSON string. The Loom gateway (grpc-gateway / protojson) encodes every
@@ -86,9 +89,19 @@ fn experiments_file_path(app: &AppHandle) -> std::path::PathBuf {
         .join("experiments.json")
 }
 
+/// Where intents live on disk: <app-data>/loom-ide/intents.json
+fn intents_file_path(app: &AppHandle) -> std::path::PathBuf {
+    app.path()
+        .app_data_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("loom-ide")
+        .join("intents.json")
+}
+
 pub struct AppState {
     work: Mutex<WorkStore>,
     experiments: Mutex<ExperimentStore>,
+    intents: Mutex<IntentStore>,
 }
 
 // ---------------------------------------------------------------------------
@@ -101,12 +114,48 @@ fn get_work_items(state: State<AppState>) -> Vec<WorkItem> {
 }
 
 #[tauri::command]
-fn add_work_item(title: String, state: State<AppState>) -> Result<WorkItem, String> {
-    state
-        .work
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .add(title)
+fn add_work_item(
+    title: String,
+    intent_id: Option<String>,
+    state: State<AppState>,
+) -> Result<WorkItem, String> {
+    // The title is validated before any intent is auto-created, so a bad
+    // title cannot leave a stray one-line intent behind.
+    if title.trim().is_empty() {
+        return Err("Work item title cannot be empty".to_string());
+    }
+    // Lock order is ALWAYS intents first, then work (never the reverse).
+    let mut intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+    let resolved: Intent = match intent_id {
+        Some(id) => intents
+            .get(&id)
+            .ok_or_else(|| format!("Unknown intent: {id}"))?,
+        None => match intents.active() {
+            Some(intent) => intent,
+            None => {
+                // Rule 1: no work exists without an intent. A one-line
+                // intent the person confirms (the work title) is created
+                // and made active.
+                let mut intent = intents.create(
+                    title.trim().to_string(),
+                    None,
+                    Vec::new(),
+                    Some("collaborative".to_string()),
+                )?;
+                if intents.active_id().as_deref() != Some(intent.id.as_str()) {
+                    intent = intents.set_active(&intent.id)?;
+                }
+                intent
+            }
+        },
+    };
+    let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+    let mut item = work.add(title, Some(resolved.id.clone()))?;
+    // Inheritance (rule 3): the work starts at the intent's autonomy.
+    if resolved.autonomy != "collaborative" {
+        item = work.set_autonomy(&item.id, &resolved.autonomy)?;
+    }
+    Ok(item)
 }
 
 #[tauri::command]
@@ -124,11 +173,31 @@ fn set_work_autonomy(
     autonomy: String,
     state: State<AppState>,
 ) -> Result<WorkItem, String> {
-    state
-        .work
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .set_autonomy(&id, &autonomy)
+    let requested = autonomy_rank(&autonomy)
+        .ok_or_else(|| format!("Unknown autonomy level: {autonomy}"))?;
+    // Lock order is ALWAYS intents first, then work (never the reverse).
+    let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+    let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+    // Rule 3: a work item's autonomy can be tightened below its intent's
+    // setting, never loosened above it without the person. Work items
+    // with no intent (created before intents existed) are unaffected.
+    let item = work
+        .items()
+        .into_iter()
+        .find(|w| w.id == id)
+        .ok_or_else(|| format!("Unknown work item: {id}"))?;
+    if let Some(intent_id) = &item.intent_id {
+        if let Some(intent) = intents.get(intent_id) {
+            let allowed = autonomy_rank(&intent.autonomy).unwrap_or(2);
+            if requested > allowed {
+                return Err(format!(
+                    "Cannot raise this work item to \"{autonomy}\": its intent allows at most \"{}\". Loosen the intent's autonomy first, or pick a lower level for this work item.",
+                    intent.autonomy
+                ));
+            }
+        }
+    }
+    work.set_autonomy(&id, &autonomy)
 }
 
 #[tauri::command]
@@ -168,6 +237,93 @@ fn set_work_artifacts(
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .set_artifacts(&id, artifact_ids)
+}
+
+// ---------------------------------------------------------------------------
+// Intents (the primary object: what the person wants, why, what "done"
+// means, and how much freedom the system has). One intent owns many
+// pieces of work; no work exists without an intent.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+struct IntentsList {
+    active_intent_id: Option<String>,
+    intents: Vec<Intent>,
+}
+
+#[tauri::command]
+fn get_intents(state: State<AppState>) -> IntentsList {
+    let (active_intent_id, intents) = state
+        .intents
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .list();
+    IntentsList {
+        active_intent_id,
+        intents,
+    }
+}
+
+#[tauri::command]
+fn create_intent(
+    statement: String,
+    why: Option<String>,
+    acceptance: Vec<AcceptanceCriterion>,
+    autonomy: Option<String>,
+    state: State<AppState>,
+) -> Result<Intent, String> {
+    state
+        .intents
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .create(statement, why, acceptance, autonomy)
+}
+
+#[tauri::command]
+fn update_intent(
+    id: String,
+    statement: Option<String>,
+    why: Option<String>,
+    autonomy: Option<String>,
+    status: Option<String>,
+    state: State<AppState>,
+) -> Result<Intent, String> {
+    state
+        .intents
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .update(&id, statement, why, autonomy, status)
+}
+
+#[tauri::command]
+fn set_intent_acceptance(
+    id: String,
+    criteria: Vec<AcceptanceCriterion>,
+    state: State<AppState>,
+) -> Result<Intent, String> {
+    state
+        .intents
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .set_acceptance(&id, criteria)
+}
+
+#[tauri::command]
+fn set_active_intent(id: String, state: State<AppState>) -> Result<Intent, String> {
+    state
+        .intents
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .set_active(&id)
+}
+
+#[tauri::command]
+fn delete_intent(id: String, state: State<AppState>) -> Result<bool, String> {
+    // Lock order is ALWAYS intents first, then work (never the reverse):
+    // delete refuses when work still references the intent.
+    let mut intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+    intents.delete(&id, &work)
 }
 
 // ---------------------------------------------------------------------------
@@ -981,9 +1137,12 @@ pub fn run() {
             let store = WorkStore::load(path)?;
             let exp_path = experiments_file_path(app.handle());
             let exp_store = ExperimentStore::load(exp_path)?;
+            let int_path = intents_file_path(app.handle());
+            let int_store = IntentStore::load(int_path)?;
             app.manage(AppState {
                 work: Mutex::new(store),
                 experiments: Mutex::new(exp_store),
+                intents: Mutex::new(int_store),
             });
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -1002,6 +1161,12 @@ pub fn run() {
             set_work_session,
             set_work_success_criteria,
             set_work_artifacts,
+            get_intents,
+            create_intent,
+            update_intent,
+            set_intent_acceptance,
+            set_active_intent,
+            delete_intent,
             get_collaboration,
             get_attention,
             get_loom_status,

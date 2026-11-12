@@ -19,8 +19,43 @@ export interface WorkItem {
   updated_at: number;
   // The Loom session associated with this work item (if any).
   session_id?: string | null;
+  // The intent this work belongs to (if any).
+  intent_id?: string | null;
   success_criteria?: string[];
   artifact_ids?: string[];
+}
+
+export interface AcceptanceCriterion {
+  text: string;
+  done: boolean;
+}
+
+export interface IntentVersion {
+  version: number;
+  statement: string;
+  why?: string | null;
+  acceptance: AcceptanceCriterion[];
+  updated_at: number;
+}
+
+export type IntentAutonomy = "manual" | "assisted" | "collaborative" | "delegated";
+
+export interface Intent {
+  id: string;
+  statement: string;
+  why?: string | null;
+  acceptance: AcceptanceCriterion[];
+  autonomy: IntentAutonomy;
+  status: "active" | "done";
+  version: number;
+  history: IntentVersion[];
+  created_at: number;
+  updated_at: number;
+}
+
+export interface IntentsList {
+  active_intent_id: string | null;
+  intents: Intent[];
 }
 
 export interface CollabStep {
@@ -174,6 +209,75 @@ function saveLocalWorkItems(items: WorkItem[]) {
   }
 }
 
+const INTENTS_KEY = "loom-ide-tauri:intents";
+
+// Browser fallback persistence: the user's own intents, stored locally.
+// Starts empty; nothing is seeded.
+function localIntents(): IntentsList {
+  try {
+    const raw = localStorage.getItem(INTENTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as IntentsList;
+      if (Array.isArray(parsed.intents)) {
+        return {
+          active_intent_id: parsed.active_intent_id ?? null,
+          intents: parsed.intents,
+        };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return { active_intent_id: null, intents: [] };
+}
+
+function saveLocalIntents(list: IntentsList) {
+  try {
+    localStorage.setItem(INTENTS_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+}
+
+function nowUnix(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+/** Trim criterion text and drop empties, as the backend does. */
+function normalizeCriteria(criteria: AcceptanceCriterion[]): AcceptanceCriterion[] {
+  return criteria
+    .map((c) => ({ text: c.text.trim(), done: c.done }))
+    .filter((c) => c.text.length > 0);
+}
+
+/** Create an intent in the browser fallback store. Mirrors the backend:
+    the first intent becomes the active one. */
+function createLocalIntent(
+  statement: string,
+  why?: string | null,
+  acceptance: AcceptanceCriterion[] = [],
+  autonomy?: IntentAutonomy | null,
+): Intent {
+  const list = localIntents();
+  const now = nowUnix();
+  const intent: Intent = {
+    id: `intent-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+    statement: statement.trim(),
+    why: why?.trim() ? why.trim() : null,
+    acceptance: normalizeCriteria(acceptance),
+    autonomy: autonomy ?? "collaborative",
+    status: "active",
+    version: 1,
+    history: [],
+    created_at: now,
+    updated_at: now,
+  };
+  list.intents.push(intent);
+  if (list.active_intent_id === null) list.active_intent_id = intent.id;
+  saveLocalIntents(list);
+  return intent;
+}
+
 // ---- Commands ----
 
 export async function getWorkItems(): Promise<WorkItem[]> {
@@ -181,8 +285,21 @@ export async function getWorkItems(): Promise<WorkItem[]> {
   return invoke<WorkItem[]>("get_work_items");
 }
 
-export async function addWorkItem(title: string): Promise<WorkItem> {
+export async function addWorkItem(
+  title: string,
+  intentId?: string | null,
+): Promise<WorkItem> {
   if (!IN_TAURI) {
+    // Mirror the backend: no work without an intent. An explicit intent
+    // wins, then the active one, then a one-line intent from the title.
+    let resolvedId = intentId ?? null;
+    if (!resolvedId) {
+      const list = localIntents();
+      const active = list.intents.find((i) => i.id === list.active_intent_id);
+      resolvedId = active
+        ? active.id
+        : createLocalIntent(title).id;
+    }
     const items = localWorkItems();
     const item: WorkItem = {
       id: `work-${Date.now()}`,
@@ -190,12 +307,16 @@ export async function addWorkItem(title: string): Promise<WorkItem> {
       status: "paused",
       autonomy: "collaborative",
       updated_label: "Now",
-      updated_at: Math.floor(Date.now() / 1000),
+      updated_at: nowUnix(),
+      intent_id: resolvedId,
     };
     saveLocalWorkItems([item, ...items]);
     return item;
   }
-  return invoke<WorkItem>("add_work_item", { title });
+  // Tauri requires the key to be present: an id string, or null when
+  // there is no intent to attach. The backend then resolves the active
+  // intent, or auto-creates a one-line intent from the title.
+  return invoke<WorkItem>("add_work_item", { title, intent_id: intentId ?? null });
 }
 
 export async function setWorkStatus(
@@ -238,6 +359,149 @@ export async function setWorkSession(
     return items.find((w) => w.id === id)!;
   }
   return invoke<WorkItem>("set_work_session", { id, sessionId });
+}
+
+// ---- Intents (the primary object) ----
+
+export async function getIntents(): Promise<IntentsList> {
+  if (!IN_TAURI) return localIntents();
+  return invoke<IntentsList>("get_intents");
+}
+
+export async function createIntent(args: {
+  statement: string;
+  why?: string | null;
+  acceptance?: AcceptanceCriterion[];
+  autonomy?: IntentAutonomy | null;
+}): Promise<Intent> {
+  if (!IN_TAURI) {
+    return createLocalIntent(args.statement, args.why, args.acceptance ?? [], args.autonomy);
+  }
+  // `acceptance` is a required list on the backend: always send the key,
+  // empty when there are no criteria yet.
+  return invoke<Intent>("create_intent", {
+    statement: args.statement,
+    why: args.why ?? null,
+    acceptance: normalizeCriteria(args.acceptance ?? []),
+    autonomy: args.autonomy ?? null,
+  });
+}
+
+export async function updateIntent(args: {
+  id: string;
+  statement?: string | null;
+  why?: string | null;
+  autonomy?: IntentAutonomy | null;
+  status?: "active" | "done" | null;
+}): Promise<Intent> {
+  if (!IN_TAURI) {
+    const list = localIntents();
+    const idx = list.intents.findIndex((i) => i.id === args.id);
+    if (idx < 0) throw new Error(`Unknown intent: ${args.id}`);
+    const current = list.intents[idx];
+    // Mirror the backend: a content change (statement, why, autonomy)
+    // bumps the version and snapshots the previous version; a status
+    // change alone does not. Null/undefined means "no change"; an empty
+    // string clears the why.
+    const newStatement =
+      args.statement != null && args.statement.trim() !== ""
+        ? args.statement.trim()
+        : current.statement;
+    const newWhy =
+      args.why == null ? (current.why ?? null) : args.why.trim() === "" ? null : args.why.trim();
+    const newAutonomy = args.autonomy ?? current.autonomy;
+    const changed =
+      newStatement !== current.statement ||
+      newWhy !== (current.why ?? null) ||
+      newAutonomy !== current.autonomy;
+    const updated: Intent = { ...current };
+    if (changed) {
+      updated.history = [
+        ...current.history,
+        {
+          version: current.version,
+          statement: current.statement,
+          why: current.why ?? null,
+          acceptance: current.acceptance,
+          updated_at: current.updated_at,
+        },
+      ];
+      updated.version = current.version + 1;
+      updated.updated_at = nowUnix();
+    }
+    updated.statement = newStatement;
+    updated.why = newWhy;
+    updated.autonomy = newAutonomy;
+    if (args.status != null) {
+      updated.status = args.status;
+      updated.updated_at = nowUnix();
+    }
+    list.intents[idx] = updated;
+    saveLocalIntents(list);
+    return updated;
+  }
+  return invoke<Intent>("update_intent", {
+    id: args.id,
+    statement: args.statement ?? null,
+    why: args.why ?? null,
+    autonomy: args.autonomy ?? null,
+    status: args.status ?? null,
+  });
+}
+
+export async function setIntentAcceptance(args: {
+  id: string;
+  criteria: AcceptanceCriterion[];
+}): Promise<Intent> {
+  if (!IN_TAURI) {
+    const list = localIntents();
+    const idx = list.intents.findIndex((i) => i.id === args.id);
+    if (idx < 0) throw new Error(`Unknown intent: ${args.id}`);
+    // Toggling acceptance never bumps the version and keeps no history.
+    const updated: Intent = {
+      ...list.intents[idx],
+      acceptance: normalizeCriteria(args.criteria),
+      updated_at: nowUnix(),
+    };
+    list.intents[idx] = updated;
+    saveLocalIntents(list);
+    return updated;
+  }
+  return invoke<Intent>("set_intent_acceptance", {
+    id: args.id,
+    criteria: normalizeCriteria(args.criteria),
+  });
+}
+
+export async function setActiveIntent(id: string): Promise<Intent> {
+  if (!IN_TAURI) {
+    const list = localIntents();
+    const intent = list.intents.find((i) => i.id === id);
+    if (!intent) throw new Error(`Unknown intent: ${id}`);
+    list.active_intent_id = id;
+    saveLocalIntents(list);
+    return intent;
+  }
+  return invoke<Intent>("set_active_intent", { id });
+}
+
+export async function deleteIntent(id: string): Promise<boolean> {
+  if (!IN_TAURI) {
+    const count = localWorkItems().filter((w) => w.intent_id === id).length;
+    if (count > 0) {
+      throw new Error(
+        `Cannot delete intent ${id}: ${count} work item(s) still reference it. Reassign or delete that work first.`,
+      );
+    }
+    const list = localIntents();
+    const idx = list.intents.findIndex((i) => i.id === id);
+    if (idx < 0) throw new Error(`Unknown intent: ${id}`);
+    list.intents.splice(idx, 1);
+    if (list.active_intent_id === id) list.active_intent_id = null;
+    saveLocalIntents(list);
+    return true;
+  }
+  return invoke<boolean>("delete_intent", { id });
 }
 
 // The Loom server does not expose step-by-step execution yet, so
