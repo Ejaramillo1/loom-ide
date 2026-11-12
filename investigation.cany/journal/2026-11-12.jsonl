@@ -89,3 +89,17 @@
 {"caller":"ui","duration_ms":1,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T03:58:37Z","tool":"project_pins_list","ts":1794455917}
 {"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T03:58:53Z","tool":"project_pins_list","ts":1794455933}
 {"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T03:59:00Z","tool":"project_pins_list","ts":1794455940}
+{"caller":"ui","duration_ms":31,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:24:52Z","tool":"project_pins_list","ts":1794507892}
+{"kind":"user_message","text":"Your last run stopped before it finished (it was paused, or the app or the computer stopped). Everything you made so far is in app/. Pick up where you left off: see what's done and what's left (your checklist and core_unknowns_show), finish the task, then build it again, fix any errors. Craft Anything checks your build after your turn. Reply with 1-3 plain sentences on what you did.\n\nKeep to what the person said their 2 picture(s) of the original in reference/ show; you can't look at them yourself.","time":"2026-11-12T18:24:52Z","ts":1794507892}
+{"caller":"agent","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:24:52Z","tool":"core_investigation_show","ts":1794507892}
+{"action":"trim","blocks":0,"budget":24000,"kind":"context","time":"2026-11-12T18:24:52Z","tokens_after":91985,"tokens_before":91985,"ts":1794507892}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:27:27Z","tool":"project_pins_list","ts":1794508047}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:31:26Z","tool":"project_pins_list","ts":1794508286}
+{"backend":"Ollama (local)","cache_read_tokens":1,"cache_write_tokens":0,"cost_usd":0.0,"effort":"high","input_tokens":2049,"kind":"model_turn","model":"qwen3:4b","output_tokens":1139,"stop_reason":"end_turn","time":"2026-11-12T18:37:17Z","ts":1794508637}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:40:23Z","tool":"project_pins_list","ts":1794508823}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:40:23Z","tool":"project_pins_list","ts":1794508823}
+{"caller":"ui","duration_ms":5,"kind":"tool_call","ok":true,"params":{"project":"/home/ed/loom-ide-tauri"},"time":"2026-11-12T18:40:34Z","tool":"project_preview","ts":1794508834}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:41:02Z","tool":"project_pins_list","ts":1794508862}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:51:46Z","tool":"project_pins_list","ts":1794509506}
+{"caller":"ui","duration_ms":4,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T18:52:05Z","tool":"project_pins_list","ts":1794509525}
+{"caller":"ui","duration_ms":0,"kind":"tool_call","ok":true,"params":{},"time":"2026-11-12T19:23:32Z","tool":"project_pins_list","ts":1794511412}
