@@ -74,12 +74,13 @@ import {
   type AutonomyChange,
 } from "./api";
 import { Sphere, type SphereState } from "./sphere";
+import { installAppMenu, textEditingActions } from "./app-menu";
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "layers" | "artifacts";
+type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "artifacts";
 
 type NoteKind = "design" | "scratch";
 
@@ -2521,7 +2522,7 @@ function renderEvidence() {
 }
 
 // ---------------------------------------------------------------------------
-// Layers view
+// Appearance preferences (View menu)
 // ---------------------------------------------------------------------------
 
 const LAYERS_KEY = "loom-ide-tauri:layers";
@@ -2552,38 +2553,6 @@ function applyLayerClasses() {
   if (!scene) return;
   for (const [id, on] of Object.entries(layerOn)) {
     scene.classList.toggle(`no-${id}`, !on);
-  }
-}
-
-function renderLayers() {
-  const list = $("#layers-list");
-  list.innerHTML = "";
-  for (const layer of LAYERS) {
-    const row = document.createElement("div");
-    row.className = "flat-row layer-row";
-    const text = document.createElement("div");
-    text.className = "layer-text";
-    const label = document.createElement("strong");
-    label.textContent = layer.label;
-    const desc = document.createElement("span");
-    desc.textContent = layer.desc;
-    text.append(label, desc);
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "switch";
-    toggle.setAttribute("role", "switch");
-    toggle.setAttribute("aria-checked", String(layerOn[layer.id]));
-    toggle.setAttribute("aria-label", `Toggle ${layer.label}`);
-    toggle.addEventListener("click", () => {
-      layerOn[layer.id] = !layerOn[layer.id];
-      document
-        .querySelector(".scene")
-        ?.classList.toggle(`no-${layer.id}`, !layerOn[layer.id]);
-      toggle.setAttribute("aria-checked", String(layerOn[layer.id]));
-      saveLayers();
-    });
-    row.append(text, toggle);
-    list.append(row);
   }
 }
 
@@ -4011,7 +3980,7 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
 }
 
 // ---------------------------------------------------------------------------
-// Modes (the footer mode switcher is the single navigation control)
+// Application menus and workspace modes
 // ---------------------------------------------------------------------------
 
 const ALL_VIEWS: Mode[] = [
@@ -4020,11 +3989,82 @@ const ALL_VIEWS: Mode[] = [
   "code",
   "agents",
   "evidence",
-  "layers",
   "artifacts",
 ];
 
+let appMenu: ReturnType<typeof installAppMenu> | null = null;
+
+function initAppMenu() {
+  const guide = $("#app-help-dialog") as HTMLDialogElement;
+  $("#app-help-close").addEventListener("click", () => guide.close());
+  appMenu = installAppMenu($("#app-menu"), [
+    {
+      label: "File",
+      items: [
+        { label: "New file…", disabled: () => fileCreationPending,
+          run: () => { setMode("code"); beginFileCreation("file"); } },
+        { label: "New folder…", disabled: () => fileCreationPending,
+          run: () => { setMode("code"); beginFileCreation("folder"); } },
+        "separator",
+        { label: "Design notes", run: () => openNote("design") },
+        { label: "Scratch notes", run: () => openNote("scratch") },
+        { label: "Save note", disabled: () => mode !== "code" || openFilePath !== null,
+          run: () => { $("#code-save").click(); } },
+      ],
+    },
+    {
+      label: "Edit",
+      items: [
+        ...textEditingActions(),
+        "separator",
+        { label: "Find work…", run: () => { openLeftDrawer(); setSearchOpen(true); } },
+      ],
+    },
+    {
+      label: "View",
+      items: [
+        ...(["code", "experiment", "work", "agents", "evidence"] as const).map((view) => ({
+          label: view[0].toUpperCase() + view.slice(1),
+          radio: true,
+          checked: () => mode === view,
+          run: () => setMode(view),
+        })),
+        "separator",
+        { label: "Work panel", disabled: () => !isLeftDrawer(),
+          checked: () => !isLeftDrawer() || document.body.classList.contains("left-open"),
+          run: () => document.body.classList.contains("left-open") ? closeLeftDrawer() : openLeftDrawer() },
+        { label: "Context panel", disabled: () => !isInspectorDrawer(),
+          checked: () => !isInspectorDrawer() || document.body.classList.contains("inspector-open"),
+          run: () => document.body.classList.contains("inspector-open") ? closeInspector() : openInspector() },
+        { label: "Conversation", checked: () => chatOpen, run: () => setChatOpen(!chatOpen) },
+        "separator",
+        ...LAYERS.map((layer) => ({
+          label: layer.label,
+          description: layer.desc,
+          checked: () => layerOn[layer.id],
+          run: () => {
+            layerOn[layer.id] = !layerOn[layer.id];
+            applyLayerClasses();
+            saveLayers();
+          },
+        })),
+      ],
+    },
+    {
+      label: "Help",
+      items: [
+        { label: "Using Loom", run: () => guide.showModal() },
+        { label: "About Loom", run: () => {
+          guide.showModal();
+          $("#app-help-about").scrollIntoView({ block: "nearest" });
+        } },
+      ],
+    },
+  ]);
+}
+
 function closeMenus() {
+  appMenu?.close();
   setChatMenu(false);
 }
 
@@ -4156,6 +4196,9 @@ function initCodeEditor() {
 // ---------------------------------------------------------------------------
 
 async function init() {
+  loadLayers();
+  applyLayerClasses();
+  initAppMenu();
   // Modes
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
@@ -4356,11 +4399,8 @@ async function init() {
   // Workspace views.
   loadChatOpen();
   applyChatOpen();
-  loadLayers();
-  applyLayerClasses();
   renderAgents();
   renderEvidence();
-  renderLayers();
   renderArtifacts();
 
   // Experiments (local definitions; arms run through real Loom calls).

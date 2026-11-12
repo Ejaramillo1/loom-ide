@@ -21,6 +21,7 @@
             <span class="brand-ring" aria-hidden="true"></span>
             <span class="brand-name">Loom</span>
           </div>
+          <nav id="app-menu" class="app-menu" aria-label="Application"></nav>
           <div class="vdiv" aria-hidden="true"></div>
           <button class="objective" id="objective-btn" type="button" title="Open this work">
             <span class="obj-label">You are working on:</span>
@@ -184,14 +185,6 @@
               <div id="evidence-list" class="scroll-list"></div>
             </div>
 
-            <div id="view-layers" class="view view-list" hidden>
-              <div class="mode-head">
-                <h2>Layers</h2>
-                <p>Show or hide the layers of the scene. The sphere only appears in Experiment mode; the water band only appears there too.</p>
-              </div>
-              <div id="layers-list" class="scroll-list"></div>
-            </div>
-
             <div id="view-artifacts" class="view view-list" hidden>
               <div class="mode-head">
                 <h2>Artifacts</h2>
@@ -314,12 +307,6 @@
               </svg>
               Evidence
             </button>
-            <button class="mode-btn" data-mode="layers" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 2l10 5.5L12 13 2 7.5 12 2z" /><path d="M2 12.5L12 18l10-5.5" /><path d="M2 17.5L12 23l10-5.5" />
-              </svg>
-              Layers
-            </button>
           </nav>
         </footer>
 
@@ -330,6 +317,15 @@
       <!-- Drawer scrim -->
       <div class="scrim" id="scrim" hidden></div>
     </div>
+    <dialog id="app-help-dialog" class="app-help-dialog" aria-labelledby="app-help-title">
+      <h2 id="app-help-title">Using Loom</h2>
+      <p>Use File to create workspace files and folders or open your notes. Workspace files open read-only; use Save note for Design and Scratch notes.</p>
+      <p>Edit acts on the last text field you focused. Standard keyboard shortcuts work directly in text fields.</p>
+      <p>Use View to switch workspaces, open panels, and adjust the scene’s appearance. Experiment runs and conversations need a connected Loom server.</p>
+      <h3 id="app-help-about">About Loom</h3>
+      <p>Loom is a human-centered development environment for work, experiments, and collaboration with AI agents.</p>
+      <button id="app-help-close" class="btn" type="button" autofocus>Close</button>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
