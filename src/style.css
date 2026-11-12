@@ -211,8 +211,7 @@ select {
 .scene.no-glass .mode-btn.active,
 .scene.no-glass .rail-btn.active,
 .scene.no-glass .code-tab.active,
-.scene.no-glass .tab.active,
-.scene.no-glass .inspector-tab.active {
+.scene.no-glass .tab.active {
   background: var(--surface);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -312,10 +311,6 @@ select {
 .header-btn[aria-expanded="true"] {
   background: #fff;
   font-weight: 600;
-}
-
-#conversation-btn {
-  display: inline-flex;
 }
 
 .status-pill {
@@ -588,6 +583,25 @@ select {
 
 .new-work input::placeholder {
   color: var(--muted);
+}
+
+/* ---------- Conversation, always live in the left column ---------- */
+/* The chat sits directly below the work list, not in a drawer or a
+   tab: it is always rendered and the input is always ready to type.
+   The work list keeps the flexible share of the column; the chat keeps
+   a fixed share (clamped so it stays usable at short window heights). */
+.left-col .work-panel {
+  flex: 1 1 0;
+  min-height: 120px;
+}
+
+.left-col .left-chat {
+  flex: 0 0 42%;
+  min-height: 200px;
+  max-height: 340px;
+  border-top: 1px solid rgba(221, 213, 208, 0.7);
+  margin-top: 12px;
+  padding-top: 10px;
 }
 
 /* ---------- Center ---------- */
@@ -1175,37 +1189,6 @@ select {
   min-width: 0;
 }
 
-.inspector-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 4px 10px;
-  flex-shrink: 0;
-}
-
-.inspector-tab {
-  font-size: 13px;
-  color: var(--muted);
-  padding: 6px 12px;
-  border-radius: var(--radius-control);
-  white-space: nowrap;
-}
-
-.inspector-tab:hover {
-  color: var(--ink);
-}
-
-.inspector-tab.active {
-  background: rgba(255, 255, 255, 0.85);
-  color: var(--ink);
-  font-weight: 600;
-  box-shadow: var(--shadow-panel);
-}
-
-.inspector-tabs .drawer-close {
-  margin-left: auto;
-}
-
 .inspector-pane {
   flex: 1;
   min-height: 0;
@@ -1214,10 +1197,6 @@ select {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
-}
-
-.inspector-pane[hidden] {
-  display: none;
 }
 
 .right-title {
@@ -1419,32 +1398,6 @@ select {
   flex-direction: column;
   padding: 4px 4px 0;
   overflow: hidden;
-}
-
-.chat-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 12px;
-  flex-shrink: 0;
-}
-
-.chat-ava {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1.7px solid var(--ink);
-  background: radial-gradient(circle at 35% 30%, #fffdf8, #e9dfd2 70%);
-  flex-shrink: 0;
-}
-
-.chat-title {
-  font-size: 14.5px;
-  font-weight: 600;
-}
-
-.chat-head .icon-btn {
-  margin-left: auto;
 }
 
 .chat-log {

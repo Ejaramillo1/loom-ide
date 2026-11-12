@@ -281,7 +281,7 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
   conv.type = "button";
   conv.className = "btn ghost";
   conv.textContent = "Conversation";
-  conv.addEventListener("click", () => openInspector("conversation", conv));
+  conv.addEventListener("click", () => focusChat(conv));
 
   controls.append(label, stateBtn, conv, error);
 
@@ -484,54 +484,45 @@ function isLeftDrawer(): boolean {
 }
 
 function updateScrim() {
-  // The inspector (Context / Conversation) is a non-modal drawer: it never
-  // raises the scrim and never closes on an outside click, so it stays put
-  // while the user works elsewhere in the app. Only the left (work)
+  // The inspector (Context) is a non-modal drawer: it never raises the
+  // scrim and never closes on an outside click. Only the left (work)
   // drawer is modal and raises the scrim.
   const open = document.body.classList.contains("left-open");
   $("#scrim").hidden = !open;
 }
 
-function setInspectorTab(tab: "context" | "conversation") {
-  for (const btn of document.querySelectorAll<HTMLButtonElement>(".inspector-tab")) {
-    const active = btn.id === `tab-${tab}`;
-    btn.classList.toggle("active", active);
-    btn.setAttribute("aria-selected", String(active));
-  }
-  $("#inspector-context").hidden = tab !== "context";
-  $("#inspector-chat").hidden = tab !== "conversation";
-}
-
-function openInspector(tab: "context" | "conversation", opener?: HTMLElement) {
+// The inspector holds Context only now. The chat lives in the left
+// column and is always visible, so there is no tab to switch and no
+// inspector state for the conversation.
+function openInspector(opener?: HTMLElement) {
   if (opener) lastFocus = opener;
-  setInspectorTab(tab);
-  const toggle =
-    tab === "context" ? $("#context-toggle") : $("#conversation-btn");
   if (isInspectorDrawer()) {
     document.body.classList.add("inspector-open");
-    toggle.setAttribute("aria-expanded", "true");
+    $("#context-toggle").setAttribute("aria-expanded", "true");
     updateScrim();
   } else {
-    toggle.setAttribute("aria-expanded", "true");
-  }
-  // The conversation opens ready to type: focus goes to the message box.
-  // Focus must never land on the drawer's close button — a focused close
-  // button fires on the first Space or Enter, which closed the panel
-  // while the user was trying to write a message.
-  if (tab === "conversation") {
-    ($("#chat-text") as HTMLInputElement).focus();
+    $("#context-toggle").setAttribute("aria-expanded", "true");
   }
 }
 
 function closeInspector() {
   document.body.classList.remove("inspector-open");
   $("#context-toggle").setAttribute("aria-expanded", "false");
-  $("#conversation-btn").setAttribute("aria-expanded", "false");
   updateScrim();
   if (lastFocus) {
     lastFocus.focus();
     lastFocus = null;
   }
+}
+
+/** The chat lives in the left column and is always visible; this just
+    brings it into view (opening the left drawer on narrow screens) and
+    focuses the message box. */
+function focusChat(from?: HTMLElement) {
+  if (isLeftDrawer()) {
+    openLeftDrawer(from);
+  }
+  ($("#chat-text") as HTMLInputElement).focus();
 }
 
 function openLeftDrawer(opener?: HTMLElement) {
@@ -973,7 +964,7 @@ function initCodeEditor() {
     window.setTimeout(() => (note.hidden = true), 2000);
   });
   $("#code-ask").addEventListener("click", async () => {
-    openInspector("conversation");
+    focusChat();
     await sendChat(`About this note: ${editor.value.slice(0, 280)}`);
   });
 }
@@ -1047,12 +1038,9 @@ async function init() {
     else openLeftDrawer(e.currentTarget as HTMLElement);
   });
   $("#context-toggle").addEventListener("click", (e) => {
-    // Switching tabs never closes the inspector. Only its ✕ button or
-    // Escape closes it, so the conversation stays put while in use.
-    openInspector("context", e.currentTarget as HTMLElement);
-  });
-  $("#conversation-btn").addEventListener("click", (e) => {
-    openInspector("conversation", e.currentTarget as HTMLElement);
+    // The inspector holds Context only. In drawer mode this opens it;
+    // its ✕ button or Escape closes it.
+    openInspector(e.currentTarget as HTMLElement);
   });
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
   $("#right-close").addEventListener("click", () => closeInspector());
@@ -1066,10 +1054,6 @@ async function init() {
     }
     updateScrim();
   });
-
-  // Inspector tabs.
-  $("#tab-context").addEventListener("click", () => setInspectorTab("context"));
-  $("#tab-conversation").addEventListener("click", () => setInspectorTab("conversation"));
 
   // Search: filters the work catalogue by title.
   $("#search-btn").addEventListener("click", () => {

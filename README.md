@@ -21,10 +21,10 @@ whitespace.
 Three rows, no absolute positioning:
 
 - **Header (~56px)** — current objective, Work and Context toggles,
-  a Conversation control, a search input that filters the work list,
-  and the Loom status pill.
-- **Main (flexible)** — icon rail (48px), work catalogue (~260px),
-  center floor (min ~520px), right inspector (~280px).
+  a search input that filters the work list, and the Loom status pill.
+- **Main (flexible)** — icon rail (48px), work catalogue (~260px)
+  with the Conversation always live below the work list, center floor
+  (min ~520px), right inspector (~280px, Context only).
 - **Footer (~56px)** — the mode switcher, in normal flow:
   **Experiment · Work · Code · Agents · Evidence · Layers · Artifacts**.
 
@@ -34,11 +34,14 @@ scrolling bodies and never clip.
 **Breakpoints.** ≥ ~1440px shows all panes. ~1100–1439px collapses
 the right inspector behind the labeled **Context** toggle. < ~1100px
 also moves the left catalogue behind the **Work** toggle. The
-Conversation is a labeled control: a contextual pane on wide windows,
-a drawer on narrow ones. Closing it keeps the chat text and history.
-Drawers close with Escape and return focus to the control that opened
-them. Drawers span only the main row — they never cover the header or
-the footer.
+Conversation is not a drawer or a tab: it lives in the left column
+directly below the work list, and it is always visible and ready to
+type — in every mode, at every width. Below ~1100px it travels with
+the left drawer, so it is reached through the **Work** toggle there.
+An unsent message is saved as you type, so it survives closing the
+drawer and restarting the app. Drawers close with Escape and return
+focus to the control that opened them. Drawers span only the main
+row — they never cover the header or the footer.
 
 **Depth, not transparency.** The window is opaque — the desktop never
 shows through. The sense of 3D comes from layering: a painted warm
@@ -63,7 +66,7 @@ transparent; that was a misunderstanding and was reverted.)
   "No artifacts attached", evidence or "No evidence attached".
 - **Code** — a plain notes editor (design philosophy note + scratch
   notes, saved locally, both starting empty). "Ask about this note"
-  opens the Conversation and sends the note to Loom.
+  sends the note to Loom through the always-visible Conversation.
 - **Agents** — the agents in this workspace. Empty ("No agents
   running") until the Loom server exposes live agents.
 - **Evidence** — what the claims rest on. Empty ("No evidence yet")
