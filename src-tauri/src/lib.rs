@@ -88,6 +88,24 @@ fn set_work_session(
     state.work.lock().unwrap().set_session(&id, session_id)
 }
 
+#[tauri::command]
+fn set_work_success_criteria(
+    id: String,
+    criteria: Vec<String>,
+    state: State<AppState>,
+) -> Result<WorkItem, String> {
+    state.work.lock().unwrap().set_success_criteria(&id, criteria)
+}
+
+#[tauri::command]
+fn set_work_artifacts(
+    id: String,
+    artifact_ids: Vec<String>,
+    state: State<AppState>,
+) -> Result<WorkItem, String> {
+    state.work.lock().unwrap().set_artifacts(&id, artifact_ids)
+}
+
 // ---------------------------------------------------------------------------
 // Experiments (local definitions; arms run through real Loom calls)
 // ---------------------------------------------------------------------------
@@ -251,6 +269,68 @@ struct HistoryResponse {
     messages: Vec<HistoryMessage>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Workflow {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default, rename = "type")]
+    pub workflow_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowExecution {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default, alias = "startedAt")]
+    pub started_at: i64,
+    #[serde(default, alias = "completedAt")]
+    pub completed_at: i64,
+    #[serde(default)]
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Artifact {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub purpose: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default, alias = "createdAt")]
+    pub created_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowsResponse {
+    #[serde(default)]
+    workflows: Vec<Workflow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExecutionsResponse {
+    #[serde(default)]
+    executions: Vec<WorkflowExecution>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ArtifactsResponse {
+    #[serde(default)]
+    artifacts: Vec<Artifact>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExecuteWorkflowResponse {
+    #[serde(default, alias = "executionId")]
+    execution_id: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct LoomStatus {
     online: bool,
@@ -385,6 +465,58 @@ async fn get_session_history(session_id: String) -> Result<Vec<HistoryMessage>, 
     let resp: HistoryResponse =
         serde_json::from_value(value).map_err(|e| format!("Unexpected history response: {e}"))?;
     Ok(resp.messages)
+}
+
+#[tauri::command]
+async fn list_workflows() -> Result<Vec<Workflow>, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| {
+        loom_request("GET", "/v1/workflows", None)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let resp: WorkflowsResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected workflows response: {e}"))?;
+    Ok(resp.workflows)
+}
+
+#[tauri::command]
+async fn execute_workflow(workflow_ref: String) -> Result<String, String> {
+    if workflow_ref.trim().is_empty() {
+        return Err("No workflow selected.".to_string());
+    }
+    let body = serde_json::json!({ "workflow_ref": workflow_ref }).to_string();
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        loom_request("POST", "/v1/workflows:execute", Some(body))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let resp: ExecuteWorkflowResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected execute response: {e}"))?;
+    Ok(resp.execution_id)
+}
+
+#[tauri::command]
+async fn list_workflow_executions() -> Result<Vec<WorkflowExecution>, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| {
+        loom_request("GET", "/v1/workflows/executions", None)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let resp: ExecutionsResponse = serde_json::from_value(value)
+        .map_err(|e| format!("Unexpected executions response: {e}"))?;
+    Ok(resp.executions)
+}
+
+#[tauri::command]
+async fn list_artifacts() -> Result<Vec<Artifact>, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| {
+        loom_request("GET", "/v1/artifacts", None)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let resp: ArtifactsResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected artifacts response: {e}"))?;
+    Ok(resp.artifacts)
 }
 
 #[tauri::command]
@@ -558,6 +690,8 @@ pub fn run() {
             set_work_status,
             set_work_autonomy,
             set_work_session,
+            set_work_success_criteria,
+            set_work_artifacts,
             get_collaboration,
             get_attention,
             get_loom_status,
@@ -566,6 +700,10 @@ pub fn run() {
             create_session,
             list_agents,
             get_session_history,
+            list_workflows,
+            execute_workflow,
+            list_workflow_executions,
+            list_artifacts,
             get_experiments,
             add_experiment,
             add_experiment_arm,

@@ -22,6 +22,12 @@ pub struct WorkItem {
     /// The Loom conversation session associated with this work (if any).
     #[serde(default)]
     pub session_id: Option<String>,
+    /// Human-defined criteria for "done".
+    #[serde(default)]
+    pub success_criteria: Vec<String>,
+    /// Loom artifact ids attached to this work.
+    #[serde(default)]
+    pub artifact_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +100,8 @@ impl WorkStore {
             autonomy: "collaborative".to_string(),
             updated_label: "Now".to_string(),
             session_id: None,
+            success_criteria: Vec::new(),
+            artifact_ids: Vec::new(),
         };
         self.items.insert(0, item.clone());
         self.save()?;
@@ -143,6 +151,44 @@ impl WorkStore {
             .find(|w| w.id == id)
             .ok_or_else(|| format!("Unknown work item: {id}"))?;
         item.session_id = normalized;
+        let out = item.clone();
+        self.save()?;
+        Ok(out)
+    }
+
+    /// Replace the success criteria for a work item (trimmed, empties dropped).
+    pub fn set_success_criteria(
+        &mut self,
+        id: &str,
+        criteria: Vec<String>,
+    ) -> Result<WorkItem, String> {
+        let item = self
+            .items
+            .iter_mut()
+            .find(|w| w.id == id)
+            .ok_or_else(|| format!("Unknown work item: {id}"))?;
+        item.success_criteria = criteria
+            .into_iter()
+            .map(|c| c.trim().to_string())
+            .filter(|c| !c.is_empty())
+            .collect();
+        let out = item.clone();
+        self.save()?;
+        Ok(out)
+    }
+
+    /// Replace the attached artifact ids for a work item.
+    pub fn set_artifacts(&mut self, id: &str, artifact_ids: Vec<String>) -> Result<WorkItem, String> {
+        let item = self
+            .items
+            .iter_mut()
+            .find(|w| w.id == id)
+            .ok_or_else(|| format!("Unknown work item: {id}"))?;
+        item.artifact_ids = artifact_ids
+            .into_iter()
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect();
         let out = item.clone();
         self.save()?;
         Ok(out)

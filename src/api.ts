@@ -15,6 +15,8 @@ export interface WorkItem {
   updated_label: string;
   // The Loom session associated with this work item (if any).
   session_id?: string | null;
+  success_criteria?: string[];
+  artifact_ids?: string[];
 }
 
 export interface CollabStep {
@@ -97,6 +99,28 @@ export interface Experiment {
   status: "draft" | "running" | "decided";
   arms: ExperimentArm[];
   decision?: string | null;
+}
+
+export interface Workflow {
+  name: string;
+  description: string;
+  type: string;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  status: string;
+  started_at: number;
+  completed_at: number;
+  error: string;
+}
+
+export interface Artifact {
+  id: string;
+  name: string;
+  purpose: string;
+  source: string;
+  created_at: number;
 }
 
 const IN_TAURI =
@@ -325,4 +349,38 @@ export async function chooseExperimentArm(
   armId: string,
 ): Promise<Experiment> {
   return invoke<Experiment>("choose_experiment_arm", { id, armId });
+}
+
+// ---- Work detail: success criteria + attachments (local, via work store) ----
+
+export async function setWorkSuccessCriteria(
+  id: string,
+  criteria: string[],
+): Promise<WorkItem> {
+  return invoke<WorkItem>("set_work_success_criteria", { id, criteria });
+}
+
+export async function setWorkArtifacts(
+  id: string,
+  artifactIds: string[],
+): Promise<WorkItem> {
+  return invoke<WorkItem>("set_work_artifacts", { id, artifactIds });
+}
+
+// ---- Workflows + artifacts (real Loom server) ----
+
+export async function listWorkflows(): Promise<Workflow[]> {
+  return invoke<Workflow[]>("list_workflows");
+}
+
+export async function executeWorkflow(workflowRef: string): Promise<string> {
+  return invoke<string>("execute_workflow", { workflowRef });
+}
+
+export async function listWorkflowExecutions(): Promise<WorkflowExecution[]> {
+  return invoke<WorkflowExecution[]>("list_workflow_executions");
+}
+
+export async function listArtifacts(): Promise<Artifact[]> {
+  return invoke<Artifact[]>("list_artifacts");
 }

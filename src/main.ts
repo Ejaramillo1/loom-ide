@@ -6,6 +6,7 @@ import {
   askLoom,
   chooseExperimentArm,
   createSession,
+  executeWorkflow,
   getAttention,
   getCollaboration,
   getExperiments,
@@ -13,16 +14,22 @@ import {
   getSessionHistory,
   getWorkItems,
   listAgents,
+  listArtifacts,
   listDirectory,
   listSessions,
+  listWorkflowExecutions,
+  listWorkflows,
   listWorkspace,
   readFile,
   setExperimentArmResult,
   setExperimentArmStatus,
+  setWorkArtifacts,
   setWorkAutonomy,
   setWorkSession,
   setWorkStatus,
+  setWorkSuccessCriteria,
   type Agent,
+  type Artifact,
   type AttentionItem,
   type ChatReply,
   type CollabStep,
@@ -30,6 +37,8 @@ import {
   type Experiment,
   type ExperimentArm,
   type Session,
+  type Workflow,
+  type WorkflowExecution,
   type WorkItem,
 } from "./api";
 import { Sphere, type SphereState } from "./sphere";
@@ -97,6 +106,10 @@ let agents: Agent[] = [];
 let selectedAgentId: string | null = null;
 let experiments: Experiment[] = [];
 let selectedExperimentId: string | null = null;
+let workflows: Workflow[] = [];
+let executions: WorkflowExecution[] = [];
+let artifacts: Artifact[] = [];
+let runningWorkflow: string | null = null;
 let lastFocus: HTMLElement | null = null;
 const layerOn: Record<string, boolean> = {
   light: true,
@@ -362,26 +375,24 @@ function renderWorkDetail() {
   scroll.className = "wd-scroll";
 
   // Goal: the work item's own title is its goal statement.
-  scroll.append(detailSection("Goal", item.title, null));
+  scroll.append(simpleSection("Goal", item.title));
 
-  // Success criteria — none are recorded anywhere yet; never fabricate.
-  scroll.append(
-    detailSection("Success criteria", null, "No success criteria recorded."),
-  );
+  // Success criteria — editable by the human.
+  scroll.append(buildSuccessCriteria(item));
 
-  // Artifacts and evidence come from the Loom server when it shares
-  // them; until then the honest state is empty.
-  scroll.append(detailSection("Artifacts", null, "No artifacts attached."));
-  scroll.append(detailSection("Evidence", null, "No evidence attached."));
+  // Workflows — run real Loom workflows under this work item.
+  scroll.append(buildWorkflowsSection());
+
+  // Artifacts — attach real Loom artifacts.
+  scroll.append(buildArtifactsSection(item));
+
+  // Evidence — experiment decisions + Loom findings (honest).
+  scroll.append(buildEvidenceSection());
 
   wrap.append(scroll);
 }
 
-function detailSection(
-  heading: string,
-  text: string | null,
-  emptyText: string | null,
-): HTMLElement {
+function simpleSection(heading: string, text: string | null): HTMLElement {
   const section = document.createElement("section");
   section.className = "wd-section";
   const h = document.createElement("h4");
@@ -391,13 +402,318 @@ function detailSection(
     const p = document.createElement("p");
     p.textContent = text;
     section.append(p);
-  } else if (emptyText) {
-    const p = document.createElement("p");
-    p.className = "empty";
-    p.textContent = emptyText;
-    section.append(p);
   }
   return section;
+}
+
+// ---- Success criteria (editable, local) ----
+
+function buildSuccessCriteria(item: WorkItem): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const h = document.createElement("h4");
+  h.textContent = "Success criteria";
+  section.append(h);
+
+  const criteria = item.success_criteria ?? [];
+  if (criteria.length === 0) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "No criteria yet. Add one to define what done means.";
+    section.append(p);
+  } else {
+    const ul = document.createElement("ul");
+    ul.className = "criteria-list";
+    for (const c of criteria) {
+      const li = document.createElement("li");
+      const text = document.createElement("span");
+      text.textContent = c;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "icon-btn small";
+      remove.title = "Remove criterion";
+      remove.textContent = "✕";
+      remove.addEventListener("click", () => {
+        saveCriteria(item.id, criteria.filter((x) => x !== c));
+      });
+      li.append(text, remove);
+      ul.append(li);
+    }
+    section.append(ul);
+  }
+
+  const form = document.createElement("form");
+  form.className = "add-criterion";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Add a criterion…";
+  input.setAttribute("aria-label", "New success criterion");
+  const add = document.createElement("button");
+  add.type = "submit";
+  add.className = "btn ghost";
+  add.textContent = "Add";
+  form.append(input, add);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = input.value.trim();
+    if (!v) return;
+    saveCriteria(item.id, [...criteria, v]);
+    input.value = "";
+  });
+  section.append(form);
+  return section;
+}
+
+async function saveCriteria(workId: string, criteria: string[]) {
+  try {
+    const updated = await setWorkSuccessCriteria(workId, criteria);
+    workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
+    renderWorkDetail();
+  } catch (err) {
+    addChatError(
+      `Could not save the criteria: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// ---- Workflows (real Loom server) ----
+
+function buildWorkflowsSection(): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const head = document.createElement("div");
+  head.className = "wd-section-head";
+  const h = document.createElement("h4");
+  h.textContent = "Workflows";
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.className = "icon-btn small";
+  refresh.title = "Refresh workflows";
+  refresh.textContent = "↻";
+  refresh.addEventListener("click", () => refreshWorkflows());
+  head.append(h, refresh);
+  section.append(head);
+
+  if (!loomReachable) {
+    section.append(emptyP("The Loom server is offline — workflows are not available."));
+    return section;
+  }
+  if (workflows.length === 0) {
+    section.append(emptyP("No workflows saved on the Loom server."));
+  } else {
+    const ul = document.createElement("ul");
+    ul.className = "workflow-list";
+    for (const wf of workflows) {
+      const li = document.createElement("li");
+      const info = document.createElement("div");
+      info.className = "workflow-info";
+      const name = document.createElement("strong");
+      name.textContent = wf.name;
+      info.append(name);
+      const desc = wf.description || wf.type;
+      if (desc) {
+        const span = document.createElement("span");
+        span.textContent = desc;
+        info.append(span);
+      }
+      const run = document.createElement("button");
+      run.type = "button";
+      run.className = "btn";
+      run.textContent = runningWorkflow === wf.name ? "Running…" : "Run";
+      run.disabled = runningWorkflow !== null;
+      run.addEventListener("click", () => runWorkflow(wf.name));
+      li.append(info, run);
+      ul.append(li);
+    }
+    section.append(ul);
+  }
+
+  const execLabel = document.createElement("p");
+  execLabel.className = "wd-sub-label";
+  execLabel.textContent = "Executions";
+  section.append(execLabel);
+  if (executions.length === 0) {
+    section.append(emptyP("No executions yet."));
+  } else {
+    const ul = document.createElement("ul");
+    ul.className = "execution-list";
+    for (const ex of executions.slice(0, 10)) {
+      const li = document.createElement("li");
+      const status = document.createElement("span");
+      status.className = `exp-status ${ex.status}`;
+      status.textContent = ex.status;
+      const id = document.createElement("span");
+      id.className = "execution-id";
+      id.textContent = ex.id.slice(0, 12);
+      li.append(status, id);
+      if (ex.error) {
+        const err = document.createElement("span");
+        err.className = "execution-error";
+        err.textContent = ex.error;
+        li.append(err);
+      }
+      ul.append(li);
+    }
+    section.append(ul);
+  }
+  return section;
+}
+
+async function refreshWorkflows() {
+  try {
+    workflows = await listWorkflows();
+  } catch {
+    workflows = [];
+  }
+  try {
+    executions = await listWorkflowExecutions();
+  } catch {
+    executions = [];
+  }
+  renderWorkDetail();
+}
+
+async function runWorkflow(name: string) {
+  if (runningWorkflow) return;
+  runningWorkflow = name;
+  renderWorkDetail();
+  setSphereState("executing");
+  try {
+    await executeWorkflow(name);
+    try {
+      executions = await listWorkflowExecutions();
+    } catch {
+      /* keep the previous list */
+    }
+    runningWorkflow = null;
+    renderWorkDetail();
+    setSphereState("completed");
+    window.setTimeout(() => {
+      if (sphereState === "completed") setSphereState("idle");
+    }, 3000);
+  } catch (err) {
+    runningWorkflow = null;
+    renderWorkDetail();
+    setSphereState("idle");
+    addChatError(
+      `Workflow "${name}" failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// ---- Artifacts (real Loom server, attach to work item) ----
+
+function buildArtifactsSection(item: WorkItem): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const head = document.createElement("div");
+  head.className = "wd-section-head";
+  const h = document.createElement("h4");
+  h.textContent = "Artifacts";
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.className = "icon-btn small";
+  refresh.title = "Refresh artifacts";
+  refresh.textContent = "↻";
+  refresh.addEventListener("click", () => refreshArtifacts());
+  head.append(h, refresh);
+  section.append(head);
+
+  if (!loomReachable) {
+    section.append(emptyP("The Loom server is offline — artifacts are not available."));
+    return section;
+  }
+  if (artifacts.length === 0) {
+    section.append(emptyP("No artifacts on the Loom server yet."));
+    return section;
+  }
+
+  const attached = new Set(item.artifact_ids ?? []);
+  const ul = document.createElement("ul");
+  ul.className = "artifact-list";
+  for (const a of artifacts) {
+    const li = document.createElement("li");
+    const info = document.createElement("div");
+    info.className = "artifact-info";
+    const name = document.createElement("strong");
+    name.textContent = a.name;
+    info.append(name);
+    const meta = [a.source, a.purpose].filter(Boolean).join(" · ");
+    if (meta) {
+      const span = document.createElement("span");
+      span.textContent = meta;
+      info.append(span);
+    }
+    const isAttached = attached.has(a.id);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "btn" + (isAttached ? "" : " ghost");
+    toggle.textContent = isAttached ? "Detach" : "Attach";
+    toggle.addEventListener("click", () => toggleArtifact(item, a.id, isAttached));
+    li.append(info, toggle);
+    ul.append(li);
+  }
+  section.append(ul);
+  return section;
+}
+
+async function refreshArtifacts() {
+  try {
+    artifacts = await listArtifacts();
+  } catch {
+    artifacts = [];
+  }
+  renderWorkDetail();
+}
+
+async function toggleArtifact(item: WorkItem, artifactId: string, currentlyAttached: boolean) {
+  const ids = new Set(item.artifact_ids ?? []);
+  if (currentlyAttached) ids.delete(artifactId);
+  else ids.add(artifactId);
+  try {
+    const updated = await setWorkArtifacts(item.id, [...ids]);
+    workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
+    renderWorkDetail();
+  } catch (err) {
+    addChatError(
+      `Could not update artifacts: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+// ---- Evidence (experiment decisions now; Loom findings later) ----
+
+function buildEvidenceSection(): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const h = document.createElement("h4");
+  h.textContent = "Evidence";
+  section.append(h);
+
+  const decided = experiments.filter((e) => e.decision);
+  if (decided.length === 0) {
+    section.append(
+      emptyP("No findings yet. Experiment decisions appear here as evidence once made."),
+    );
+    return section;
+  }
+  const ul = document.createElement("ul");
+  ul.className = "evidence-list";
+  for (const e of decided) {
+    const li = document.createElement("li");
+    const arm = e.arms.find((a) => a.id === e.decision);
+    li.textContent = `${e.title}: chose ${arm?.label ?? e.decision}`;
+    ul.append(li);
+  }
+  section.append(ul);
+  return section;
+}
+
+function emptyP(text: string): HTMLElement {
+  const p = document.createElement("p");
+  p.className = "empty";
+  p.textContent = text;
+  return p;
 }
 
 function focusNewWork(from?: HTMLElement) {
@@ -1928,6 +2244,24 @@ async function init() {
   const status = await getLoomStatus();
   loomReachable = status.online;
   renderStatusPill();
+
+  // Workflows + artifacts (real Loom server; honest empty when offline).
+  try {
+    workflows = await listWorkflows();
+  } catch {
+    workflows = [];
+  }
+  try {
+    executions = await listWorkflowExecutions();
+  } catch {
+    executions = [];
+  }
+  try {
+    artifacts = await listArtifacts();
+  } catch {
+    artifacts = [];
+  }
+  renderWorkDetail();
 
   // Sessions + agents (from the Loom server). The selected work item's
   // session is the source of truth for the conversation; switch to it.

@@ -2274,3 +2274,131 @@ select {
   font-size: 12.5px;
   color: var(--muted);
 }
+
+/* ---------- Work detail: success criteria / workflows / artifacts ---------- */
+
+.wd-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wd-sub-label {
+  margin-top: 14px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.criteria-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.criteria-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 13.5px;
+}
+
+.criteria-list li span {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-criterion {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.add-criterion input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 7px 10px;
+}
+
+.workflow-list,
+.execution-list,
+.artifact-list,
+.evidence-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-list li,
+.artifact-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.workflow-list li:last-child,
+.artifact-list li:last-child {
+  border-bottom: none;
+}
+
+.workflow-info,
+.artifact-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workflow-info strong,
+.artifact-info strong {
+  font-size: 13.5px;
+}
+
+.workflow-info span,
+.artifact-info span {
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.execution-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12.5px;
+}
+
+.execution-id {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.execution-error {
+  color: #7a2e2e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-list li {
+  padding: 5px 0;
+  font-size: 13.5px;
+}
