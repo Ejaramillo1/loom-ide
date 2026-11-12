@@ -23,123 +23,6 @@ type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "layers" | 
 
 type NoteKind = "design" | "scratch";
 
-const OBJECTIVES: Record<string, string> = {
-  "work-1": "Understand why enabling agent memory increases latency.",
-  "work-2": "Improve tool reliability.",
-  "work-3": "Review PR #4287.",
-};
-
-// ---- Demonstration seed data for the new views --------------------------
-// Everything here is labelled as demonstration in the UI, like the
-// collaboration steps and attention items already were.
-
-interface EvidenceItem {
-  id: string;
-  title: string;
-  detail: string;
-  basis: string;
-  state: "collected" | "partial" | "pending";
-}
-
-const EVIDENCE: EvidenceItem[] = [
-  {
-    id: "ev-1",
-    title: "Finding: memory adds ~340 ms",
-    detail: "Consistent across 3 runs",
-    basis:
-      "3 replications, memory on vs off, same prompts. Baseline traces compared run by run.",
-    state: "collected",
-  },
-  {
-    id: "ev-2",
-    title: "Baseline traces analyzed",
-    detail: "Memory on/off pair captured",
-    basis:
-      "Trace spans from the baseline run set. Demonstration traces, not a live server.",
-    state: "collected",
-  },
-  {
-    id: "ev-3",
-    title: "Configuration experiments",
-    detail: "3 of 5 configurations run — 68%",
-    basis: "Run configuration experiments step. 2 configurations still to run.",
-    state: "partial",
-  },
-  {
-    id: "ev-4",
-    title: "Compare results",
-    detail: "Not yet collected",
-    basis: "Starts when the configuration experiments finish.",
-    state: "pending",
-  },
-  {
-    id: "ev-5",
-    title: "Identify likely causes",
-    detail: "Not yet collected",
-    basis: "Needs the comparison first.",
-    state: "pending",
-  },
-];
-
-interface ArtifactItem {
-  id: string;
-  kind: string;
-  title: string;
-  detail: string;
-  body?: string;
-  action: "expand" | "code-design" | "code-scratch" | "evidence";
-}
-
-const ARTIFACTS: ArtifactItem[] = [
-  {
-    id: "art-1",
-    kind: "Experiment plan",
-    title: "Experiment design",
-    detail: "Compare memory strategies",
-    body: "Proposal from the chat with Loom: compare memory on/off across 3 configurations, same prompts, measure latency per run. Demonstration.",
-    action: "expand",
-  },
-  {
-    id: "art-2",
-    kind: "Note",
-    title: "Design philosophy note",
-    detail: "01 — Design Philosophy: Quiet Complexity",
-    action: "code-design",
-  },
-  {
-    id: "art-3",
-    kind: "Decision",
-    title: "Decision: next experiment",
-    detail: "2 configurations ready",
-    body: "Two configurations are ready to run. Pick one to start the next experiment. Demonstration.",
-    action: "expand",
-  },
-  {
-    id: "art-4",
-    kind: "Finding",
-    title: "Finding: memory adds ~340 ms",
-    detail: "Consistent across 3 runs",
-    action: "evidence",
-  },
-];
-
-const DOCUMENTS: ArtifactItem[] = [
-  {
-    id: "doc-1",
-    kind: "Note",
-    title: "Design philosophy note",
-    detail: "01 — Design Philosophy: Quiet Complexity",
-    action: "code-design",
-  },
-  {
-    id: "doc-2",
-    kind: "Note",
-    title: "Scratch notes",
-    detail: "Your scratch pad",
-    action: "code-scratch",
-  },
-];
-
 const LAYERS: { id: string; label: string; desc: string }[] = [
   {
     id: "light",
@@ -149,7 +32,7 @@ const LAYERS: { id: string; label: string; desc: string }[] = [
   {
     id: "water",
     label: "Water reflection",
-    desc: "The reflective band along the bottom.",
+    desc: "The reflective band along the bottom, Experiment overview only.",
   },
   {
     id: "glass",
@@ -163,11 +46,6 @@ const LAYERS: { id: string; label: string; desc: string }[] = [
   },
 ];
 
-const PAUSE_SVG =
-  '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>';
-const PLAY_SVG =
-  '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5-13-7.5z" /></svg>';
-
 const CAPTIONS: Record<SphereState, string> = {
   idle: "At rest — nothing is running.",
   listening: "Listening — Loom is with you.",
@@ -177,21 +55,24 @@ const CAPTIONS: Record<SphereState, string> = {
   completed: "Done — back at rest.",
 };
 
-const DESIGN_NOTE = `# 01 — Design Philosophy: Quiet Complexity
-
-*A front end for Loom designed around human intention, not around agents.*
-
-## The one-sentence position
-
-Loom already knows how to run agents, score them, remember them and ask a person questions. What it does not yet have is a place where a person and the system share the same work. This design builds that place: a quiet surface where intent is stated once, work is visible as objects, evidence sits next to every claim, and a person can always see — and change — how much freedom the agents have.`;
+/** The two real local documents. They are the user's own notes, not
+    seeded content: both start empty and persist in localStorage. */
+const NOTE_DOCS: { id: string; title: string; detail: string; kind: NoteKind }[] = [
+  { id: "doc-design", title: "Design philosophy", detail: "Your design notes", kind: "design" },
+  { id: "doc-scratch", title: "Scratch notes", detail: "Your scratch pad", kind: "scratch" },
+];
 
 let workItems: WorkItem[] = [];
 let selectedWorkId: string | null = null;
 let mode: Mode = "experiment";
 let sphereState: SphereState = "idle";
-let agentPaused = false;
 let currentNote: NoteKind = "design";
 let artifactTab: "artifacts" | "documents" = "artifacts";
+let loomReachable = false;
+let loomVerified = false;
+let collabSteps: CollabStep[] = [];
+let attentionItems: AttentionItem[] = [];
+let lastFocus: HTMLElement | null = null;
 const layerOn: Record<string, boolean> = {
   light: true,
   water: true,
@@ -220,16 +101,47 @@ function fitSphere() {
 }
 new ResizeObserver(fitSphere).observe($("#sphere") as HTMLCanvasElement);
 window.addEventListener("resize", fitSphere);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) sphere.stop();
+  else if (mode === "experiment") sphere.startAnimation();
+});
 
 // ---------------------------------------------------------------------------
-// Work list
+// Time + labels (truthful, never "Now ago")
+// ---------------------------------------------------------------------------
+
+function capitalize(s: string) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Short time token for list rows: "Now" / "2h ago". */
+function timeLabel(item: WorkItem): string {
+  return item.updated_label === "Now"
+    ? "Now"
+    : `${item.updated_label} ago`;
+}
+
+/** Metadata line: status + when it was updated. Autonomy is shown
+    once, in its labeled control — never here. */
+function metaLabel(item: WorkItem): string {
+  const when =
+    item.updated_label === "Now"
+      ? "Updated now"
+      : `Updated ${item.updated_label} ago`;
+  return `${capitalize(item.status)} · ${when}`;
+}
+
+// ---------------------------------------------------------------------------
+// Work list (left catalogue)
 // ---------------------------------------------------------------------------
 
 function renderWorkList() {
-  const list = $("#work-list");
+  const list = document.querySelector<HTMLElement>("#work-list");
+  if (!list) return;
   list.innerHTML = "";
   for (const item of workItems) {
     const li = document.createElement("li");
+    li.dataset.title = item.title.toLowerCase();
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "work-row" + (item.id === selectedWorkId ? " selected" : "");
@@ -242,118 +154,270 @@ function renderWorkList() {
     title.textContent = item.title;
     const time = document.createElement("span");
     time.className = "work-time";
-    time.textContent = item.updated_label;
+    time.textContent = timeLabel(item);
 
     btn.append(dot, title, time);
     btn.addEventListener("click", () => selectWork(item.id));
     li.append(btn);
     list.append(li);
   }
+  applySearchFilter(($("#search-input") as HTMLInputElement).value);
 }
 
 function selectWork(id: string) {
   selectedWorkId = id;
   const item = workItems.find((w) => w.id === id);
   if (item) {
-    $("#objective-title").textContent =
-      OBJECTIVES[item.id] ?? item.title;
+    $("#objective-title").textContent = item.title;
   }
   renderWorkList();
-  renderWorkCards();
-  renderWorkFocus();
+  renderWorkDetail();
+  renderInspectorContext();
 }
 
-/** "Active · Collaborative · Now" — never "Now ago". */
-function metaLabel(item: WorkItem): string {
-  const when =
-    item.updated_label === "Now"
-      ? "Now"
-      : `${item.updated_label} ago`;
-  return `${capitalize(item.status)} · ${capitalize(item.autonomy)} · ${when}`;
+// ---------------------------------------------------------------------------
+// Work summary component (spec section 6) — the detail view's header.
+// Title on its own first row, metadata on its own line, controls below
+// the text. Never clamps the full title.
+// ---------------------------------------------------------------------------
+
+function showFieldError(slot: HTMLElement | null, message: string) {
+  if (!slot) return;
+  slot.textContent = message;
+  slot.hidden = false;
 }
 
-function renderWorkCards() {
-  const wrap = $("#work-cards");
-  wrap.innerHTML = "";
-  for (const item of workItems) {
-    const card = document.createElement("div");
-    card.className = "work-card";
+function clearFieldError(slot: HTMLElement | null) {
+  if (!slot) return;
+  slot.textContent = "";
+  slot.hidden = true;
+}
 
-    // Row 1: dot + full-width title and meta (nothing competes for width,
-    // so a title fits on one line and the meta on one line too).
-    const top = document.createElement("div");
-    top.className = "wc-top";
-    const dot = document.createElement("span");
-    dot.className = `work-dot ${item.status}`;
-    const body = document.createElement("div");
-    body.className = "wc-body";
-    const title = document.createElement("strong");
-    title.textContent = item.title;
-    const meta = document.createElement("span");
-    meta.textContent = metaLabel(item);
-    body.append(title, meta);
-    top.append(dot, body);
+/** Build the summary block for one work item. */
+function buildWorkSummary(item: WorkItem): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "work-summary";
 
-    // Row 2: controls live underneath the text instead of beside it.
-    const actions = document.createElement("div");
-    actions.className = "wc-actions";
-    const autonomy = document.createElement("select");
-    autonomy.className = "autonomy-select";
-    autonomy.setAttribute("aria-label", `Autonomy for ${item.title}`);
-    for (const level of ["manual", "assisted", "collaborative", "delegated"] as const) {
-      const opt = document.createElement("option");
-      opt.value = level;
-      opt.textContent = capitalize(level);
-      if (item.autonomy === level) opt.selected = true;
-      autonomy.append(opt);
-    }
-    autonomy.addEventListener("change", async () => {
+  // Row 1: dot + title + metadata.
+  const top = document.createElement("div");
+  top.className = "ws-top";
+  const dot = document.createElement("span");
+  dot.className = `work-dot ${item.status}`;
+  const body = document.createElement("div");
+  body.className = "ws-body";
+  const title = document.createElement("div");
+  title.className = "ws-title";
+  title.textContent = item.title;
+  const meta = document.createElement("div");
+  meta.className = "ws-meta";
+  meta.textContent = metaLabel(item);
+  body.append(title, meta);
+  top.append(dot, body);
+
+  // Row 2: planning preference + supported local action.
+  const controls = document.createElement("div");
+  controls.className = "ws-controls";
+  const label = document.createElement("label");
+  label.className = "ctl-label";
+  label.textContent = "Planning mode:";
+  const autonomy = document.createElement("select");
+  autonomy.className = "autonomy-select";
+  autonomy.setAttribute("aria-label", `Planning mode for ${item.title}`);
+  for (const level of ["manual", "assisted", "collaborative", "delegated"] as const) {
+    const opt = document.createElement("option");
+    opt.value = level;
+    opt.textContent = capitalize(level);
+    if (item.autonomy === level) opt.selected = true;
+    autonomy.append(opt);
+  }
+  label.append(autonomy);
+
+  const stateBtn = document.createElement("button");
+  stateBtn.type = "button";
+  stateBtn.className = "btn";
+  stateBtn.textContent = item.status === "active" ? "Mark paused" : "Mark active";
+  stateBtn.title =
+    "Local planning — this saves a state on this device. It does not pause a running agent.";
+
+  const error = document.createElement("span");
+  error.className = "field-error";
+  error.hidden = true;
+
+  autonomy.addEventListener("change", async () => {
+    clearFieldError(error);
+    const previous = item.autonomy;
+    try {
       const updated = await setWorkAutonomy(item.id, autonomy.value as WorkItem["autonomy"]);
       workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
-      renderWorkCards();
-      renderWorkFocus();
-    });
+      renderWorkList();
+      renderWorkDetail();
+    } catch (err) {
+      autonomy.value = previous;
+      showFieldError(
+        error,
+        `Could not save the planning mode: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
 
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "btn";
-    toggle.textContent = item.status === "active" ? "Pause" : "Resume";
-    toggle.addEventListener("click", async () => {
-      const next = item.status === "active" ? "paused" : "active";
+  stateBtn.addEventListener("click", async () => {
+    clearFieldError(error);
+    const next = item.status === "active" ? "paused" : "active";
+    try {
       const updated = await setWorkStatus(item.id, next);
       workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
       renderWorkList();
-      renderWorkCards();
-      renderWorkFocus();
-    });
-    actions.append(autonomy, toggle);
+      renderWorkDetail();
+      renderInspectorContext();
+    } catch (err) {
+      showFieldError(
+        error,
+        `Could not save the state: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
 
-    card.append(top, actions);
-    wrap.append(card);
+  const conv = document.createElement("button");
+  conv.type = "button";
+  conv.className = "btn ghost";
+  conv.textContent = "Conversation";
+  conv.addEventListener("click", () => openInspector("conversation", conv));
+
+  controls.append(label, stateBtn, conv, error);
+
+  const note = document.createElement("p");
+  note.className = "ws-note";
+  note.textContent =
+    "Local planning — this saves a preference on this device. It does not pause a running agent or change how agents behave.";
+
+  root.append(top, controls, note);
+  return root;
+}
+
+// ---------------------------------------------------------------------------
+// Work detail view (the selected work; the catalogue stays on the left)
+// ---------------------------------------------------------------------------
+
+function renderWorkDetail() {
+  const wrap = document.querySelector<HTMLElement>("#work-detail");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  if (workItems.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "wd-empty";
+    const text = document.createElement("p");
+    text.textContent =
+      "No work yet. Create a work item to give this workspace something to focus on.";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn";
+    btn.textContent = "Create work";
+    btn.addEventListener("click", () => focusNewWork(btn));
+    empty.append(text, btn);
+    wrap.append(empty);
+    return;
   }
-}
 
-/** Work mode is headed by the selected work item, not by the word "Work". */
-function renderWorkFocus() {
   const item = workItems.find((w) => w.id === selectedWorkId);
-  if (!item) return;
-  $("#work-focus-title").textContent = item.title;
-  $("#work-focus-sub").textContent = metaLabel(item);
+  if (!item) {
+    const empty = document.createElement("div");
+    empty.className = "wd-empty";
+    const text = document.createElement("p");
+    text.textContent = "Select a work item from the list.";
+    empty.append(text);
+    wrap.append(empty);
+    return;
+  }
+
+  wrap.append(buildWorkSummary(item));
+
+  const scroll = document.createElement("div");
+  scroll.className = "wd-scroll";
+
+  // Goal: the work item's own title is its goal statement.
+  scroll.append(detailSection("Goal", item.title, null));
+
+  // Success criteria — none are recorded anywhere yet; never fabricate.
+  scroll.append(
+    detailSection("Success criteria", null, "No success criteria recorded."),
+  );
+
+  // Artifacts and evidence come from the Loom server when it shares
+  // them; until then the honest state is empty.
+  scroll.append(detailSection("Artifacts", null, "No artifacts attached."));
+  scroll.append(detailSection("Evidence", null, "No evidence attached."));
+
+  wrap.append(scroll);
 }
 
-function capitalize(s: string) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function detailSection(
+  heading: string,
+  text: string | null,
+  emptyText: string | null,
+): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const h = document.createElement("h4");
+  h.textContent = heading;
+  section.append(h);
+  if (text !== null) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    section.append(p);
+  } else if (emptyText) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = emptyText;
+    section.append(p);
+  }
+  return section;
+}
+
+function focusNewWork(from?: HTMLElement) {
+  if (window.matchMedia("(max-width: 1099px)").matches) {
+    openLeftDrawer(from);
+  }
+  ($("#new-work-input") as HTMLInputElement).focus();
 }
 
 // ---------------------------------------------------------------------------
-// Collaboration + Attention
+// Inspector: Context (collaboration + attention, from the backend)
 // ---------------------------------------------------------------------------
+
+function renderInspectorContext() {
+  if (!document.querySelector("#collab-steps")) return;
+  renderSteps(collabSteps);
+  renderAttention(attentionItems);
+}
 
 function renderSteps(steps: CollabStep[]) {
   const list = $("#collab-steps");
   list.innerHTML = "";
-  const done = steps.filter((s) => s.state === "done" || s.state === "active").length;
-  $("#agent-status").textContent = `Experimenting · ${done}/${steps.length}`;
+  if (steps.length === 0) {
+    const li = document.createElement("li");
+    li.className = "step";
+    const label = document.createElement("span");
+    label.className = "step-label";
+    label.textContent = "No agents running";
+    li.append(label);
+    list.append(li);
+    $("#agent-status").textContent = "No agents running";
+    const prog = $("#agent-progress");
+    if (prog) prog.textContent = "";
+    return;
+  }
+  // "Step 3 of 5" is not the same as "2 of 5 completed": the active
+  // step counts toward neither the done total nor the current step
+  // twice.
+  const done = steps.filter((s) => s.state === "done").length;
+  const activeIdx = steps.findIndex((s) => s.state === "active");
+  $("#agent-status").textContent =
+    activeIdx >= 0
+      ? `Step ${activeIdx + 1} of ${steps.length}`
+      : `${done} of ${steps.length} completed`;
+  const prog = $("#agent-progress");
+  if (prog) prog.textContent = `${done} of ${steps.length} completed`;
   for (const step of steps) {
     const li = document.createElement("li");
     li.className = `step ${step.state}`;
@@ -378,11 +442,19 @@ function renderAttention(items: AttentionItem[]) {
   const list = $("#attention-list");
   list.innerHTML = "";
   $("#att-count").textContent = String(items.length);
+  if (items.length === 0) {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.className = "step-label";
+    span.textContent = "No attention items";
+    li.append(span);
+    list.append(li);
+    return;
+  }
   for (const item of items) {
     const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "att-item";
+    const row = document.createElement("div");
+    row.className = "att-item";
     const ico = document.createElement("span");
     ico.className = "att-ico" + (item.kind === "finding" ? " finding" : "");
     ico.textContent = item.kind === "finding" ? "↗" : "!";
@@ -393,146 +465,126 @@ function renderAttention(items: AttentionItem[]) {
     const detail = document.createElement("span");
     detail.textContent = item.detail;
     text.append(title, detail);
-    const chev = document.createElement("span");
-    chev.className = "chev";
-    chev.textContent = "›";
-    btn.append(ico, text, chev);
-    btn.addEventListener("click", () => {
-      setSphereState("attention");
-      window.setTimeout(() => setSphereState("idle"), 4000);
-    });
-    li.append(btn);
+    row.append(ico, text);
+    li.append(row);
     list.append(li);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Agents view + agent pause (shared by the right panel and Agents view)
+// Drawers + inspector tabs
 // ---------------------------------------------------------------------------
 
-function renderAgentPause() {
-  const status = agentPaused ? "Paused" : "Experimenting";
-  const text = `${status} · 3/5`;
-  $("#agent-status").textContent = text;
-  const cardStatus = $("#agent-card-status");
-  if (cardStatus) cardStatus.textContent = text;
-  for (const btn of document.querySelectorAll<HTMLButtonElement>(".agent-pause-btn")) {
-    btn.classList.toggle("paused", agentPaused);
-    btn.setAttribute("aria-label", agentPaused ? "Resume agent" : "Pause agent");
-    btn.title = agentPaused ? "Resume agent" : "Pause agent";
-    btn.innerHTML = agentPaused ? PLAY_SVG : PAUSE_SVG;
+function isInspectorDrawer(): boolean {
+  return window.matchMedia("(max-width: 1439px)").matches;
+}
+
+function isLeftDrawer(): boolean {
+  return window.matchMedia("(max-width: 1099px)").matches;
+}
+
+function updateScrim() {
+  const open =
+    document.body.classList.contains("inspector-open") ||
+    document.body.classList.contains("left-open");
+  $("#scrim").hidden = !open;
+}
+
+function setInspectorTab(tab: "context" | "conversation") {
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(".inspector-tab")) {
+    const active = btn.id === `tab-${tab}`;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", String(active));
   }
-  for (const ring of document.querySelectorAll(".agent-ring")) {
-    ring.classList.toggle("paused", agentPaused);
+  $("#inspector-context").hidden = tab !== "context";
+  $("#inspector-chat").hidden = tab !== "conversation";
+}
+
+function openInspector(tab: "context" | "conversation", opener?: HTMLElement) {
+  if (opener) lastFocus = opener;
+  setInspectorTab(tab);
+  const toggle =
+    tab === "context" ? $("#context-toggle") : $("#conversation-btn");
+  if (isInspectorDrawer()) {
+    document.body.classList.add("inspector-open");
+    toggle.setAttribute("aria-expanded", "true");
+    updateScrim();
+    ($("#right-close") as HTMLButtonElement).focus();
+  } else {
+    toggle.setAttribute("aria-expanded", "true");
   }
 }
 
-function toggleAgentPaused() {
-  agentPaused = !agentPaused;
-  renderAgentPause();
+function closeInspector() {
+  document.body.classList.remove("inspector-open");
+  $("#context-toggle").setAttribute("aria-expanded", "false");
+  $("#conversation-btn").setAttribute("aria-expanded", "false");
+  updateScrim();
+  if (lastFocus) {
+    lastFocus.focus();
+    lastFocus = null;
+  }
 }
 
-function renderAgents(steps: CollabStep[]) {
+function openLeftDrawer(opener?: HTMLElement) {
+  if (opener) lastFocus = opener;
+  if (isLeftDrawer()) {
+    document.body.classList.add("left-open");
+    $("#work-toggle").setAttribute("aria-expanded", "true");
+    updateScrim();
+    ($("#left-close") as HTMLButtonElement).focus();
+  }
+}
+
+function closeLeftDrawer() {
+  document.body.classList.remove("left-open");
+  $("#work-toggle").setAttribute("aria-expanded", "false");
+  updateScrim();
+  if (lastFocus) {
+    lastFocus.focus();
+    lastFocus = null;
+  }
+}
+
+function closeDrawers() {
+  closeInspector();
+  closeLeftDrawer();
+}
+
+// ---------------------------------------------------------------------------
+// Agents view — empty until the Loom server exposes live agents
+// ---------------------------------------------------------------------------
+
+function renderAgents() {
   const list = $("#agents-list");
   list.innerHTML = "";
-  const done = steps.filter((s) => s.state === "done" || s.state === "active").length;
-
-  const card = document.createElement("div");
-  card.className = "agent-card glass";
-  const head = document.createElement("header");
-  head.className = "agent-head";
-  const ring = document.createElement("span");
-  ring.className = "agent-ring" + (agentPaused ? " paused" : "");
-  const id = document.createElement("div");
-  id.className = "agent-id";
-  const name = document.createElement("strong");
-  name.textContent = "Research Agent";
-  const status = document.createElement("span");
-  status.id = "agent-card-status";
-  status.textContent = `${agentPaused ? "Paused" : "Experimenting"} · ${done}/${steps.length}`;
-  id.append(name, status);
-  const pause = document.createElement("button");
-  pause.type = "button";
-  pause.className = "pause-btn agent-pause-btn" + (agentPaused ? " paused" : "");
-  pause.setAttribute("aria-label", agentPaused ? "Resume agent" : "Pause agent");
-  pause.title = agentPaused ? "Resume agent" : "Pause agent";
-  pause.innerHTML = agentPaused ? PLAY_SVG : PAUSE_SVG;
-  pause.addEventListener("click", toggleAgentPaused);
-  head.append(ring, id, pause);
-  card.append(head);
-
-  const note = document.createElement("p");
-  note.className = "demo-note";
-  note.textContent =
-    "Demonstration data — the Loom server does not expose step-by-step execution here yet.";
-  card.append(note);
-
-  const stepsList = document.createElement("ul");
-  stepsList.className = "steps";
-  for (const step of steps) {
-    const li = document.createElement("li");
-    li.className = `step ${step.state}`;
-    const mark = document.createElement("span");
-    mark.className = "mark";
-    mark.textContent = step.state === "done" ? "✓" : "";
-    const label = document.createElement("span");
-    label.className = "step-label";
-    label.textContent = step.label;
-    li.append(mark, label);
-    if (step.progress !== null && step.progress !== undefined) {
-      const pct = document.createElement("span");
-      pct.className = "step-pct";
-      pct.textContent = `${step.progress}%`;
-      li.append(pct);
-    }
-    stepsList.append(li);
-  }
-  card.append(stepsList);
-  list.append(card);
-
   const empty = document.createElement("div");
-  empty.className = "empty-card glass";
-  const emptyTitle = document.createElement("strong");
-  emptyTitle.textContent = "No other agents yet";
-  const emptyText = document.createElement("p");
-  emptyText.textContent =
-    "More agents will appear here when the Loom server exposes them.";
-  empty.append(emptyTitle, emptyText);
+  empty.className = "flat-row empty-row";
+  const title = document.createElement("strong");
+  title.textContent = "No agents running";
+  const text = document.createElement("p");
+  text.textContent =
+    "No agents are running in this workspace yet. Agents appear here when the Loom server exposes them.";
+  empty.append(title, text);
   list.append(empty);
 }
 
 // ---------------------------------------------------------------------------
-// Evidence view
+// Evidence view — empty until the Loom server shares findings
 // ---------------------------------------------------------------------------
 
 function renderEvidence() {
   const list = $("#evidence-list");
   list.innerHTML = "";
-  for (const item of EVIDENCE) {
-    const card = document.createElement("div");
-    card.className = "evidence-card glass";
-    const head = document.createElement("div");
-    head.className = "ev-head";
-    const title = document.createElement("strong");
-    title.textContent = item.title;
-    const state = document.createElement("span");
-    state.className = `ev-state ${item.state}`;
-    state.textContent =
-      item.state === "collected"
-        ? "Collected"
-        : item.state === "partial"
-          ? "Partial"
-          : "Pending";
-    head.append(title, state);
-    const detail = document.createElement("p");
-    detail.className = "ev-detail";
-    detail.textContent = item.detail;
-    const basis = document.createElement("p");
-    basis.className = "ev-basis";
-    basis.textContent = item.basis;
-    card.append(head, detail, basis);
-    list.append(card);
-  }
+  const empty = document.createElement("div");
+  empty.className = "flat-row empty-row";
+  const title = document.createElement("strong");
+  title.textContent = "No evidence yet";
+  const text = document.createElement("p");
+  text.textContent =
+    "Evidence appears here when the Loom server shares findings and traces.";
+  empty.append(title, text);
+  list.append(empty);
 }
 
 // ---------------------------------------------------------------------------
@@ -544,7 +596,7 @@ function renderLayers() {
   list.innerHTML = "";
   for (const layer of LAYERS) {
     const row = document.createElement("div");
-    row.className = "layer-row glass";
+    row.className = "flat-row layer-row";
     const text = document.createElement("div");
     text.className = "layer-text";
     const label = document.createElement("strong");
@@ -582,63 +634,103 @@ function setArtifactTab(tab: "artifacts" | "documents") {
   renderArtifacts();
 }
 
-function artifactClick(item: ArtifactItem, card: HTMLElement) {
-  if (item.action === "expand") {
-    const open = card.querySelector(".artifact-body");
-    if (open) {
-      open.remove();
-      return;
-    }
-    const body = document.createElement("p");
-    body.className = "artifact-body";
-    body.textContent = item.body ?? item.detail;
-    card.append(body);
-  } else if (item.action === "code-design") {
-    openNote("design");
-  } else if (item.action === "code-scratch") {
-    openNote("scratch");
-  } else if (item.action === "evidence") {
-    setMode("evidence");
-  }
-}
-
 function renderArtifacts() {
   const list = $("#artifacts-list");
   list.innerHTML = "";
-  const items = artifactTab === "artifacts" ? ARTIFACTS : DOCUMENTS;
-  for (const item of items) {
-    const wrap = document.createElement("div");
-    wrap.className = "artifact-item";
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "artifact-card glass";
-    const kind = document.createElement("span");
-    kind.className = "artifact-kind";
-    kind.textContent = item.kind;
-    const title = document.createElement("strong");
-    title.textContent = item.title;
-    const detail = document.createElement("span");
-    detail.className = "artifact-detail";
-    detail.textContent = item.detail;
-    const chev = document.createElement("span");
-    chev.className = "chev";
-    chev.textContent = "›";
-    card.append(kind, title, detail, chev);
-    card.addEventListener("click", () => artifactClick(item, wrap));
-    wrap.append(card);
-    list.append(wrap);
+  if (artifactTab === "documents") {
+    // The two real local documents. They start empty; clicking one
+    // opens it in Code mode.
+    for (const doc of NOTE_DOCS) {
+      const wrap = document.createElement("div");
+      wrap.className = "flat-row";
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "artifact-card";
+      const kind = document.createElement("span");
+      kind.className = "artifact-kind";
+      kind.textContent = "Note";
+      const title = document.createElement("strong");
+      title.textContent = doc.title;
+      const detail = document.createElement("span");
+      detail.className = "artifact-detail";
+      detail.textContent = doc.detail;
+      const chev = document.createElement("span");
+      chev.className = "chev";
+      chev.textContent = "›";
+      card.append(kind, title, detail, chev);
+      card.addEventListener("click", () => openNote(doc.kind));
+      wrap.append(card);
+      list.append(wrap);
+    }
+    return;
   }
+  // Artifacts come from the Loom server when it shares them.
+  const empty = document.createElement("div");
+  empty.className = "flat-row empty-row";
+  const title = document.createElement("strong");
+  title.textContent = "No artifacts yet";
+  const text = document.createElement("p");
+  text.textContent =
+    "Artifacts appear here when the Loom server shares them.";
+  empty.append(title, text);
+  list.append(empty);
 }
 
 // ---------------------------------------------------------------------------
-// Chat
+// Search (filters the work catalogue by title)
 // ---------------------------------------------------------------------------
+
+function setSearchOpen(open: boolean) {
+  const input = $("#search-input") as HTMLInputElement;
+  const btn = $("#search-btn");
+  input.hidden = !open;
+  btn.setAttribute("aria-expanded", String(open));
+  if (open) {
+    input.focus();
+  } else {
+    input.value = "";
+    applySearchFilter("");
+  }
+}
+
+function applySearchFilter(query: string) {
+  const input = document.querySelector<HTMLInputElement>("#search-input");
+  if (!input) return;
+  const q = query.trim().toLowerCase();
+  let visible = 0;
+  for (const li of document.querySelectorAll<HTMLLIElement>("#work-list li")) {
+    const show = !q || (li.dataset.title ?? "").includes(q);
+    li.hidden = !show;
+    if (show) visible++;
+  }
+  $("#work-empty").hidden = visible > 0 || workItems.length === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Chat — starts empty; no invented replies. When the Loom server cannot
+// be reached, the failure is shown as a connection error.
+// ---------------------------------------------------------------------------
+
+function showChatHint() {
+  const log = $("#chat-log");
+  if (log.querySelector(".chat-msg") || log.querySelector(".chat-hint")) return;
+  const hint = document.createElement("div");
+  hint.className = "chat-hint";
+  hint.textContent =
+    "No messages yet. Ask Loom something — it answers when the Loom server is running on localhost:5006.";
+  log.append(hint);
+}
+
+function hideChatHint() {
+  document.querySelector("#chat-log .chat-hint")?.remove();
+}
 
 function addChatMessage(
   who: "user" | "loom",
   text: string,
   reply?: ChatReply,
 ) {
+  hideChatHint();
   const log = $("#chat-log");
   const msg = document.createElement("div");
   msg.className = `chat-msg ${who}`;
@@ -669,17 +761,14 @@ function addChatMessage(
       <span class="chev">›</span>`;
     (card.querySelector("strong") as HTMLElement).textContent = reply.card.title;
     (card.querySelector(".card-text span") as HTMLElement).textContent = reply.card.detail;
-    card.addEventListener("click", () => setMode("experiment"));
+    card.addEventListener("click", () => setMode("artifacts"));
     msg.append(card);
   }
 
-  if (reply && who === "loom") {
+  if (who === "loom") {
     const src = document.createElement("span");
     src.className = "chat-source";
-    src.textContent =
-      reply.source === "live"
-        ? "Live — answered by the Loom server"
-        : "Demonstration — example conversation";
+    src.textContent = "Live — answered by the Loom server";
     msg.append(src);
   }
 
@@ -687,13 +776,18 @@ function addChatMessage(
   log.scrollTop = log.scrollHeight;
 }
 
-function seedChat() {
-  addChatMessage("user", "Can you help me design the next experiment?");
-  addChatMessage("loom", "Sure. Based on the current findings, here's a proposal:", {
-    text: "",
-    source: "demonstration",
-    card: { title: "Experiment design", detail: "Compare memory strategies" },
-  });
+/** A connection error is shown in the chat itself, not as a reply. */
+function addChatError(text: string) {
+  hideChatHint();
+  const log = $("#chat-log");
+  const msg = document.createElement("div");
+  msg.className = "chat-msg loom chat-error";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
+  msg.append(bubble);
+  log.append(msg);
+  log.scrollTop = log.scrollHeight;
 }
 
 async function sendChat(text: string) {
@@ -712,6 +806,8 @@ async function sendChat(text: string) {
   try {
     const reply = await askLoom(clean);
     typing.remove();
+    loomVerified = true;
+    renderStatusPill();
     addChatMessage("loom", reply.text, reply);
     setSphereState("completed");
     window.setTimeout(() => {
@@ -719,14 +815,19 @@ async function sendChat(text: string) {
     }, 3000);
   } catch (err) {
     typing.remove();
-    addChatMessage("loom", `Could not reach Loom: ${err instanceof Error ? err.message : String(err)}. Start the Loom service and send your message again.`);
+    // Keep the failed text in the composer so it can be retried.
+    ($("#chat-text") as HTMLInputElement).value = clean;
+    const detail = err instanceof Error ? err.message : String(err);
+    const guidance = /looms serve|Start the Loom/i.test(detail)
+      ? ""
+      : " Start the Loom service and send your message again.";
+    addChatError(`Could not reach Loom: ${detail}.${guidance}`);
     setSphereState("idle");
-    console.error(err);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Modes
+// Modes (one shared navigation state: rail + footer stay in sync)
 // ---------------------------------------------------------------------------
 
 const ALL_VIEWS: Mode[] = [
@@ -746,11 +847,32 @@ function closeMenus() {
   if (chatMenu) chatMenu.hidden = true;
 }
 
+function renderStatusPill() {
+  const pill = $("#loom-status");
+  const text = $("#loom-status-text");
+  if (loomVerified) {
+    text.textContent = "Connected to Loom";
+    pill.classList.add("live");
+    pill.title = "A verified Loom response was received from localhost:5006.";
+  } else if (loomReachable) {
+    text.textContent = "Server reachable";
+    pill.classList.remove("live");
+    pill.title =
+      "The Loom server answers on localhost:5006, but no Loom-level response has been verified yet.";
+  } else {
+    text.textContent = "Loom offline";
+    pill.classList.remove("live");
+    pill.title =
+      "The Loom server is not reachable at localhost:5006. Start the server to connect.";
+  }
+}
+
 function setMode(next: Mode) {
   if (mode === next) {
     closeMenus();
     return;
   }
+  const wasExperiment = mode === "experiment";
   mode = next;
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.classList.toggle("active", btn.dataset.mode === next);
@@ -766,33 +888,32 @@ function setMode(next: Mode) {
     const el = document.getElementById(`view-${id}`);
     if (el) el.hidden = id !== next;
   }
-  if (next === "experiment") fitSphere();
+  // The scene follows the mode: water + full gradient only in Experiment.
+  document.querySelector(".scene")?.setAttribute("data-mode", next);
+  // Pause the sphere when its view is hidden; resume in Experiment.
+  if (next === "experiment") {
+    fitSphere();
+    sphere.startAnimation();
+  } else if (wasExperiment) {
+    sphere.stop();
+  }
   closeMenus();
 }
 
 // ---------------------------------------------------------------------------
-// Code editor (prototype: notes persist in localStorage)
+// Code editor (prototype: notes persist in localStorage, start empty)
 // ---------------------------------------------------------------------------
 
 const NOTE_KEY_DESIGN = "loom-ide-tauri:design-note";
 const NOTE_KEY_SCRATCH = "loom-ide-tauri:scratch-note";
 
-const SCRATCH_SEED = `# Scratch notes
-
-Quick thoughts, links, and half-formed ideas.
-`;
-
 function noteKey(kind: NoteKind): string {
   return kind === "design" ? NOTE_KEY_DESIGN : NOTE_KEY_SCRATCH;
 }
 
-function noteSeed(kind: NoteKind): string {
-  return kind === "design" ? DESIGN_NOTE : SCRATCH_SEED;
-}
-
 function loadNote() {
   const editor = $("#code-editor") as HTMLTextAreaElement;
-  editor.value = localStorage.getItem(noteKey(currentNote)) ?? noteSeed(currentNote);
+  editor.value = localStorage.getItem(noteKey(currentNote)) ?? "";
 }
 
 function saveNote() {
@@ -831,7 +952,7 @@ function initCodeEditor() {
     window.setTimeout(() => (note.hidden = true), 2000);
   });
   $("#code-ask").addEventListener("click", async () => {
-    setMode("experiment");
+    openInspector("conversation");
     await sendChat(`About this note: ${editor.value.slice(0, 280)}`);
   });
 }
@@ -884,15 +1005,59 @@ async function init() {
     }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeMenus();
+    if (e.key === "Escape") {
+      if (
+        document.body.classList.contains("inspector-open") ||
+        document.body.classList.contains("left-open")
+      ) {
+        closeDrawers();
+      } else if (!($("#search-input") as HTMLInputElement).hidden) {
+        setSearchOpen(false);
+        ($("#search-btn") as HTMLButtonElement).focus();
+      } else {
+        closeMenus();
+      }
+    }
   });
 
-  // Search focuses the chat input.
-  $("#search-btn").addEventListener("click", () => {
-    ($("#chat-text") as HTMLInputElement).focus();
+  // Header toggles.
+  $("#work-toggle").addEventListener("click", (e) => {
+    if (document.body.classList.contains("left-open")) closeLeftDrawer();
+    else openLeftDrawer(e.currentTarget as HTMLElement);
   });
-  // Agent pause (right panel; the Agents view card wires its own button).
-  $("#agent-pause").addEventListener("click", toggleAgentPaused);
+  $("#context-toggle").addEventListener("click", (e) => {
+    if (document.body.classList.contains("inspector-open")) closeInspector();
+    else openInspector("context", e.currentTarget as HTMLElement);
+  });
+  $("#conversation-btn").addEventListener("click", (e) => {
+    openInspector("conversation", e.currentTarget as HTMLElement);
+  });
+  $("#left-close").addEventListener("click", () => closeLeftDrawer());
+  $("#right-close").addEventListener("click", () => closeInspector());
+  $("#scrim").addEventListener("click", () => closeDrawers());
+  window.addEventListener("resize", () => {
+    if (!isInspectorDrawer()) {
+      document.body.classList.remove("inspector-open");
+    }
+    if (!isLeftDrawer()) {
+      document.body.classList.remove("left-open");
+    }
+    updateScrim();
+  });
+
+  // Inspector tabs.
+  $("#tab-context").addEventListener("click", () => setInspectorTab("context"));
+  $("#tab-conversation").addEventListener("click", () => setInspectorTab("conversation"));
+
+  // Search: filters the work catalogue by title.
+  $("#search-btn").addEventListener("click", () => {
+    const input = $("#search-input") as HTMLInputElement;
+    setSearchOpen(Boolean(input.hidden));
+  });
+  $("#search-input").addEventListener("input", (e) => {
+    applySearchFilter((e.target as HTMLInputElement).value);
+  });
+
   // Chat menu: clear the conversation.
   $("#chat-menu-btn").addEventListener("click", (e) => {
     e.stopPropagation();
@@ -902,10 +1067,7 @@ async function init() {
   $("#chat-clear").addEventListener("click", () => {
     const log = $("#chat-log");
     log.innerHTML = "";
-    const note = document.createElement("div");
-    note.className = "typing";
-    note.textContent = "Chat cleared — start a new message below.";
-    log.append(note);
+    showChatHint();
     closeMenus();
   });
 
@@ -913,44 +1075,53 @@ async function init() {
   workItems = await getWorkItems();
   selectedWorkId = workItems[0]?.id ?? null;
   renderWorkList();
-  renderWorkCards();
-  renderWorkFocus();
+  renderWorkDetail();
   if (selectedWorkId) {
     const item = workItems.find((w) => w.id === selectedWorkId);
-    if (item) $("#objective-title").textContent = OBJECTIVES[item.id] ?? item.title;
+    if (item) $("#objective-title").textContent = item.title;
   }
   $("#new-work-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = $("#new-work-input") as HTMLInputElement;
     const title = input.value.trim();
     if (!title) return;
-    const item = await addWorkItem(title);
-    workItems = [item, ...workItems];
-    input.value = "";
-    selectWork(item.id);
+    try {
+      const item = await addWorkItem(title);
+      workItems = [item, ...workItems];
+      input.value = "";
+      selectWork(item.id);
+    } catch (err) {
+      // Inline error on the form itself; the list keeps its state.
+      const form = $("#new-work-form");
+      let errEl = form.querySelector<HTMLElement>(".field-error");
+      if (!errEl) {
+        errEl = document.createElement("span");
+        errEl.className = "field-error";
+        form.append(errEl);
+      }
+      showFieldError(errEl, `Could not create the work item: ${err instanceof Error ? err.message : String(err)}`);
+    }
   });
 
-  // Collaboration + attention
-  const steps = await getCollaboration();
-  renderSteps(steps);
-  renderAttention(await getAttention());
+  // Collaboration + attention (empty until the Loom server exposes them).
+  collabSteps = await getCollaboration();
+  attentionItems = await getAttention();
+  renderInspectorContext();
 
-  // New views (all demonstration data, labelled in the UI).
-  renderAgents(steps);
+  // Workspace views.
+  renderAgents();
   renderEvidence();
   renderLayers();
   renderArtifacts();
 
-  // Loom server status
+  // Loom server status: "Server reachable" is the TCP probe;
+  // "Connected to Loom" only after a verified live reply.
   const status = await getLoomStatus();
-  const pill = $("#loom-status");
-  $("#loom-status-text").textContent = status.online ? "Live" : "Demonstration";
-  pill.classList.toggle("live", status.online);
-  pill.title = status.detail;
-  $("#demo-note").hidden = false;
+  loomReachable = status.online;
+  renderStatusPill();
 
-  // Chat
-  seedChat();
+  // Chat starts empty, with a short hint.
+  showChatHint();
   $("#chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = $("#chat-text") as HTMLInputElement;

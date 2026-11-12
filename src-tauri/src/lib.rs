@@ -1,14 +1,14 @@
 //! Loom IDE — Tauri backend.
 //!
 //! Work items persist as structured JSON on disk, like the existing
-//! eframe app does. Collaboration steps and attention items are
-//! demonstration data for now: the Loom server does not yet expose
-//! step-by-step execution, and the UI labels them as such.
+//! eframe app does. Collaboration steps and attention items are empty
+//! for now: the Loom server does not yet expose step-by-step execution,
+//! and the UI shows honest empty states until it does.
 //!
-//! Chat tries the real Loom server first (POST /v1/weave on
-//! http://localhost:5006, the same endpoint the eframe app uses) and
-//! falls back to a clearly labelled demonstration reply when the
-//! server is not reachable. Nothing here fakes agent progress.
+//! Chat calls the real Loom server (POST /v1/weave on
+//! http://localhost:5006, the same endpoint the eframe app uses).
+//! When the server is not reachable the command fails and the UI
+//! shows the error. Nothing here invents a reply or fakes progress.
 
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -66,17 +66,19 @@ fn set_work_autonomy(
 }
 
 // ---------------------------------------------------------------------------
-// Collaboration + attention (demonstration data — labelled in the UI)
+// Collaboration + attention (empty until the Loom server exposes them)
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
 fn get_collaboration() -> Vec<CollabStep> {
-    store::seed_steps()
+    // The Loom server does not expose step-by-step execution yet.
+    Vec::new()
 }
 
 #[tauri::command]
 fn get_attention() -> Vec<AttentionItem> {
-    store::seed_attention()
+    // The Loom server does not expose attention items yet.
+    Vec::new()
 }
 
 // ---------------------------------------------------------------------------
@@ -113,7 +115,7 @@ struct ChatCard {
 #[derive(Debug, Clone, Serialize)]
 struct ChatReply {
     text: String,
-    source: String, // "live" | "demonstration"
+    source: String, // always "live" — there is no demo reply
     card: Option<ChatCard>,
 }
 

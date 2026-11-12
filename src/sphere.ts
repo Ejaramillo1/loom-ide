@@ -28,6 +28,7 @@ export class Sphere {
   private state: SphereState = "idle";
   private raf = 0;
   private start = performance.now();
+  private running = false;
   private reducedMotion: boolean;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -45,11 +46,14 @@ export class Sphere {
   }
 
   startAnimation() {
+    if (this.running) return;
+    this.running = true;
     if (this.reducedMotion) {
       this.draw(0);
       return;
     }
     const tick = (now: number) => {
+      if (!this.running) return;
       this.draw((now - this.start) / 1000);
       this.raf = requestAnimationFrame(tick);
     };
@@ -57,6 +61,7 @@ export class Sphere {
   }
 
   stop() {
+    this.running = false;
     cancelAnimationFrame(this.raf);
   }
 
@@ -182,15 +187,15 @@ export class Sphere {
 
     // Fine flowing contour lines — the reference's signature detail.
     // Sine curves across the sphere, denser near the middle, fading at the rim.
-    const lines = 72;
+    const lines = 16;
     for (let i = 0; i < lines; i++) {
       const f = i / (lines - 1); // 0 top .. 1 bottom
       const y = cy - R * 0.92 + f * R * 1.84;
       const halfChord = Math.sqrt(Math.max(0, R * R - (y - cy) * (y - cy)));
       if (halfChord < R * 0.05) continue;
-      const amp = R * 0.48 * Math.sin(f * Math.PI);
-      const phase = t * (isReflection ? 0.06 : 0.09) + f * 1.8;
-      const alpha = 0.19 * Math.sin(f * Math.PI) + 0.04;
+      const amp = R * 0.16 * Math.sin(f * Math.PI);
+      const phase = t * (isReflection ? 0.12 : 0.25) + i * 0.55;
+      const alpha = 0.16 * Math.sin(f * Math.PI) + 0.03;
       ctx.beginPath();
       const steps = 48;
       for (let s = 0; s <= steps; s++) {
@@ -202,7 +207,7 @@ export class Sphere {
         if (s === 0) ctx.moveTo(x, yy);
         else ctx.lineTo(x, yy);
       }
-      ctx.strokeStyle = `rgba(255, 252, 248, ${alpha.toFixed(3)})`;
+      ctx.strokeStyle = `rgba(122, 102, 82, ${alpha.toFixed(3)})`;
       ctx.lineWidth = Math.max(0.7, R * 0.0022);
       ctx.stroke();
     }

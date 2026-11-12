@@ -1,7 +1,9 @@
 // Frontend <-> Rust bridge.
 // Under Tauri, calls go to real Rust commands (src-tauri/src/lib.rs).
-// In a plain browser (vite dev without Tauri) the same calls fall back to
-// local seed data, so the UI can be previewed and iterated on anywhere.
+// In a plain browser (vite dev without Tauri) work items fall back to
+// localStorage and the Loom calls go through the /api/loom dev proxy
+// (see vite.config.ts). There is no demo data anywhere: when the Loom
+// server is not reachable, the calls fail and the UI says so.
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -40,7 +42,8 @@ export interface ChatCard {
 
 export interface ChatReply {
   text: string;
-  source: "live" | "demonstration";
+  // The backend only ever sends "live". There is no demo reply.
+  source: "live";
   card: ChatCard | null;
 }
 
@@ -49,57 +52,10 @@ const IN_TAURI =
 
 export const isTauri = IN_TAURI;
 
-// ---- Seed data (mirrors the Rust backend seeds; used as fallback) ----
-
-export const seedWorkItems: WorkItem[] = [
-  {
-    id: "work-1",
-    title: "Investigate agent memory latency",
-    status: "active",
-    autonomy: "collaborative",
-    updated_label: "Now",
-  },
-  {
-    id: "work-2",
-    title: "Improve tool reliability",
-    status: "paused",
-    autonomy: "assisted",
-    updated_label: "2h",
-  },
-  {
-    id: "work-3",
-    title: "Review PR #4287",
-    status: "paused",
-    autonomy: "manual",
-    updated_label: "4h",
-  },
-];
-
-export const seedSteps: CollabStep[] = [
-  { id: "step-1", label: "Analyze baseline traces", state: "done", progress: null },
-  { id: "step-2", label: "Reproduce with memory on/off", state: "done", progress: null },
-  { id: "step-3", label: "Run configuration experiments", state: "active", progress: 68 },
-  { id: "step-4", label: "Compare results", state: "pending", progress: null },
-  { id: "step-5", label: "Identify likely causes", state: "pending", progress: null },
-];
-
-export const seedAttention: AttentionItem[] = [
-  {
-    id: "att-1",
-    kind: "decision",
-    title: "Decision: next experiment",
-    detail: "2 configurations ready",
-  },
-  {
-    id: "att-2",
-    kind: "finding",
-    title: "Finding: memory adds ~340 ms",
-    detail: "Consistent across 3 runs",
-  },
-];
-
 const LOCAL_KEY = "loom-ide-tauri:work-items";
 
+// Browser fallback persistence: the user's own work items, stored
+// locally. Starts empty; nothing is seeded.
 function localWorkItems(): WorkItem[] {
   try {
     const raw = localStorage.getItem(LOCAL_KEY);
@@ -107,7 +63,7 @@ function localWorkItems(): WorkItem[] {
   } catch {
     /* ignore */
   }
-  return seedWorkItems;
+  return [];
 }
 
 function saveLocalWorkItems(items: WorkItem[]) {
@@ -169,13 +125,15 @@ export async function setWorkAutonomy(
   return invoke<WorkItem>("set_work_autonomy", { id, autonomy });
 }
 
+// The Loom server does not expose step-by-step execution or attention
+// items yet, so these return empty until it does. No seed data.
 export async function getCollaboration(): Promise<CollabStep[]> {
-  if (!IN_TAURI) return seedSteps;
+  if (!IN_TAURI) return [];
   return invoke<CollabStep[]>("get_collaboration");
 }
 
 export async function getAttention(): Promise<AttentionItem[]> {
-  if (!IN_TAURI) return seedAttention;
+  if (!IN_TAURI) return [];
   return invoke<AttentionItem[]>("get_attention");
 }
 
@@ -203,6 +161,8 @@ async function loomRequest(path: string, body?: object): Promise<any> {
   return value;
 }
 
+// Throws when the Loom server cannot be reached or answers without
+// usable text. The caller shows the error; nothing invents a reply.
 export async function askLoom(message: string): Promise<ChatReply> {
   if (IN_TAURI) return invoke<ChatReply>("ask_loom", { message });
   const value = await loomRequest("/v1/weave", { query: message });
@@ -210,22 +170,4 @@ export async function askLoom(message: string): Promise<ChatReply> {
     .find(value => typeof value === "string" && value.trim());
   if (!text) throw new Error("Loom returned an empty response. Check its agent configuration.");
   return { text, source: "live", card: null };
-}
-
-/** The same honest demo fallback the Rust backend uses. */
-export function demoReply(message: string): ChatReply {
-  if (/experiment/i.test(message)) {
-    return {
-      text: "Sure. Based on the current findings, here's a proposal:",
-      source: "demonstration",
-      card: { title: "Experiment design", detail: "Compare memory strategies" },
-    };
-  }
-  return {
-    text:
-      "I can help with that once the Loom server is running. " +
-      "Right now I'm answering from demonstration data, so I can't run agents or read live traces.",
-    source: "demonstration",
-    card: null,
-  };
 }

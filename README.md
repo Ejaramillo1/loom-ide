@@ -2,9 +2,9 @@
 
 A human-centered, AI-native development environment built on the Loom
 agentic platform. This is the **Tauri 2 prototype**: a Rust backend with
-a web frontend, built to reproduce the light minimal design reference
-pixel for pixel — warm beige palette, glass translucent panels, soft
-shadows, lots of whitespace.
+a web frontend, built to reproduce the light minimal design reference —
+warm beige palette, glass translucent panels, soft shadows, lots of
+whitespace.
 
 > Design reference: `Agent_Memory_Experiment_Dashboard_1.png` (light
 > minimal dashboard). The heart of the design is the cleanliness and
@@ -16,57 +16,164 @@ shadows, lots of whitespace.
 
 ![Loom IDE prototype — Agents view](docs/screenshot-agents.png)
 
+## The shell
+
+Three rows, no absolute positioning:
+
+- **Header (~56px)** — current objective, Work and Context toggles,
+  a Conversation control, a search input that filters the work list,
+  and the Loom status pill.
+- **Main (flexible)** — icon rail (48px), work catalogue (~260px),
+  center floor (min ~520px), right inspector (~280px).
+- **Footer (~56px)** — the mode switcher, in normal flow:
+  **Experiment · Work · Code · Agents · Evidence · Layers · Artifacts**.
+
+Every long region has its own scroll owner; mode headings stay outside
+scrolling bodies and never clip.
+
+**Breakpoints.** ≥ ~1440px shows all panes. ~1100–1439px collapses
+the right inspector behind the labeled **Context** toggle. < ~1100px
+also moves the left catalogue behind the **Work** toggle. The
+Conversation is a labeled control: a contextual pane on wide windows,
+a drawer on narrow ones. Closing it keeps the chat text and history.
+Drawers close with Escape and return focus to the control that opened
+them. Drawers span only the main row — they never cover the header or
+the footer.
+
+**Depth, not transparency.** The window is opaque — the desktop never
+shows through. The sense of 3D comes from layering: a painted warm
+backdrop with a light beam, translucent glass panels floating above it,
+and one restrained shadow separating the layers. The water reflection
+is kept as background atmosphere in **Experiment** overview only; in
+Work and Code modes the background behind reading surfaces is flatter,
+so text stays easy to read. (An earlier build made the window itself
+transparent; that was a misunderstanding and was reverted.)
+
+## Modes and how to reach them
+
+- **Experiment** — the luminous sphere (canvas 2D: radial gradients +
+  fine flowing contour lines + water reflection), states idle /
+  listening / processing / executing / attention / completed, with a
+  caption in plain words. The sphere animation pauses when its view is
+  hidden.
+- **Work** — the left panel is the work catalogue; the center is the
+  selected work's detail view: full title and state, a control row for
+  the planning preference and the supported local action, goal,
+  success criteria (or an honest empty state), artifacts or
+  "No artifacts attached", evidence or "No evidence attached".
+- **Code** — a plain notes editor (design philosophy note + scratch
+  notes, saved locally, both starting empty). "Ask about this note"
+  opens the Conversation and sends the note to Loom.
+- **Agents** — the agents in this workspace. Empty ("No agents
+  running") until the Loom server exposes live agents.
+- **Evidence** — what the claims rest on. Empty ("No evidence yet")
+  until the Loom server shares findings and traces.
+- **Layers** — toggles for the scene layers: light beam, water
+  reflection, glass panels, sphere.
+- **Artifacts** (footer mode, and the rail's ··· menu) — two tabs:
+  **Artifacts** (empty, "No artifacts yet", until the Loom server
+  shares them) and **Documents** (the two local notes; clicking one
+  opens it in Code mode).
+
+Both navigation mechanisms — the icon rail and the footer mode
+switcher — show the same current destination.
+
 ## What it is
 
 - **Backend (Rust, `src-tauri/`)** — Tauri 2 commands:
   - `get_work_items` / `add_work_item` / `set_work_status` /
     `set_work_autonomy` — work items persist as structured JSON in
-    `<app-data>/loom-ide/work.json`, like the existing eframe app.
-  - `get_collaboration` / `get_attention` — demonstration data (the Loom
-    server does not expose step-by-step execution yet; the UI labels it).
-  - `get_loom_status` — probes `localhost:5006`.
-  - `ask_loom` — tries the real Loom server first (`POST /v1/weave` on
-    `http://localhost:5006`) and falls back to a clearly labelled
-    demonstration reply when the server is not reachable. Nothing here
-    fakes agent progress.
+    `<app-data>/loom-ide/work.json`, like the existing eframe app. The
+    store starts empty; work items come from the user creating them.
+  - `get_collaboration` / `get_attention` — empty until the Loom
+    server exposes live execution state.
+  - `get_loom_status` — a real `GET /health` against localhost:5006
+    (async, via the raw HTTP client below).
+  - `ask_loom` — a real `POST /v1/weave` on `http://localhost:5006`
+    with `{"query": ...}`. The Rust HTTP client reads framing
+    explicitly, including chunked responses from gRPC-gateway. When
+    the server cannot be reached, or answers without usable text, the
+    command fails and the UI shows the error. Nothing invents a reply.
 - **Frontend (Vite + TypeScript, `src/`)** — no framework: plain
   TypeScript + CSS, chosen deliberately because the UI is a static,
   design-driven layout and hand-written DOM/CSS gives the closest
   control over the glass/transparency look with the smallest bundle.
-  - Top bar with the current objective and a live/demonstration status pill.
-  - Left icon rail, Work list, and a chat panel with the example exchange.
-    Every rail button opens a real view now: **Work**, **Code**,
-    **Agents**, **Evidence**, **Layers**; **···** opens a menu with
-    **Artifacts** and **Documents**. The search button focuses the chat
-    input, the agent pause button pauses/resumes the Research Agent, the
-    chat **···** menu clears the chat, and Code mode has two notes
-    (design philosophy + scratch notes) that save separately.
-  - Center luminous sphere (canvas 2D: radial gradients + fine flowing
-    contour lines + water reflection), with states idle / listening /
-    processing / executing / attention / completed.
-  - Right Agentic Collaboration panel (Research Agent checklist, 3/5) and
-    Attention panel.
-  - Bottom segmented nav: **Code | Experiment | Work**. Code mode is a
-    plain notes editor (design philosophy note + scratch notes, saved
-    locally); Work mode is headed by the selected work item and shows
-    work cards with pause/resume and autonomy controls.
-  - **Agents view** — the agents in this workspace (Research Agent with
-    its checklist; room for more when the Loom server exposes them).
-  - **Evidence view** — what the claims rest on (the ~340 ms finding
-    with its basis, traces, experiment progress), labelled demonstration.
-  - **Layers view** — toggles for the scene layers: light beam, water
-    reflection, glass panels, sphere.
-  - **Artifacts view** (from the ··· menu) — two tabs: **Artifacts**
-    (experiment design, design-philosophy note, decision, finding) and
-    **Documents** (the two notes). Clicking a note opens it in Code
-    mode; the finding opens Evidence.
+  In `vite dev` (plain browser) the Loom calls go through the
+  `/api/loom` dev proxy in `vite.config.ts`, which forwards to
+  `http://localhost:5006`; work items fall back to localStorage. The
+  same no-demo rule applies there: a failed call is an error, not a
+  made-up reply.
+
+### Truthfulness rules (the UI must not pretend)
+
+- The status pill shows **Loom offline** when the server is not
+  reachable, **Server reachable** when the health probe answers, and
+  **Connected to Loom** only after a verified Loom-level response.
+- There is no seed or demonstration data anywhere in the app. Empty
+  states are honest: "No work yet", "No agents running",
+  "No attention items", "No evidence yet", "No artifacts yet",
+  "No artifacts attached", "No evidence attached",
+  "No success criteria recorded."
+- The chat starts empty with a short hint. If the Loom server is not
+  reachable, the chat shows a connection error ("Could not reach
+  Loom: …") and keeps the failed text in the composer for retry. It
+  never invents a demo reply.
+- Work controls are **local planning labels**: "Planning mode" and
+  "Mark paused" / "Mark active" save a preference on this device.
+  They do not pause a running agent. Execution controls that the
+  server does not expose do not exist yet.
+- Progress is stated as "Step 3 of 5" and "2 of 5 completed" — the
+  active step is not counted as done.
+- Every active control performs its labeled action. A click that
+  redirected to an unrelated mode was a defect and was fixed.
+- A failed save shows a readable error beside the control; the
+  control's previous value is restored.
+
+### Type scale and tokens
+
+- Body 14–15px, secondary 12–13px, section titles 16–18px,
+  line height 1.4–1.5, 4px spacing base.
+- Palette: app background `#F5F0EB`, text `#292725`, secondary
+  `#77716D`, boundary `#DDD5D0`, focus/selection muted blue `#6A91CC`,
+  amber `#D9A65F` for decisions.
+- Panel radii 12–16px, control radii 6–8px, one restrained panel
+  shadow, flat list rows with a quiet selection wash.
 - **Window**: 1648×928 by default (the design's fidelity target),
-  minimum 1200×760. The window is **transparent** (`"transparent": true`
-  in `tauri.conf.json`) and html/body paint nothing, so on a composited
-  desktop the wallpaper tints through the translucent scene and glass
-  panels; without a compositor the painted scene (diagonal light beam +
-  water reflection) still reads as the reference. On Linux a compositor
-  is required for the real see-through effect.
+  minimum 1024×640, opaque.
+
+## Before / after (the 2026-11-11 redesign)
+
+Before — the version Eduardo ran and screenshotted:
+
+- The window was transparent, so the desktop showed through the IDE.
+- Work mode showed the catalogue twice (left panel and center); the
+  center had no detail view of the selected work.
+- The mode nav was absolutely positioned over the content with
+  104–110px of bottom padding as compensation; headings could clip.
+- Work cards truncated titles, repeated the autonomy label, and said
+  "Now ago".
+- The search button focused the chat input; the agent pause button
+  pretended to pause a real agent; a chat card jumped to Experiment;
+  a decision only tinted the sphere for 4 seconds.
+- The water horizon ran behind reading surfaces in every mode.
+- The app shipped seeded work items, seeded collaboration steps and
+  attention items, a seeded example chat, seeded notes, and demo
+  replies when the server was down.
+
+After — this version:
+
+- Opaque window; depth through layered paint, glass, and shadow.
+- Work mode: catalogue left, selected work's detail center.
+- Three-row shell; footer mode nav in normal flow; headings never clip.
+- Work summary component: title on its own first row, metadata on
+  its own line, controls below the text; "Updated now" / "Updated 2h
+  ago"; autonomy once, in its labeled planning control.
+- Search filters the work list; chat cards open the Artifacts view.
+- Water reflection only in Experiment overview; flat warm background
+  behind reading surfaces.
+- No seeds, no demo replies, no sample labels, no test fixtures in
+  the app. Empty states are honest, and a failed Loom call is a
+  visible connection error.
 
 ## Run it (Ubuntu 24.04)
 
@@ -103,8 +210,10 @@ npm run tauri build
 
 ### Frontend only (no Rust, in a browser)
 
-The UI also runs in a plain browser with local demo data, for quick
-visual iteration:
+The UI also runs in a plain browser with local persistence, for quick
+visual iteration. The Loom calls go through the `/api/loom` dev proxy
+to `http://localhost:5006`; start the Loom server first
+(`looms serve --http-port 5006`) or the chat shows a connection error.
 
 ```bash
 npm run dev      # http://localhost:1420
@@ -114,15 +223,15 @@ npm run dev      # http://localhost:1420
 
 ```
 loom-ide-tauri/
-├── index.html            # app shell (top bar, rail, panels, nav)
+├── index.html            # app shell (header, main, footer, drawers)
 ├── src/
-│   ├── main.ts           # app logic, panels, chat, modes
+│   ├── main.ts           # app logic, panes, chat, modes
 │   ├── api.ts            # Tauri invoke wrappers (+ browser fallback)
 │   ├── sphere.ts         # canvas sphere + water reflection
-│   └── style.css         # light minimal theme
+│   └── style.css         # light minimal theme (tokens, shell, panes)
 ├── src-tauri/
 │   ├── src/lib.rs        # Tauri commands, Loom HTTP client
-│   ├── src/store.rs      # work-item JSON persistence + seed data
+│   ├── src/store.rs      # work-item JSON persistence (starts empty)
 │   ├── src/main.rs       # entry point
 │   ├── tauri.conf.json   # window 1648×928, bundle id com.loom.ide
 │   └── capabilities/default.json
@@ -134,15 +243,22 @@ loom-ide-tauri/
 - The sphere is canvas 2D, not a 3D shader — it matches the reference's
   line-art look but is not a true 3D object.
 - Code mode is a plain notes editor (no Monaco yet).
-- The Loom server integration is the same honest attempt as the eframe
-  app: real `POST /v1/weave` when the server runs, labelled demo data
-  otherwise. The exact Loom HTTP/gRPC interface still needs to be
-  verified against the real Loom server (never invent endpoints).
-- Collaboration steps and attention items are static seed data until
-  Loom exposes live execution state.
-- The transparent window was verified to build and run under Xvfb, but
-  Xvfb has no compositor, so the real see-through effect still needs
-  checking on a composited desktop (Eduardo's laptop).
+- The Loom server integration is real-or-error: real `POST /v1/weave`
+  when the server runs, a visible connection error otherwise. The
+  exact Loom HTTP interface still needs to be verified against the
+  real Loom server (never invent endpoints). The chunked-response
+  handling in the Rust client came from the backend-fix round.
+- Collaboration steps, attention items, evidence, and artifacts are
+  empty until Loom exposes live execution state; the UI shows honest
+  empty states meanwhile.
+
+## Historical note
+
+An earlier direction — a single-file eframe/egui desktop app
+(`src/main.rs`, 1,747 lines, on the `main` branch) with an Obsidian
+integration — is **historical**. The current direction is this Tauri 2
+prototype. The egui app is kept in the repo history for reference; do
+not extend it.
 
 ## License
 
