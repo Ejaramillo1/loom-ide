@@ -550,7 +550,7 @@ pub struct WorkflowExecution {
     pub result: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Artifact {
     #[serde(default)]
     pub id: String,
@@ -584,6 +584,207 @@ struct ExecutionsResponse {
 struct ArtifactsResponse {
     #[serde(default)]
     artifacts: Vec<Artifact>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ToolListResponse {
+    #[serde(default)]
+    tools: Vec<ToolDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelListResponse {
+    #[serde(default)]
+    models: Vec<ModelInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProviderListResponse {
+    #[serde(default)]
+    providers: Vec<ProviderEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetArtifactResponse {
+    #[serde(default)]
+    artifact: Artifact,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetArtifactContentResponse {
+    #[serde(default)]
+    content: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchArtifactsResponse {
+    #[serde(default)]
+    artifacts: Vec<Artifact>,
+}
+
+/// Detailed session (GET /v1/sessions/{session_id}).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionDetail {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub backend: String,
+    #[serde(default, deserialize_with = "de_i64")]
+    pub created_at: i64,
+    #[serde(default, deserialize_with = "de_i64")]
+    pub updated_at: i64,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default, deserialize_with = "de_i64")]
+    pub total_cost_usd: i64,
+    #[serde(default)]
+    pub conversation_count: i32,
+    #[serde(default)]
+    pub metadata: std::collections::HashMap<String, String>,
+    #[serde(default, alias = "agentId")]
+    pub agent_id: String,
+    #[serde(default, alias = "agentName")]
+    pub agent_name: String,
+    #[serde(default)]
+    pub started_at: String,
+    #[serde(default)]
+    pub ended_at: String,
+    #[serde(default)]
+    pub metadata_status: String,
+    #[serde(default)]
+    pub artifact_count: i32,
+}
+
+/// A tool definition from Loom (GET /v1/tools).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub input_schema_json: String,
+    #[serde(default)]
+    pub output_schema_json: String,
+    #[serde(default)]
+    pub backends: Vec<String>,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    #[serde(default)]
+    pub category: String,
+    #[serde(default)]
+    pub providers: Vec<String>,
+}
+
+/// An execution trace (GET /v1/traces/{trace_id}).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Trace {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default, alias = "sessionId")]
+    pub session_id: String,
+    #[serde(default)]
+    pub root_span: Option<TraceSpan>,
+    #[serde(default)]
+    pub spans: Vec<TraceSpan>,
+    #[serde(default, deserialize_with = "de_i64")]
+    pub total_duration_ms: i64,
+}
+
+/// A trace span.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraceSpan {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub parent_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default, deserialize_with = "de_i64")]
+    pub start_time_us: i64,
+    #[serde(default, deserialize_with = "de_i64")]
+    pub end_time_us: i64,
+    #[serde(default, deserialize_with = "de_i64")]
+    pub duration_us: i64,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub attributes: std::collections::HashMap<String, String>,
+}
+
+/// An LLM model (GET /v1/models).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelInfo {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub context_window: i32,
+    #[serde(default)]
+    pub cost_per_1m_input_usd: f64,
+    #[serde(default)]
+    pub cost_per_1m_output_usd: f64,
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub max_output_tokens: i32,
+    #[serde(default)]
+    pub is_reasoning: bool,
+    #[serde(default)]
+    pub show_in_dropdown: bool,
+}
+
+/// A named provider (GET /v1/providers).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderEntry {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub active: bool,
+}
+
+/// Artifact stats (GET /v1/artifacts/stats).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactStats {
+    #[serde(default)]
+    pub total_files: i32,
+    #[serde(default, deserialize_with = "de_i64")]
+    pub total_size_bytes: i64,
+    #[serde(default)]
+    pub user_files: i32,
+    #[serde(default)]
+    pub generated_files: i32,
+    #[serde(default)]
+    pub deleted_files: i32,
+}
+
+/// Server configuration (GET /v1/server/config).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerConfig {
+    #[serde(default)]
+    pub config: std::collections::HashMap<String, String>,
+}
+
+/// Storage status (GET /v1/server/storage).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageStatus {
+    #[serde(default)]
+    pub backend: String,
+    #[serde(default)]
+    pub healthy: bool,
+    #[serde(default)]
+    pub detail: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -833,7 +1034,7 @@ async fn create_session(name: Option<String>, agent_id: Option<String>) -> Resul
     }
     if let Some(a) = agent_id {
         if !a.trim().is_empty() {
-            obj.insert("agent_id".into(), a.into());
+            obj.insert("agentId".into(), a.into());
         }
     }
     let body = serde_json::Value::Object(obj).to_string();
@@ -889,7 +1090,7 @@ async fn execute_workflow(workflow_ref: String) -> Result<ExecuteWorkflowRespons
     if workflow_ref.trim().is_empty() {
         return Err("No workflow selected.".to_string());
     }
-    let body = serde_json::json!({ "workflow_ref": workflow_ref }).to_string();
+    let body = serde_json::json!({ "workflowRef": workflow_ref }).to_string();
     let value = tauri::async_runtime::spawn_blocking(move || {
         loom_request("POST", "/v1/workflows:execute", Some(body))
     })
@@ -952,6 +1153,226 @@ async fn list_artifacts(session_id: Option<String>) -> Result<Vec<Artifact>, Str
     Ok(resp.artifacts)
 }
 
+/// Get details of a single session (GET /v1/sessions/{session_id}).
+#[tauri::command]
+async fn get_session(session_id: String) -> Result<SessionDetail, String> {
+    if session_id.trim().is_empty() {
+        return Err("No session selected.".to_string());
+    }
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        loom_request(
+            "GET",
+            &format!("/v1/sessions/{}", percent_encode(&session_id)),
+            None,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    serde_json::from_value(value).map_err(|e| format!("Unexpected session response: {e}"))
+}
+
+/// List all registered tools (GET /v1/tools).
+#[tauri::command]
+async fn list_tools() -> Result<Vec<ToolDefinition>, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/tools", None))
+        .await
+        .map_err(|e| e.to_string())??;
+    let resp: ToolListResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected tools response: {e}"))?;
+    Ok(resp.tools)
+}
+
+/// Get an execution trace (GET /v1/traces/{trace_id}).
+#[tauri::command]
+async fn get_trace(trace_id: String) -> Result<Trace, String> {
+    if trace_id.trim().is_empty() {
+        return Err("No trace ID provided.".to_string());
+    }
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        loom_request(
+            "GET",
+            &format!("/v1/traces/{}", percent_encode(&trace_id)),
+            None,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    serde_json::from_value(value).map_err(|e| format!("Unexpected trace response: {e}"))
+}
+
+/// Get details of a single agent (GET /v1/agents/{agent_id}).
+#[tauri::command]
+async fn get_agent(agent_id: String) -> Result<Agent, String> {
+    if agent_id.trim().is_empty() {
+        return Err("No agent selected.".to_string());
+    }
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        loom_request(
+            "GET",
+            &format!("/v1/agents/{}", percent_encode(&agent_id)),
+            None,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    serde_json::from_value(value).map_err(|e| format!("Unexpected agent response: {e}"))
+}
+
+/// List available LLM models (GET /v1/models).
+#[tauri::command]
+async fn list_models() -> Result<Vec<ModelInfo>, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/models", None))
+        .await
+        .map_err(|e| e.to_string())??;
+    let resp: ModelListResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected models response: {e}"))?;
+    Ok(resp.models)
+}
+
+/// List named LLM providers (GET /v1/providers).
+#[tauri::command]
+async fn list_providers() -> Result<Vec<ProviderEntry>, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/providers", None))
+        .await
+        .map_err(|e| e.to_string())??;
+    let resp: ProviderListResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected providers response: {e}"))?;
+    Ok(resp.providers)
+}
+
+/// Switch the LLM model for a session (POST /v1/sessions/{session_id}:switch-model).
+#[tauri::command]
+async fn switch_model(
+    session_id: String,
+    provider: Option<String>,
+    model: Option<String>,
+) -> Result<serde_json::Value, String> {
+    if session_id.trim().is_empty() {
+        return Err("No session selected.".to_string());
+    }
+    let mut obj = serde_json::Map::new();
+    if let Some(p) = provider {
+        if !p.trim().is_empty() {
+            obj.insert("provider".into(), p.into());
+        }
+    }
+    if let Some(m) = model {
+        if !m.trim().is_empty() {
+            obj.insert("model".into(), m.into());
+        }
+    }
+    let body = serde_json::Value::Object(obj).to_string();
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        loom_request(
+            "POST",
+            &format!("/v1/sessions/{}:switch-model", percent_encode(&session_id)),
+            Some(body),
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    Ok(value)
+}
+
+/// Get artifact details (GET /v1/artifacts/{id}).
+#[tauri::command]
+async fn get_artifact(artifact_id: String) -> Result<Artifact, String> {
+    if artifact_id.trim().is_empty() {
+        return Err("No artifact selected.".to_string());
+    }
+    let value = tauri::async_runtime::spawn_blocking(move || {
+        loom_request(
+            "GET",
+            &format!("/v1/artifacts/{}", percent_encode(&artifact_id)),
+            None,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let resp: GetArtifactResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected artifact response: {e}"))?;
+    Ok(resp.artifact)
+}
+
+/// Read artifact file content (GET /v1/artifacts/{id}/content).
+#[tauri::command]
+async fn get_artifact_content(
+    artifact_id: String,
+    encoding: Option<String>,
+) -> Result<String, String> {
+    if artifact_id.trim().is_empty() {
+        return Err("No artifact selected.".to_string());
+    }
+    let mut path = format!("/v1/artifacts/{}/content", percent_encode(&artifact_id));
+    if let Some(e) = encoding {
+        if !e.trim().is_empty() {
+            path.push_str(&format!("?encoding={}", percent_encode(&e)));
+        }
+    }
+    let value = tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
+        .await
+        .map_err(|e| e.to_string())??;
+    let resp: GetArtifactContentResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected artifact content response: {e}"))?;
+    // content is bytes; try UTF-8 first, fall back to base64 decode
+    match resp.content {
+        serde_json::Value::String(s) => Ok(s),
+        serde_json::Value::Array(bytes) => {
+            let b: Vec<u8> = bytes
+                .into_iter()
+                .filter_map(|v| v.as_u64().map(|n| n as u8))
+                .collect();
+            String::from_utf8(b).map_err(|e| format!("Artifact content is not valid UTF-8: {e}"))
+        }
+        _ => Err("Artifact content had an unexpected format.".to_string()),
+    }
+}
+
+/// Search artifacts (GET /v1/artifacts:search).
+#[tauri::command]
+async fn search_artifacts(query: String) -> Result<Vec<Artifact>, String> {
+    if query.trim().is_empty() {
+        return Err("No search query provided.".to_string());
+    }
+    let path = format!(
+        "/v1/artifacts:search?query={}",
+        percent_encode(&query.trim())
+    );
+    let value = tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
+        .await
+        .map_err(|e| e.to_string())??;
+    let resp: SearchArtifactsResponse =
+        serde_json::from_value(value).map_err(|e| format!("Unexpected search response: {e}"))?;
+    Ok(resp.artifacts)
+}
+
+/// Get artifact storage statistics (GET /v1/artifacts/stats).
+#[tauri::command]
+async fn get_artifact_stats() -> Result<ArtifactStats, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/artifacts/stats", None))
+        .await
+        .map_err(|e| e.to_string())??;
+    serde_json::from_value(value).map_err(|e| format!("Unexpected artifact stats response: {e}"))
+}
+
+/// Get server configuration (GET /v1/server/config).
+#[tauri::command]
+async fn get_server_config() -> Result<ServerConfig, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/config", None))
+        .await
+        .map_err(|e| e.to_string())??;
+    serde_json::from_value(value).map_err(|e| format!("Unexpected server config response: {e}"))
+}
+
+/// Get storage backend status (GET /v1/server/storage).
+#[tauri::command]
+async fn get_storage_status() -> Result<StorageStatus, String> {
+    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/storage", None))
+        .await
+        .map_err(|e| e.to_string())??;
+    serde_json::from_value(value).map_err(|e| format!("Unexpected storage status response: {e}"))
+}
+
 #[tauri::command]
 async fn ask_loom(
     message: String,
@@ -965,12 +1386,12 @@ async fn ask_loom(
     obj.insert("query".into(), message.into());
     if let Some(s) = session_id {
         if !s.trim().is_empty() {
-            obj.insert("session_id".into(), s.into());
+            obj.insert("sessionId".into(), s.into());
         }
     }
     if let Some(a) = agent_id {
         if !a.trim().is_empty() {
-            obj.insert("agent_id".into(), a.into());
+            obj.insert("agentId".into(), a.into());
         }
     }
     let body = serde_json::Value::Object(obj).to_string();
@@ -1180,6 +1601,19 @@ pub fn run() {
             get_workflow_execution,
             list_workflow_executions,
             list_artifacts,
+            get_session,
+            list_tools,
+            get_trace,
+            get_agent,
+            list_models,
+            list_providers,
+            switch_model,
+            get_artifact,
+            get_artifact_content,
+            search_artifacts,
+            get_artifact_stats,
+            get_server_config,
+            get_storage_status,
             get_experiments,
             add_experiment,
             add_experiment_arm,

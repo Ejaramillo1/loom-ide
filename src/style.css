@@ -957,6 +957,82 @@ body.chat-open .left-col .left-chat {
   font-size: 13.5px;
 }
 
+/* Evidence kind badge: labels what a claim rests on (observed /
+    recorded / inferred / unknown), so explanations are never mistaken
+    for ground truth (P3 Human Understanding). */
+.ev-kind {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+/* Experiment arm side-by-side comparison (P4 Human Creativity). */
+.arm-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.comp-row {
+  display: grid;
+  grid-template-columns: 150px repeat(var(--comp-cols, 2), 1fr);
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(221, 213, 208, 0.4);
+}
+
+.comp-row:last-child {
+  border-bottom: none;
+}
+
+.comp-row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.comp-cell {
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.comp-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.comp-result {
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  font-family: var(--mono);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
 .layer-text {
   flex: 1;
   min-width: 0;
@@ -2286,6 +2362,186 @@ body.chat-open .left-col .left-chat {
 .evidence-list li {
   padding: 5px 0;
   font-size: 13.5px;
+}
+
+/* ---------- New Loom data section styles ---------- */
+
+/* Definition lists for detail views. */
+.session-detail-list,
+.agent-detail-list,
+.stats-list,
+.config-list {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 4px 12px;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.session-detail-list dt,
+.agent-detail-list dt,
+.stats-list dt,
+.config-list dt {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+  padding: 2px 0;
+}
+
+.session-detail-list dd,
+.agent-detail-list dd,
+.stats-list dd,
+.config-list dd {
+  margin: 0;
+  padding: 2px 0;
+  color: var(--ink);
+}
+
+/* Tool list. */
+.tool-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tool-list li:last-child {
+  border-bottom: none;
+}
+
+.tool-category {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--agent);
+  min-width: 120px;
+}
+
+.tool-desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Model list. */
+.model-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.model-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.model-list li:last-child {
+  border-bottom: none;
+}
+
+.model-provider {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.model-caps {
+  font-size: 12px;
+  color: var(--agent);
+  margin-left: auto;
+}
+
+.model-reasoning {
+  font-size: 11px;
+  color: var(--attention);
+  margin-left: auto;
+}
+
+/* Provider list. */
+.provider-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.provider-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.provider-list li:last-child {
+  border-bottom: none;
+}
+
+.provider-active {
+  color: var(--ok);
+  font-size: 12px;
+}
+
+.provider-inactive {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Status indicator. */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+}
+
+.status-indicator.healthy {
+  background: rgba(63, 122, 84, 0.1);
+  color: var(--ok);
+  border: 1px solid rgba(63, 122, 84, 0.3);
+}
+
+.status-indicator.unhealthy {
+  background: rgba(164, 68, 46, 0.1);
+  color: var(--danger);
+  border: 1px solid rgba(164, 68, 46, 0.3);
+}
+
+/* Inspector section title. */
+.inspector-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 12px 0 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 
 /* ---------- Intent header (pinned above the work detail, Work mode) ---------- */

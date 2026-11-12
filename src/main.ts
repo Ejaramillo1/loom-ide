@@ -10,18 +10,26 @@ import {
   createSession,
   deleteIntent,
   executeWorkflow,
+  getAgent,
+  getArtifactStats,
   getAttention,
   getCollaboration,
   getExperiments,
   getIntents,
   getLoomStatus,
+  getServerConfig,
+  getSession,
   getSessionHistory,
+  getStorageStatus,
   getWorkflowExecution,
   getWorkItems,
   listAgents,
   listArtifacts,
   listDirectory,
+  listModels,
+  listProviders,
   listSessions,
+  listTools,
   listWorkflowExecutions,
   listWorkflows,
   listWorkspace,
@@ -39,6 +47,7 @@ import {
   type AcceptanceCriterion,
   type Agent,
   type Artifact,
+  type ArtifactStats,
   type AttentionItem,
   type ChatReply,
   type CollabStep,
@@ -47,11 +56,19 @@ import {
   type ExperimentArm,
   type Intent,
   type IntentAutonomy,
+  type ModelInfo,
+  type ProviderEntry,
   type Session,
+  type SessionDetail,
+  type ServerConfig,
+  type StorageStatus,
+  type ToolDefinition,
   type Workflow,
   type WorkflowExecution,
   type WorkflowResult,
   type WorkItem,
+  type EvidenceKind,
+  evidenceKindLabel,
 } from "./api";
 import { Sphere, type SphereState } from "./sphere";
 
@@ -122,8 +139,16 @@ let collabSteps: CollabStep[] = [];
 let attentionItems: AttentionItem[] = [];
 let sessions: Session[] = [];
 let selectedSessionId: string | null = null;
+let sessionDetail: SessionDetail | null = null;
 let agents: Agent[] = [];
 let selectedAgentId: string | null = null;
+let selectedAgentDetail: Agent | null = null;
+let tools: ToolDefinition[] = [];
+let models: ModelInfo[] = [];
+let providers: ProviderEntry[] = [];
+let artifactStats: ArtifactStats | null = null;
+let serverConfig: ServerConfig | null = null;
+let storageStatus: StorageStatus | null = null;
 let experiments: Experiment[] = [];
 let selectedExperimentId: string | null = null;
 let workflows: Workflow[] = [];
@@ -133,6 +158,11 @@ let artifacts: Artifact[] = [];
     the work's session when it has one, otherwise the global list. */
 let workArtifacts: Artifact[] = [];
 let runningWorkflow: string | null = null;
+/** When true, stop polling the current workflow run and clear the
+    running state. The server-side execution continues (there is no cancel
+    endpoint), but the UI stops tracking it — honest about the limit
+    instead of pretending control that doesn't exist (P2 Human Agency). */
+let cancelWorkflow = false;
 /** Workflow names for executions started in this session (the server does
     not report a workflow name on executions). */
 const executionWorkflowNames = new Map<string, string>();
@@ -197,6 +227,15 @@ function formatUnix(unixSeconds: number): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Format bytes into a human-readable string. */
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
 /** Short time token for list rows: "Now" / "2h ago". */
@@ -1214,6 +1253,24 @@ function buildWorkflowsSection(): HTMLElement {
       run.disabled = runningWorkflow !== null;
       run.addEventListener("click", () => runWorkflow(wf.name));
       li.append(info, run);
+
+      // Cancel/dismiss: stops polling and clears the running state.
+      // The server-side execution continues (no cancel endpoint exists),
+      // so this is honest about the limit instead of pretending control.
+      if (runningWorkflow !== null) {
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "btn ghost danger";
+        cancel.textContent = "Dismiss";
+        cancel.title = "Stop tracking this run. The server-side execution continues.";
+        cancel.addEventListener("click", () => {
+          cancelWorkflow = true;
+          runningWorkflow = null;
+          renderWorkDetail();
+          setSphereState("idle");
+        });
+        li.append(cancel);
+      }
       ul.append(li);
     }
     section.append(ul);
@@ -1282,9 +1339,11 @@ async function refreshWorkflows() {
 }
 
 /** Poll one execution until it leaves a running state (or attempts run
-    out), so the list stops showing a stale status after a run. */
+    out), so the list stops showing a stale status after a run. Stops early
+    if the human dismisses the run. */
 async function pollWorkflowExecution(executionId: string) {
   for (let i = 0; i < 5; i++) {
+    if (cancelWorkflow) return;
     const current = executions.find((e) => e.id === executionId);
     if (current && current.status !== "pending" && current.status !== "running") {
       return;
@@ -1306,12 +1365,20 @@ async function pollWorkflowExecution(executionId: string) {
 async function runWorkflow(name: string) {
   if (runningWorkflow) return;
   runningWorkflow = name;
+  cancelWorkflow = false;
   renderWorkDetail();
   setSphereState("executing");
   try {
     // execute_workflow returns the run's own result, so the UI can show
     // the run's actual output instead of only re-listing executions.
     const res = await executeWorkflow(name);
+    if (cancelWorkflow) {
+      runningWorkflow = null;
+      cancelWorkflow = false;
+      renderWorkDetail();
+      setSphereState("idle");
+      return;
+    }
     setLoomReachable(true);
     if (res.execution_id) {
       executionWorkflowNames.set(res.execution_id, name);
@@ -1321,6 +1388,7 @@ async function runWorkflow(name: string) {
       await refreshExecutionsList();
     }
     runningWorkflow = null;
+    cancelWorkflow = false;
     renderWorkDetail();
     setSphereState("completed");
     window.setTimeout(() => {
@@ -1329,6 +1397,7 @@ async function runWorkflow(name: string) {
   } catch (err) {
     await refreshExecutionsList();
     runningWorkflow = null;
+    cancelWorkflow = false;
     renderWorkDetail();
     setSphereState("idle");
     if (isLoomConnectionError(err)) setLoomReachable(false);
@@ -1481,18 +1550,32 @@ function workflowResultText(result: WorkflowResult | null | undefined): string |
 }
 
 interface EvidenceItem {
+  id: string;
+  kind: EvidenceKind;
   title: string;
   detail: string;
+  kindLabel: string;
 }
 
 /** Everything the Evidence surfaces draw on: decided experiments plus the
     recorded output of workflow runs. Workspace-wide — experiments and
-    executions are not attributed to a work item. */
+    executions are not attributed to a work item.
+
+    Every item carries a provenance kind so claims are never mistaken
+    for ground truth (P3 Human Understanding):
+    - experiment decisions are "recorded" (a human stored this choice)
+    - workflow results are "observed" (the server produced this output) */
 function evidenceItems(): EvidenceItem[] {
   const items: EvidenceItem[] = [];
   for (const e of experiments.filter((x) => x.decision)) {
     const arm = e.arms.find((a) => a.id === e.decision);
-    items.push({ title: e.title, detail: `Chose ${arm?.label ?? e.decision}` });
+    items.push({
+      id: `decision-${e.id}`,
+      kind: "recorded",
+      kindLabel: evidenceKindLabel("recorded"),
+      title: e.title,
+      detail: `Chose ${arm?.label ?? e.decision}`,
+    });
   }
   for (const ex of executions) {
     const text = workflowResultText(ex.result);
@@ -1500,7 +1583,13 @@ function evidenceItems(): EvidenceItem[] {
     const name =
       executionWorkflowNames.get(ex.id) ?? ex.result?.pattern_type ?? "Workflow";
     const detail = text.length > 400 ? `${text.slice(0, 400)}…` : text;
-    items.push({ title: `${name} — ${ex.status}`, detail });
+    items.push({
+      id: `execution-${ex.id}`,
+      kind: "observed",
+      kindLabel: evidenceKindLabel("observed"),
+      title: `${name} — ${ex.status}`,
+      detail,
+    });
   }
   return items;
 }
@@ -1523,7 +1612,20 @@ function buildEvidenceSection(): HTMLElement {
   ul.className = "evidence-list";
   for (const item of items) {
     const li = document.createElement("li");
-    li.textContent = `${item.title}: ${item.detail}`;
+    const head = document.createElement("div");
+    head.className = "ev-head";
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+    head.append(title);
+    const kind = document.createElement("span");
+    kind.className = "ev-kind";
+    kind.textContent = item.kindLabel;
+    kind.title = `${item.kindLabel} evidence — what this claim rests on.`;
+    head.append(kind);
+    const detail = document.createElement("p");
+    detail.className = "ev-detail";
+    detail.textContent = item.detail;
+    li.append(head, detail);
     ul.append(li);
   }
   section.append(ul);
@@ -1552,6 +1654,200 @@ function renderInspectorContext() {
   if (!document.querySelector("#collab-steps")) return;
   renderSteps(collabSteps);
   renderAttention(attentionItems);
+  renderInspectorSessionDetail();
+  renderInspectorAgentDetail();
+  renderInspectorTools();
+  renderInspectorModels();
+  renderInspectorProviders();
+  renderInspectorArtifactStats();
+  renderInspectorServerConfig();
+  renderInspectorStorageStatus();
+}
+
+function renderInspectorSessionDetail() {
+  const section = document.getElementById("inspector-session-detail");
+  if (!section) return;
+  if (!sessionDetail) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  section.innerHTML = "";
+  const h = document.createElement("h3");
+  h.className = "inspector-section-title";
+  h.textContent = `Session: ${sessionDetail.name || sessionDetail.id}`;
+  section.append(h);
+  section.append(renderSessionDetail());
+}
+
+function renderInspectorAgentDetail() {
+  const section = document.getElementById("inspector-agent-detail");
+  if (!section) return;
+  if (!selectedAgentDetail) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  section.innerHTML = "";
+  const h = document.createElement("h3");
+  h.className = "inspector-section-title";
+  h.textContent = `Agent: ${selectedAgentDetail.name}`;
+  section.append(h);
+  section.append(renderAgentDetail());
+}
+
+function renderInspectorTools() {
+  const section = document.getElementById("inspector-tools");
+  const content = document.getElementById("inspector-tools-content");
+  if (!section || !content) return;
+  if (tools.length === 0) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  content.innerHTML = "";
+  const ul = document.createElement("ul");
+  ul.className = "tool-list";
+  for (const t of tools) {
+    const li = document.createElement("li");
+    li.className = "flat-row";
+    const name = document.createElement("strong");
+    name.textContent = t.name;
+    const cat = document.createElement("span");
+    cat.className = "tool-category";
+    cat.textContent = t.category || "(uncategorized)";
+    const desc = document.createElement("p");
+    desc.className = "tool-desc";
+    desc.textContent = t.description || "(no description)";
+    li.append(name, cat, desc);
+    ul.append(li);
+  }
+  content.append(ul);
+}
+
+function renderInspectorModels() {
+  const section = document.getElementById("inspector-models");
+  const content = document.getElementById("inspector-models-content");
+  if (!section || !content) return;
+  if (models.length === 0) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  content.innerHTML = "";
+  const ul = document.createElement("ul");
+  ul.className = "model-list";
+  for (const m of models) {
+    const li = document.createElement("li");
+    li.className = "flat-row";
+    const name = document.createElement("strong");
+    name.textContent = m.name;
+    const provider = document.createElement("span");
+    provider.className = "model-provider";
+    provider.textContent = m.provider;
+    li.append(name, provider);
+    ul.append(li);
+  }
+  content.append(ul);
+}
+
+function renderInspectorProviders() {
+  const section = document.getElementById("inspector-providers");
+  const content = document.getElementById("inspector-providers-content");
+  if (!section || !content) return;
+  if (providers.length === 0) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  content.innerHTML = "";
+  const ul = document.createElement("ul");
+  ul.className = "provider-list";
+  for (const p of providers) {
+    const li = document.createElement("li");
+    li.className = "flat-row";
+    const name = document.createElement("strong");
+    name.textContent = p.name;
+    const model = document.createElement("span");
+    model.textContent = p.model;
+    const active = document.createElement("span");
+    active.className = p.active ? "provider-active" : "provider-inactive";
+    active.textContent = p.active ? "active" : "inactive";
+    li.append(name, model, active);
+    ul.append(li);
+  }
+  content.append(ul);
+}
+
+function renderInspectorArtifactStats() {
+  const section = document.getElementById("inspector-artifact-stats");
+  const content = document.getElementById("inspector-artifact-stats-content");
+  if (!section || !content) return;
+  if (!artifactStats) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  content.innerHTML = "";
+  const dl = document.createElement("dl");
+  dl.className = "stats-list";
+  const rows = [
+    ["Total files", String(artifactStats.total_files)],
+    ["Total size", formatBytes(artifactStats.total_size_bytes)],
+    ["User files", String(artifactStats.user_files)],
+    ["Generated files", String(artifactStats.generated_files)],
+    ["Deleted files", String(artifactStats.deleted_files)],
+  ];
+  for (const [label, value] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    dl.append(dt, dd);
+  }
+  content.append(dl);
+}
+
+function renderInspectorServerConfig() {
+  const section = document.getElementById("inspector-server-config");
+  const content = document.getElementById("inspector-server-config-content");
+  if (!section || !content) return;
+  if (!serverConfig || Object.keys(serverConfig.config).length === 0) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  content.innerHTML = "";
+  const dl = document.createElement("dl");
+  dl.className = "config-list";
+  for (const [k, v] of Object.entries(serverConfig.config) as [string, string][]) {
+    const dt = document.createElement("dt");
+    dt.textContent = k;
+    const dd = document.createElement("dd");
+    dd.textContent = v;
+    dl.append(dt, dd);
+  }
+  content.append(dl);
+}
+
+function renderInspectorStorageStatus() {
+  const section = document.getElementById("inspector-storage-status");
+  const content = document.getElementById("inspector-storage-status-content");
+  if (!section || !content) return;
+  if (!storageStatus) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  content.innerHTML = "";
+  const status = document.createElement("div");
+  status.className = `status-indicator ${storageStatus.healthy ? "healthy" : "unhealthy"}`;
+  status.textContent = storageStatus.healthy ? "Healthy" : "Unhealthy";
+  const backend = document.createElement("p");
+  backend.textContent = `Backend: ${storageStatus.backend}`;
+  const detail = document.createElement("p");
+  detail.textContent = storageStatus.detail || "—";
+  content.append(status, backend, detail);
 }
 
 function renderSteps(steps: CollabStep[]) {
@@ -1867,6 +2163,113 @@ function renderAgents() {
 }
 
 // ---------------------------------------------------------------------------
+// Session detail — expanded info about a session (GET /v1/sessions/{id})
+// ---------------------------------------------------------------------------
+
+function renderSessionDetail(): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const h = document.createElement("h4");
+  h.textContent = "Session detail";
+  section.append(h);
+
+  if (!sessionDetail) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Select a session to see its details.";
+    section.append(empty);
+    return section;
+  }
+
+  const rows = [
+    ["ID", sessionDetail.id],
+    ["Name", sessionDetail.name || "(unnamed)"],
+    ["State", sessionDetail.state],
+    ["Backend", sessionDetail.backend],
+    ["Agent", sessionDetail.agent_name || sessionDetail.agent_id || "(default)"],
+    ["Messages", String(sessionDetail.conversation_count)],
+    ["Created", sessionDetail.created_at > 0 ? new Date(sessionDetail.created_at * 1000).toLocaleString() : "—"],
+    ["Updated", sessionDetail.updated_at > 0 ? new Date(sessionDetail.updated_at * 1000).toLocaleString() : "—"],
+    ["Total cost", `$${sessionDetail.total_cost_usd.toFixed(4)}`],
+    ["Artifacts", String(sessionDetail.artifact_count)],
+  ];
+
+  const dl = document.createElement("dl");
+  dl.className = "session-detail-list";
+  for (const [label, value] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    dl.append(dt, dd);
+  }
+  section.append(dl);
+
+  if (sessionDetail.metadata && Object.keys(sessionDetail.metadata).length > 0) {
+    const metaH = document.createElement("h5");
+    metaH.textContent = "Metadata";
+    section.append(metaH);
+    const metaDl = document.createElement("dl");
+    metaDl.className = "session-detail-list";
+    for (const [k, v] of Object.entries(sessionDetail.metadata)) {
+      const dt = document.createElement("dt");
+      dt.textContent = k;
+      const dd = document.createElement("dd");
+      dd.textContent = v;
+      metaDl.append(dt, dd);
+    }
+    section.append(metaDl);
+  }
+
+  return section;
+}
+
+// ---------------------------------------------------------------------------
+// Agent detail — expanded info about an agent (GET /v1/agents/{id})
+// ---------------------------------------------------------------------------
+
+function renderAgentDetail(): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const h = document.createElement("h4");
+  h.textContent = "Agent detail";
+  section.append(h);
+
+  if (!selectedAgentDetail) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Select an agent to see its details.";
+    section.append(empty);
+    return section;
+  }
+
+  const rows = [
+    ["ID", selectedAgentDetail.id],
+    ["Name", selectedAgentDetail.name],
+    ["Status", selectedAgentDetail.status],
+    ["Uptime", selectedAgentDetail.uptime_seconds > 0
+      ? `${Math.floor(selectedAgentDetail.uptime_seconds / 3600)}h ${Math.floor((selectedAgentDetail.uptime_seconds % 3600) / 60)}m`
+      : "—"],
+    ["Active sessions", String(selectedAgentDetail.active_sessions)],
+    ["Total messages", String(selectedAgentDetail.total_messages)],
+    ["Created", selectedAgentDetail.created_at > 0 ? new Date(selectedAgentDetail.created_at * 1000).toLocaleString() : "—"],
+    ["Updated", selectedAgentDetail.updated_at > 0 ? new Date(selectedAgentDetail.updated_at * 1000).toLocaleString() : "—"],
+  ];
+
+  const dl = document.createElement("dl");
+  dl.className = "agent-detail-list";
+  for (const [label, value] of rows) {
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    dl.append(dt, dd);
+  }
+  section.append(dl);
+  return section;
+}
+
+// ---------------------------------------------------------------------------
 // Evidence view — decided experiments + workflow results (workspace-wide)
 // ---------------------------------------------------------------------------
 
@@ -1894,6 +2297,11 @@ function renderEvidence() {
     const title = document.createElement("strong");
     title.textContent = item.title;
     head.append(title);
+    const kind = document.createElement("span");
+    kind.className = "ev-kind";
+    kind.textContent = item.kindLabel;
+    kind.title = `${item.kindLabel} evidence — what this claim rests on.`;
+    head.append(kind);
     const detail = document.createElement("p");
     detail.className = "ev-detail";
     detail.textContent = item.detail;
@@ -2200,7 +2608,11 @@ function addChatMessage(
   if (who === "loom" && live) {
     const src = document.createElement("span");
     src.className = "chat-source";
-    src.textContent = "Live — answered by the Loom server";
+    const parts: string[] = ["Live — answered by the Loom server"];
+    if (reply?.evidenceKind) {
+      parts.push(evidenceKindLabel(reply.evidenceKind));
+    }
+    src.textContent = parts.join(" · ");
     msg.append(src);
   }
 
@@ -2396,6 +2808,88 @@ async function refreshAgents() {
   renderInspectorContext();
 }
 
+// ---- New Loom data refresh functions (exposing more of the Loom API) ----
+
+async function refreshSessionDetail(sessionId: string) {
+  try {
+    sessionDetail = await getSession(sessionId);
+    setLoomReachable(true);
+  } catch (err) {
+    sessionDetail = null;
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+  }
+}
+
+async function refreshTools() {
+  try {
+    tools = await listTools();
+    setLoomReachable(true);
+  } catch (err) {
+    tools = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+  }
+}
+
+async function refreshAgentDetail(agentId: string) {
+  try {
+    selectedAgentDetail = await getAgent(agentId);
+    setLoomReachable(true);
+  } catch (err) {
+    selectedAgentDetail = null;
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+  }
+}
+
+async function refreshModels() {
+  try {
+    models = await listModels();
+    setLoomReachable(true);
+  } catch (err) {
+    models = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+  }
+}
+
+async function refreshProviders() {
+  try {
+    providers = await listProviders();
+    setLoomReachable(true);
+  } catch (err) {
+    providers = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+  }
+}
+
+async function refreshArtifactStats() {
+  try {
+    artifactStats = await getArtifactStats();
+    setLoomReachable(true);
+  } catch (err) {
+    artifactStats = null;
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+  }
+}
+
+async function refreshServerConfig() {
+  try {
+    serverConfig = await getServerConfig();
+    setLoomReachable(true);
+  } catch (err) {
+    serverConfig = null;
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+  }
+}
+
+async function refreshStorageStatus() {
+  try {
+    storageStatus = await getStorageStatus();
+    setLoomReachable(true);
+  } catch (err) {
+    storageStatus = null;
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Work ↔ session binding. Each work item owns one Loom session; selecting a
 // work item switches the conversation to that session and loads its history.
@@ -2554,9 +3048,11 @@ function syncSessionToWork() {
     renderAgentBar();
     renderSessionBar();
     loadChatForWork(selectedWorkId, sid);
+    void refreshSessionDetail(sid);
   } else {
     selectedSessionId = null;
     selectedAgentId = null;
+    selectedAgentDetail = null;
     renderAgentBar();
     renderSessionBar();
     loadChatForWork(selectedWorkId, null);
@@ -2794,7 +3290,13 @@ function renderExperimentDetail() {
 
   wrap.append(buildAddArmForm(exp));
 
+  // Side-by-side comparison of arms that have run — so the human sees
+  // alternatives, not a single recommendation (P4 Human Creativity).
   const doneArms = exp.arms.filter((a) => a.status === "done");
+  if (doneArms.length >= 2) {
+    wrap.append(buildArmComparison(doneArms));
+  }
+
   if (exp.decision) {
     const decided = exp.arms.find((a) => a.id === exp.decision);
     const dec = document.createElement("div");
@@ -2893,6 +3395,78 @@ function buildArmRow(exp: Experiment, arm: ExperimentArm): HTMLElement {
   }
   row.append(actions);
   return row;
+}
+
+/** Side-by-side comparison of arms that have run. The human sees each
+    arm's configuration and result together, with differences highlighted,
+    so the choice is an informed comparison — not a single recommendation
+    (P4 Human Creativity). */
+function buildArmComparison(arms: ExperimentArm[]): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const head = document.createElement("div");
+  head.className = "wd-section-head";
+  const h = document.createElement("h4");
+  h.textContent = "Compare arms";
+  head.append(h);
+  section.append(head);
+
+  const grid = document.createElement("div");
+  grid.className = "arm-comparison";
+
+  // Header row: arm labels.
+  const header = document.createElement("div");
+  header.className = "comp-row";
+  const empty = document.createElement("span");
+  empty.className = "comp-cell comp-label";
+  header.append(empty);
+  for (const arm of arms) {
+    const cell = document.createElement("span");
+    cell.className = "comp-cell";
+    const label = document.createElement("strong");
+    label.textContent = arm.label;
+    cell.append(label);
+    header.append(cell);
+  }
+  grid.append(header);
+
+  // Config row.
+  const cfgRow = document.createElement("div");
+  cfgRow.className = "comp-row";
+  const cfgLabel = document.createElement("span");
+  cfgLabel.className = "comp-cell comp-label";
+  cfgLabel.textContent = "Configuration";
+  cfgRow.append(cfgLabel);
+  for (const arm of arms) {
+    const cell = document.createElement("span");
+    cell.className = "comp-cell";
+    cell.textContent = arm.config || "—";
+    cell.title = arm.config || "No configuration recorded";
+    cfgRow.append(cell);
+  }
+  grid.append(cfgRow);
+
+  // Result rows: each arm's result, with a diff hint when two results
+  // differ. Results are shown verbatim — the human judges, not the UI.
+  for (const arm of arms) {
+    const row = document.createElement("div");
+    row.className = "comp-row";
+    const label = document.createElement("span");
+    label.className = "comp-cell comp-label";
+    label.textContent = `Result — ${arm.label}`;
+    row.append(label);
+    const cell = document.createElement("span");
+    cell.className = "comp-cell";
+    const pre = document.createElement("pre");
+    pre.className = "arm-result comp-result";
+    pre.textContent = arm.result || "(no result recorded)";
+    cell.append(pre);
+    row.append(cell);
+    grid.append(row);
+  }
+
+  section.append(grid);
+  return section;
 }
 
 function buildAddArmForm(exp: Experiment): HTMLElement {
@@ -3439,6 +4013,20 @@ async function init() {
   attentionItems = await getAttention();
   renderInspectorContext();
 
+  // New Loom data: expose more of the server's API (honest empty when offline).
+  try {
+    await Promise.all([
+      refreshTools(),
+      refreshModels(),
+      refreshProviders(),
+      refreshArtifactStats(),
+      refreshServerConfig(),
+      refreshStorageStatus(),
+    ]);
+  } catch {
+    /* individual failures are handled inside each refresh function */
+  }
+
   // Workspace views.
   loadChatOpen();
   applyChatOpen();
@@ -3526,14 +4114,21 @@ async function init() {
     }
     // Cache-first: the work's cached conversation survives a session
     // change, and the log is only replaced once the history fetch succeeds.
-    if (v) loadChatForWork(selectedWorkId, v);
-    else clearChat();
+    if (v) {
+      loadChatForWork(selectedWorkId, v);
+      void refreshSessionDetail(v);
+    } else {
+      clearChat();
+      sessionDetail = null;
+    }
   });
-  $("#agent-select").addEventListener("change", (e) => {
+  $("#agent-select").addEventListener("change", async (e) => {
     const v = (e.target as HTMLSelectElement).value;
     selectedAgentId = v || null;
     if (v) localStorage.setItem(AGENT_KEY, v);
     else localStorage.removeItem(AGENT_KEY);
+    if (v) void refreshAgentDetail(v);
+    else selectedAgentDetail = null;
   });
   $("#session-new").addEventListener("click", async () => {
     try {

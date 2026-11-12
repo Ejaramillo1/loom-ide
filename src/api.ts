@@ -72,6 +72,25 @@ export interface AttentionItem {
   detail: string;
 }
 
+/// Provenance label for a piece of evidence: what kind of claim it rests on.
+/// Distinguishes what the system observed from what it merely inferred,
+/// so explanations are never mistaken for ground truth (P3).
+export type EvidenceKind = "observed" | "recorded" | "inferred" | "unknown";
+
+/// Human-readable label for each evidence kind badge.
+export function evidenceKindLabel(kind: EvidenceKind): string {
+  switch (kind) {
+    case "observed":
+      return "Observed";
+    case "recorded":
+      return "Recorded";
+    case "inferred":
+      return "Inferred";
+    case "unknown":
+      return "Unknown";
+  }
+}
+
 export interface LoomStatus {
   online: boolean;
   url: string;
@@ -90,6 +109,9 @@ export interface ChatReply {
   card: ChatCard | null;
   // Set when the server reports which session the reply belongs to.
   session_id?: string | null;
+  // Provenance of the reply's content: what kind of claim it rests on.
+  // Defaults to "unknown" when the server does not report one.
+  evidenceKind?: EvidenceKind;
 }
 
 export interface Session {
@@ -109,6 +131,8 @@ export interface Agent {
   uptime_seconds: number;
   active_sessions: number;
   total_messages: number;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface DirEntry {
@@ -180,6 +204,102 @@ export interface Artifact {
   created_at: number;
   // The session that produced this artifact, when the server reports it.
   session_id?: string;
+}
+
+/// Detailed session (GET /v1/sessions/{session_id}).
+export interface SessionDetail {
+  id: string;
+  name: string;
+  backend: string;
+  created_at: number;
+  updated_at: number;
+  state: string;
+  total_cost_usd: number;
+  conversation_count: number;
+  metadata: Record<string, string>;
+  agent_id: string;
+  agent_name: string;
+  started_at: string;
+  ended_at: string;
+  metadata_status: string;
+  artifact_count: number;
+}
+
+/// A tool definition from Loom (GET /v1/tools).
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  input_schema_json: string;
+  output_schema_json: string;
+  backends: string[];
+  capabilities: string[];
+  keywords: string[];
+  category: string;
+  providers: string[];
+}
+
+/// A trace span (GET /v1/traces/{trace_id}).
+export interface TraceSpan {
+  id: string;
+  parent_id: string;
+  name: string;
+  start_time_us: number;
+  end_time_us: number;
+  duration_us: number;
+  status: string;
+  attributes: Record<string, string>;
+}
+
+/// An execution trace (GET /v1/traces/{trace_id}).
+export interface Trace {
+  id: string;
+  session_id: string;
+  root_span: TraceSpan | null;
+  spans: TraceSpan[];
+  total_duration_ms: number;
+}
+
+/// An LLM model (GET /v1/models).
+export interface ModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  capabilities: string[];
+  context_window: number;
+  cost_per_1m_input_usd: number;
+  cost_per_1m_output_usd: number;
+  available: boolean;
+  max_output_tokens: number;
+  is_reasoning: boolean;
+  show_in_dropdown: boolean;
+}
+
+/// A named LLM provider (GET /v1/providers).
+export interface ProviderEntry {
+  name: string;
+  model: string;
+  active: boolean;
+}
+
+/// Artifact storage statistics (GET /v1/artifacts/stats).
+export interface ArtifactStats {
+  total_files: number;
+  total_size_bytes: number;
+  user_files: number;
+  generated_files: number;
+  deleted_files: number;
+}
+
+/// Server configuration (GET /v1/server/config).
+export interface ServerConfig {
+  config: Record<string, string>;
+}
+
+/// Storage backend status (GET /v1/server/storage).
+export interface StorageStatus {
+  backend: string;
+  healthy: boolean;
+  detail: string;
 }
 
 const IN_TAURI =
@@ -701,4 +821,77 @@ export async function listArtifacts(sessionId?: string): Promise<Artifact[]> {
   return sessionId
     ? invokeCmd<Artifact[]>("list_artifacts", { sessionId })
     : invokeCmd<Artifact[]>("list_artifacts");
+}
+
+// ---- Session details (real Loom server) ----
+
+export async function getSession(sessionId: string): Promise<SessionDetail> {
+  return invokeCmd<SessionDetail>("get_session", { sessionId });
+}
+
+// ---- Tools (real Loom server) ----
+
+export async function listTools(): Promise<ToolDefinition[]> {
+  return invokeCmd<ToolDefinition[]>("list_tools");
+}
+
+// ---- Traces / observability (real Loom server) ----
+
+export async function getTrace(traceId: string): Promise<Trace> {
+  return invokeCmd<Trace>("get_trace", { traceId });
+}
+
+// ---- Agent details (real Loom server) ----
+
+export async function getAgent(agentId: string): Promise<Agent> {
+  return invokeCmd<Agent>("get_agent", { agentId });
+}
+
+// ---- Models + providers (real Loom server) ----
+
+export async function listModels(): Promise<ModelInfo[]> {
+  return invokeCmd<ModelInfo[]>("list_models");
+}
+
+export async function listProviders(): Promise<ProviderEntry[]> {
+  return invokeCmd<ProviderEntry[]>("list_providers");
+}
+
+export async function switchModel(
+  sessionId: string,
+  provider?: string | null,
+  model?: string | null,
+): Promise<any> {
+  return invokeCmd<any>("switch_model", { sessionId, provider, model });
+}
+
+// ---- Artifact detail / content / search / stats (real Loom server) ----
+
+export async function getArtifact(artifactId: string): Promise<Artifact> {
+  return invokeCmd<Artifact>("get_artifact", { artifactId });
+}
+
+export async function getArtifactContent(
+  artifactId: string,
+  encoding?: string | null,
+): Promise<string> {
+  return invokeCmd<string>("get_artifact_content", { artifactId, encoding });
+}
+
+export async function searchArtifacts(query: string): Promise<Artifact[]> {
+  return invokeCmd<Artifact[]>("search_artifacts", { query });
+}
+
+export async function getArtifactStats(): Promise<ArtifactStats> {
+  return invokeCmd<ArtifactStats>("get_artifact_stats");
+}
+
+// ---- Server info (real Loom server) ----
+
+export async function getServerConfig(): Promise<ServerConfig> {
+  return invokeCmd<ServerConfig>("get_server_config");
+}
+
+export async function getStorageStatus(): Promise<StorageStatus> {
+  return invokeCmd<StorageStatus>("get_storage_status");
 }
