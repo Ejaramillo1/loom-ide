@@ -12,6 +12,10 @@ shadows, lots of whitespace.
 
 ![Loom IDE prototype — Experiment view](docs/screenshot-1648.png)
 
+![Loom IDE prototype — Work view at 1322×768](docs/screenshot-work-1322.png)
+
+![Loom IDE prototype — Agents view](docs/screenshot-agents.png)
+
 ## What it is
 
 - **Backend (Rust, `src-tauri/`)** — Tauri 2 commands:
@@ -31,16 +35,38 @@ shadows, lots of whitespace.
   control over the glass/transparency look with the smallest bundle.
   - Top bar with the current objective and a live/demonstration status pill.
   - Left icon rail, Work list, and a chat panel with the example exchange.
+    Every rail button opens a real view now: **Work**, **Code**,
+    **Agents**, **Evidence**, **Layers**; **···** opens a menu with
+    **Artifacts** and **Documents**. The search button focuses the chat
+    input, the agent pause button pauses/resumes the Research Agent, the
+    chat **···** menu clears the chat, and Code mode has two notes
+    (design philosophy + scratch notes) that save separately.
   - Center luminous sphere (canvas 2D: radial gradients + fine flowing
     contour lines + water reflection), with states idle / listening /
     processing / executing / attention / completed.
   - Right Agentic Collaboration panel (Research Agent checklist, 3/5) and
     Attention panel.
   - Bottom segmented nav: **Code | Experiment | Work**. Code mode is a
-    plain notes editor (design philosophy note, saved locally);
-    Work mode shows work cards with pause/resume and autonomy controls.
+    plain notes editor (design philosophy note + scratch notes, saved
+    locally); Work mode is headed by the selected work item and shows
+    work cards with pause/resume and autonomy controls.
+  - **Agents view** — the agents in this workspace (Research Agent with
+    its checklist; room for more when the Loom server exposes them).
+  - **Evidence view** — what the claims rest on (the ~340 ms finding
+    with its basis, traces, experiment progress), labelled demonstration.
+  - **Layers view** — toggles for the scene layers: light beam, water
+    reflection, glass panels, sphere.
+  - **Artifacts view** (from the ··· menu) — two tabs: **Artifacts**
+    (experiment design, design-philosophy note, decision, finding) and
+    **Documents** (the two notes). Clicking a note opens it in Code
+    mode; the finding opens Evidence.
 - **Window**: 1648×928 by default (the design's fidelity target),
-  minimum 1200×760.
+  minimum 1200×760. The window is **transparent** (`"transparent": true`
+  in `tauri.conf.json`) and html/body paint nothing, so on a composited
+  desktop the wallpaper tints through the translucent scene and glass
+  panels; without a compositor the painted scene (diagonal light beam +
+  water reflection) still reads as the reference. On Linux a compositor
+  is required for the real see-through effect.
 
 ## Run it (Ubuntu 24.04)
 
@@ -114,6 +140,9 @@ loom-ide-tauri/
   verified against the real Loom server (never invent endpoints).
 - Collaboration steps and attention items are static seed data until
   Loom exposes live execution state.
+- The transparent window was verified to build and run under Xvfb, but
+  Xvfb has no compositor, so the real see-through effect still needs
+  checking on a composited desktop (Eduardo's laptop).
 
 ## License
 

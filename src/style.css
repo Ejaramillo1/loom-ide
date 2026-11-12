@@ -26,7 +26,11 @@
   color-scheme: light;
   font: 15px/1.5 var(--sans);
   color: var(--ink);
-  background: var(--bg);
+  /* Transparent window (Tauri "transparent": true): the html/body paint
+     nothing, so a composited desktop shows through the translucent
+     scene below. Without a compositor the scene still reads as the
+     reference's warm beige. */
+  background: transparent;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -34,6 +38,10 @@
 
 * {
   box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 html,
@@ -45,6 +53,7 @@ body,
 body {
   margin: 0;
   overflow: hidden;
+  background: transparent;
 }
 
 h2 {
@@ -88,12 +97,23 @@ textarea {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Translucent base: the desktop tints through faintly where a
+     compositor exists; elsewhere this is the reference's warm beige.
+     The light shaft lives in .scene-light so Layers can toggle it. */
+  background:
+    radial-gradient(90% 70% at 85% 30%, rgba(233, 215, 202, 0.42) 0%, rgba(233, 215, 202, 0) 60%),
+    linear-gradient(180deg, rgba(247, 242, 236, 0.86) 0%, rgba(245, 240, 235, 0.84) 52%, rgba(236, 228, 218, 0.8) 76%, rgba(226, 215, 201, 0.78) 100%);
+}
+
+.scene-light {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background:
     /* soft diagonal light shaft */
-    linear-gradient(115deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 42%),
-    radial-gradient(120% 90% at 18% 0%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0) 55%),
-    radial-gradient(90% 70% at 85% 30%, rgba(233, 215, 202, 0.5) 0%, rgba(233, 215, 202, 0) 60%),
-    linear-gradient(180deg, #f7f2ec 0%, #f5f0eb 52%, #ece4da 76%, #e2d7c9 100%);
+    linear-gradient(115deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 42%),
+    radial-gradient(120% 90% at 18% 0%, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0) 55%);
 }
 
 .water {
@@ -111,7 +131,38 @@ textarea {
       rgba(255, 255, 255, 0.12) 0 1px,
       rgba(255, 255, 255, 0) 1px 8px
     ),
-    linear-gradient(180deg, rgba(238, 230, 218, 0.35) 0%, #d9cec0 45%, #c6b8a6 100%);
+    linear-gradient(180deg, rgba(238, 230, 218, 0.3) 0%, rgba(217, 206, 192, 0.72) 45%, rgba(198, 184, 166, 0.7) 100%);
+}
+
+/* ---------- Scene layers (toggled from the Layers view) ---------- */
+
+.scene.no-light .scene-light {
+  display: none;
+}
+
+.scene.no-water .water {
+  display: none;
+}
+
+.scene.no-sphere #sphere,
+.scene.no-sphere .sphere-caption {
+  visibility: hidden;
+}
+
+/* Glass off: panels become flat solid surfaces, no blur. */
+.scene.no-glass .glass,
+.scene.no-glass .work-card,
+.scene.no-glass .msg-card,
+.scene.no-glass .att-item,
+.scene.no-glass .chat-input,
+.scene.no-glass .status-pill,
+.scene.no-glass .mode-btn.active,
+.scene.no-glass .rail-btn.active,
+.scene.no-glass .code-tab.active,
+.scene.no-glass .tab.active {
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* ---------- Glass ---------- */
@@ -266,6 +317,7 @@ textarea {
 /* ---------- Left icon rail ---------- */
 
 .rail {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -423,6 +475,7 @@ textarea {
 /* ---------- Chat panel ---------- */
 
 .chat-panel {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -483,7 +536,7 @@ textarea {
 }
 
 .chat-msg.user .bubble {
-  background: #efe7db;
+  background: rgba(239, 231, 219, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 14px 14px 4px 14px;
   padding: 10px 13px;
@@ -658,23 +711,27 @@ textarea {
   letter-spacing: 0.02em;
 }
 
-/* Work / Code mode views */
+/* Work / Code / list views: the view itself never scrolls. The header
+   stays put and only the list inside scrolls, so the heading can never
+   be clipped and the last card is never cut off. */
 
 .view-work,
-.view-code {
+.view-code,
+.view-list {
   justify-content: flex-start;
   align-items: stretch;
   padding: 8px 10px 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .mode-head {
   text-align: left;
-  padding: 6px 8px 16px;
+  padding: 6px 8px 14px;
+  flex-shrink: 0;
 }
 
 .mode-head h2 {
-  font-size: 19px;
+  font-size: 15px;
 }
 
 .mode-head p {
@@ -685,23 +742,40 @@ textarea {
 }
 
 .work-cards {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
   max-width: 620px;
+  padding: 2px 2px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
 }
 
 .work-card {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
   text-align: left;
-  background: rgba(255, 253, 250, 0.6);
+  background: rgba(255, 253, 250, 0.52);
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 16px;
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(14px);
   padding: 16px 18px;
+}
+
+.work-card .wc-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.work-card .wc-top .work-dot {
+  margin-top: 6px;
 }
 
 .work-card .wc-body {
@@ -712,6 +786,9 @@ textarea {
 .work-card .wc-body strong {
   display: block;
   font-size: 14.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .work-card .wc-body span {
@@ -719,6 +796,16 @@ textarea {
   margin-top: 2px;
   font-size: 12.5px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.work-card .wc-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 21px;
 }
 
 .autonomy-select {
@@ -1064,6 +1151,285 @@ textarea {
 .att-item .chev {
   color: var(--muted);
   flex-shrink: 0;
+}
+
+/* ---------- List views: Agents / Evidence / Layers / Artifacts ---------- */
+
+.scroll-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 640px;
+  padding: 2px 2px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.agent-card {
+  padding: 16px 16px 12px;
+}
+
+.agent-card .agent-head {
+  margin-bottom: 4px;
+}
+
+.agent-ring.paused {
+  border-color: var(--muted);
+  border-top-color: rgba(119, 113, 109, 0.25);
+}
+
+.pause-btn.paused {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.empty-card {
+  padding: 16px 18px;
+}
+
+.empty-card strong {
+  display: block;
+  font-size: 14px;
+}
+
+.empty-card p {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.evidence-card {
+  padding: 14px 16px;
+}
+
+.ev-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ev-head strong {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.ev-state {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.ev-state.collected {
+  background: rgba(93, 162, 113, 0.16);
+  border-color: rgba(93, 162, 113, 0.4);
+  color: #3f7a54;
+}
+
+.ev-state.partial {
+  background: rgba(217, 166, 95, 0.18);
+  border-color: rgba(217, 166, 95, 0.45);
+  color: var(--attention-deep);
+}
+
+.ev-detail {
+  margin-top: 6px;
+  font-size: 13.5px;
+}
+
+.ev-basis {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.layer-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.layer-text strong {
+  display: block;
+  font-size: 14px;
+}
+
+.layer-text span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.switch {
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(119, 113, 109, 0.35);
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  transition: left 0.15s ease;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--agent);
+}
+
+.switch[aria-checked="true"]::after {
+  left: 23px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 12px;
+  flex-shrink: 0;
+}
+
+.tab {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab.active {
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(74, 58, 40, 0.06);
+}
+
+.artifact-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 14px 16px;
+  width: 100%;
+}
+
+.artifact-kind {
+  grid-column: 1;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.artifact-card strong {
+  grid-column: 1;
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.artifact-detail {
+  grid-column: 1;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.artifact-card .chev {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  color: var(--muted);
+}
+
+.artifact-body {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+/* ---------- Popover menus ---------- */
+
+.rail-menu {
+  position: absolute;
+  left: 56px;
+  bottom: 0;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 150px;
+  padding: 6px;
+  border-radius: 14px;
+}
+
+.rail-menu button {
+  text-align: left;
+  font-size: 13.5px;
+  padding: 8px 12px;
+  border-radius: 9px;
+}
+
+.rail-menu button:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.chat-menu {
+  position: absolute;
+  top: 54px;
+  right: 12px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 6px;
+  border-radius: 14px;
+}
+
+.chat-menu button {
+  text-align: left;
+  font-size: 13.5px;
+  padding: 8px 12px;
+  border-radius: 9px;
+}
+
+.chat-menu button:hover {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 /* ---------- Bottom segmented nav ---------- */

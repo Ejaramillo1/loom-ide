@@ -19,13 +19,154 @@ import { Sphere, type SphereState } from "./sphere";
 // State
 // ---------------------------------------------------------------------------
 
-type Mode = "code" | "experiment" | "work";
+type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "layers" | "artifacts";
+
+type NoteKind = "design" | "scratch";
 
 const OBJECTIVES: Record<string, string> = {
   "work-1": "Understand why enabling agent memory increases latency.",
   "work-2": "Improve tool reliability.",
   "work-3": "Review PR #4287.",
 };
+
+// ---- Demonstration seed data for the new views --------------------------
+// Everything here is labelled as demonstration in the UI, like the
+// collaboration steps and attention items already were.
+
+interface EvidenceItem {
+  id: string;
+  title: string;
+  detail: string;
+  basis: string;
+  state: "collected" | "partial" | "pending";
+}
+
+const EVIDENCE: EvidenceItem[] = [
+  {
+    id: "ev-1",
+    title: "Finding: memory adds ~340 ms",
+    detail: "Consistent across 3 runs",
+    basis:
+      "3 replications, memory on vs off, same prompts. Baseline traces compared run by run.",
+    state: "collected",
+  },
+  {
+    id: "ev-2",
+    title: "Baseline traces analyzed",
+    detail: "Memory on/off pair captured",
+    basis:
+      "Trace spans from the baseline run set. Demonstration traces, not a live server.",
+    state: "collected",
+  },
+  {
+    id: "ev-3",
+    title: "Configuration experiments",
+    detail: "3 of 5 configurations run — 68%",
+    basis: "Run configuration experiments step. 2 configurations still to run.",
+    state: "partial",
+  },
+  {
+    id: "ev-4",
+    title: "Compare results",
+    detail: "Not yet collected",
+    basis: "Starts when the configuration experiments finish.",
+    state: "pending",
+  },
+  {
+    id: "ev-5",
+    title: "Identify likely causes",
+    detail: "Not yet collected",
+    basis: "Needs the comparison first.",
+    state: "pending",
+  },
+];
+
+interface ArtifactItem {
+  id: string;
+  kind: string;
+  title: string;
+  detail: string;
+  body?: string;
+  action: "expand" | "code-design" | "code-scratch" | "evidence";
+}
+
+const ARTIFACTS: ArtifactItem[] = [
+  {
+    id: "art-1",
+    kind: "Experiment plan",
+    title: "Experiment design",
+    detail: "Compare memory strategies",
+    body: "Proposal from the chat with Loom: compare memory on/off across 3 configurations, same prompts, measure latency per run. Demonstration.",
+    action: "expand",
+  },
+  {
+    id: "art-2",
+    kind: "Note",
+    title: "Design philosophy note",
+    detail: "01 — Design Philosophy: Quiet Complexity",
+    action: "code-design",
+  },
+  {
+    id: "art-3",
+    kind: "Decision",
+    title: "Decision: next experiment",
+    detail: "2 configurations ready",
+    body: "Two configurations are ready to run. Pick one to start the next experiment. Demonstration.",
+    action: "expand",
+  },
+  {
+    id: "art-4",
+    kind: "Finding",
+    title: "Finding: memory adds ~340 ms",
+    detail: "Consistent across 3 runs",
+    action: "evidence",
+  },
+];
+
+const DOCUMENTS: ArtifactItem[] = [
+  {
+    id: "doc-1",
+    kind: "Note",
+    title: "Design philosophy note",
+    detail: "01 — Design Philosophy: Quiet Complexity",
+    action: "code-design",
+  },
+  {
+    id: "doc-2",
+    kind: "Note",
+    title: "Scratch notes",
+    detail: "Your scratch pad",
+    action: "code-scratch",
+  },
+];
+
+const LAYERS: { id: string; label: string; desc: string }[] = [
+  {
+    id: "light",
+    label: "Light beam",
+    desc: "The soft diagonal light across the scene.",
+  },
+  {
+    id: "water",
+    label: "Water reflection",
+    desc: "The reflective band along the bottom.",
+  },
+  {
+    id: "glass",
+    label: "Glass panels",
+    desc: "Translucent panels with blur. Off: flat solid panels.",
+  },
+  {
+    id: "sphere",
+    label: "Sphere",
+    desc: "The luminous sphere in Experiment mode.",
+  },
+];
+
+const PAUSE_SVG =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>';
+const PLAY_SVG =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5-13-7.5z" /></svg>';
 
 const CAPTIONS: Record<SphereState, string> = {
   idle: "At rest — nothing is running.",
@@ -48,6 +189,15 @@ let workItems: WorkItem[] = [];
 let selectedWorkId: string | null = null;
 let mode: Mode = "experiment";
 let sphereState: SphereState = "idle";
+let agentPaused = false;
+let currentNote: NoteKind = "design";
+let artifactTab: "artifacts" | "documents" = "artifacts";
+const layerOn: Record<string, boolean> = {
+  light: true,
+  water: true,
+  glass: true,
+  sphere: true,
+};
 
 const $ = <T extends HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T;
@@ -110,6 +260,16 @@ function selectWork(id: string) {
   }
   renderWorkList();
   renderWorkCards();
+  renderWorkFocus();
+}
+
+/** "Active · Collaborative · Now" — never "Now ago". */
+function metaLabel(item: WorkItem): string {
+  const when =
+    item.updated_label === "Now"
+      ? "Now"
+      : `${item.updated_label} ago`;
+  return `${capitalize(item.status)} · ${capitalize(item.autonomy)} · ${when}`;
 }
 
 function renderWorkCards() {
@@ -119,17 +279,24 @@ function renderWorkCards() {
     const card = document.createElement("div");
     card.className = "work-card";
 
+    // Row 1: dot + full-width title and meta (nothing competes for width,
+    // so a title fits on one line and the meta on one line too).
+    const top = document.createElement("div");
+    top.className = "wc-top";
     const dot = document.createElement("span");
     dot.className = `work-dot ${item.status}`;
-
     const body = document.createElement("div");
     body.className = "wc-body";
     const title = document.createElement("strong");
     title.textContent = item.title;
     const meta = document.createElement("span");
-    meta.textContent = `${capitalize(item.status)} · ${capitalize(item.autonomy)} · ${item.updated_label} ago`;
+    meta.textContent = metaLabel(item);
     body.append(title, meta);
+    top.append(dot, body);
 
+    // Row 2: controls live underneath the text instead of beside it.
+    const actions = document.createElement("div");
+    actions.className = "wc-actions";
     const autonomy = document.createElement("select");
     autonomy.className = "autonomy-select";
     autonomy.setAttribute("aria-label", `Autonomy for ${item.title}`);
@@ -144,6 +311,7 @@ function renderWorkCards() {
       const updated = await setWorkAutonomy(item.id, autonomy.value as WorkItem["autonomy"]);
       workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
       renderWorkCards();
+      renderWorkFocus();
     });
 
     const toggle = document.createElement("button");
@@ -156,11 +324,21 @@ function renderWorkCards() {
       workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
       renderWorkList();
       renderWorkCards();
+      renderWorkFocus();
     });
+    actions.append(autonomy, toggle);
 
-    card.append(dot, body, autonomy, toggle);
+    card.append(top, actions);
     wrap.append(card);
   }
+}
+
+/** Work mode is headed by the selected work item, not by the word "Work". */
+function renderWorkFocus() {
+  const item = workItems.find((w) => w.id === selectedWorkId);
+  if (!item) return;
+  $("#work-focus-title").textContent = item.title;
+  $("#work-focus-sub").textContent = metaLabel(item);
 }
 
 function capitalize(s: string) {
@@ -225,6 +403,230 @@ function renderAttention(items: AttentionItem[]) {
     });
     li.append(btn);
     list.append(li);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Agents view + agent pause (shared by the right panel and Agents view)
+// ---------------------------------------------------------------------------
+
+function renderAgentPause() {
+  const status = agentPaused ? "Paused" : "Experimenting";
+  const text = `${status} · 3/5`;
+  $("#agent-status").textContent = text;
+  const cardStatus = $("#agent-card-status");
+  if (cardStatus) cardStatus.textContent = text;
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(".agent-pause-btn")) {
+    btn.classList.toggle("paused", agentPaused);
+    btn.setAttribute("aria-label", agentPaused ? "Resume agent" : "Pause agent");
+    btn.title = agentPaused ? "Resume agent" : "Pause agent";
+    btn.innerHTML = agentPaused ? PLAY_SVG : PAUSE_SVG;
+  }
+  for (const ring of document.querySelectorAll(".agent-ring")) {
+    ring.classList.toggle("paused", agentPaused);
+  }
+}
+
+function toggleAgentPaused() {
+  agentPaused = !agentPaused;
+  renderAgentPause();
+}
+
+function renderAgents(steps: CollabStep[]) {
+  const list = $("#agents-list");
+  list.innerHTML = "";
+  const done = steps.filter((s) => s.state === "done" || s.state === "active").length;
+
+  const card = document.createElement("div");
+  card.className = "agent-card glass";
+  const head = document.createElement("header");
+  head.className = "agent-head";
+  const ring = document.createElement("span");
+  ring.className = "agent-ring" + (agentPaused ? " paused" : "");
+  const id = document.createElement("div");
+  id.className = "agent-id";
+  const name = document.createElement("strong");
+  name.textContent = "Research Agent";
+  const status = document.createElement("span");
+  status.id = "agent-card-status";
+  status.textContent = `${agentPaused ? "Paused" : "Experimenting"} · ${done}/${steps.length}`;
+  id.append(name, status);
+  const pause = document.createElement("button");
+  pause.type = "button";
+  pause.className = "pause-btn agent-pause-btn" + (agentPaused ? " paused" : "");
+  pause.setAttribute("aria-label", agentPaused ? "Resume agent" : "Pause agent");
+  pause.title = agentPaused ? "Resume agent" : "Pause agent";
+  pause.innerHTML = agentPaused ? PLAY_SVG : PAUSE_SVG;
+  pause.addEventListener("click", toggleAgentPaused);
+  head.append(ring, id, pause);
+  card.append(head);
+
+  const note = document.createElement("p");
+  note.className = "demo-note";
+  note.textContent =
+    "Demonstration data — the Loom server does not expose step-by-step execution here yet.";
+  card.append(note);
+
+  const stepsList = document.createElement("ul");
+  stepsList.className = "steps";
+  for (const step of steps) {
+    const li = document.createElement("li");
+    li.className = `step ${step.state}`;
+    const mark = document.createElement("span");
+    mark.className = "mark";
+    mark.textContent = step.state === "done" ? "✓" : "";
+    const label = document.createElement("span");
+    label.className = "step-label";
+    label.textContent = step.label;
+    li.append(mark, label);
+    if (step.progress !== null && step.progress !== undefined) {
+      const pct = document.createElement("span");
+      pct.className = "step-pct";
+      pct.textContent = `${step.progress}%`;
+      li.append(pct);
+    }
+    stepsList.append(li);
+  }
+  card.append(stepsList);
+  list.append(card);
+
+  const empty = document.createElement("div");
+  empty.className = "empty-card glass";
+  const emptyTitle = document.createElement("strong");
+  emptyTitle.textContent = "No other agents yet";
+  const emptyText = document.createElement("p");
+  emptyText.textContent =
+    "More agents will appear here when the Loom server exposes them.";
+  empty.append(emptyTitle, emptyText);
+  list.append(empty);
+}
+
+// ---------------------------------------------------------------------------
+// Evidence view
+// ---------------------------------------------------------------------------
+
+function renderEvidence() {
+  const list = $("#evidence-list");
+  list.innerHTML = "";
+  for (const item of EVIDENCE) {
+    const card = document.createElement("div");
+    card.className = "evidence-card glass";
+    const head = document.createElement("div");
+    head.className = "ev-head";
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+    const state = document.createElement("span");
+    state.className = `ev-state ${item.state}`;
+    state.textContent =
+      item.state === "collected"
+        ? "Collected"
+        : item.state === "partial"
+          ? "Partial"
+          : "Pending";
+    head.append(title, state);
+    const detail = document.createElement("p");
+    detail.className = "ev-detail";
+    detail.textContent = item.detail;
+    const basis = document.createElement("p");
+    basis.className = "ev-basis";
+    basis.textContent = item.basis;
+    card.append(head, detail, basis);
+    list.append(card);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Layers view
+// ---------------------------------------------------------------------------
+
+function renderLayers() {
+  const list = $("#layers-list");
+  list.innerHTML = "";
+  for (const layer of LAYERS) {
+    const row = document.createElement("div");
+    row.className = "layer-row glass";
+    const text = document.createElement("div");
+    text.className = "layer-text";
+    const label = document.createElement("strong");
+    label.textContent = layer.label;
+    const desc = document.createElement("span");
+    desc.textContent = layer.desc;
+    text.append(label, desc);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "switch";
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-checked", String(layerOn[layer.id]));
+    toggle.setAttribute("aria-label", `Toggle ${layer.label}`);
+    toggle.addEventListener("click", () => {
+      layerOn[layer.id] = !layerOn[layer.id];
+      document
+        .querySelector(".scene")
+        ?.classList.toggle(`no-${layer.id}`, !layerOn[layer.id]);
+      toggle.setAttribute("aria-checked", String(layerOn[layer.id]));
+    });
+    row.append(text, toggle);
+    list.append(row);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Artifacts view (Artifacts + Documents tabs)
+// ---------------------------------------------------------------------------
+
+function setArtifactTab(tab: "artifacts" | "documents") {
+  artifactTab = tab;
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#artifact-tabs .tab")) {
+    btn.classList.toggle("active", btn.dataset.atab === tab);
+  }
+  renderArtifacts();
+}
+
+function artifactClick(item: ArtifactItem, card: HTMLElement) {
+  if (item.action === "expand") {
+    const open = card.querySelector(".artifact-body");
+    if (open) {
+      open.remove();
+      return;
+    }
+    const body = document.createElement("p");
+    body.className = "artifact-body";
+    body.textContent = item.body ?? item.detail;
+    card.append(body);
+  } else if (item.action === "code-design") {
+    openNote("design");
+  } else if (item.action === "code-scratch") {
+    openNote("scratch");
+  } else if (item.action === "evidence") {
+    setMode("evidence");
+  }
+}
+
+function renderArtifacts() {
+  const list = $("#artifacts-list");
+  list.innerHTML = "";
+  const items = artifactTab === "artifacts" ? ARTIFACTS : DOCUMENTS;
+  for (const item of items) {
+    const wrap = document.createElement("div");
+    wrap.className = "artifact-item";
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "artifact-card glass";
+    const kind = document.createElement("span");
+    kind.className = "artifact-kind";
+    kind.textContent = item.kind;
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+    const detail = document.createElement("span");
+    detail.className = "artifact-detail";
+    detail.textContent = item.detail;
+    const chev = document.createElement("span");
+    chev.className = "chev";
+    chev.textContent = "›";
+    card.append(kind, title, detail, chev);
+    card.addEventListener("click", () => artifactClick(item, wrap));
+    wrap.append(card);
+    list.append(wrap);
   }
 }
 
@@ -327,29 +729,103 @@ async function sendChat(text: string) {
 // Modes
 // ---------------------------------------------------------------------------
 
+const ALL_VIEWS: Mode[] = [
+  "experiment",
+  "work",
+  "code",
+  "agents",
+  "evidence",
+  "layers",
+  "artifacts",
+];
+
+function closeMenus() {
+  const railMenu = $("#rail-menu");
+  if (railMenu) railMenu.hidden = true;
+  const chatMenu = $("#chat-menu");
+  if (chatMenu) chatMenu.hidden = true;
+}
+
 function setMode(next: Mode) {
-  if (mode === next) return;
+  if (mode === next) {
+    closeMenus();
+    return;
+  }
   mode = next;
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.classList.toggle("active", btn.dataset.mode === next);
   }
-  $("#view-experiment").hidden = next !== "experiment";
-  $("#view-work").hidden = next !== "work";
-  $("#view-code").hidden = next !== "code";
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
+    const section = btn.dataset.section;
+    btn.classList.toggle(
+      "active",
+      section === next || (next === "artifacts" && section === "more"),
+    );
+  }
+  for (const id of ALL_VIEWS) {
+    const el = document.getElementById(`view-${id}`);
+    if (el) el.hidden = id !== next;
+  }
   if (next === "experiment") fitSphere();
+  closeMenus();
 }
 
 // ---------------------------------------------------------------------------
 // Code editor (prototype: notes persist in localStorage)
 // ---------------------------------------------------------------------------
 
-const NOTE_KEY = "loom-ide-tauri:design-note";
+const NOTE_KEY_DESIGN = "loom-ide-tauri:design-note";
+const NOTE_KEY_SCRATCH = "loom-ide-tauri:scratch-note";
+
+const SCRATCH_SEED = `# Scratch notes
+
+Quick thoughts, links, and half-formed ideas.
+`;
+
+function noteKey(kind: NoteKind): string {
+  return kind === "design" ? NOTE_KEY_DESIGN : NOTE_KEY_SCRATCH;
+}
+
+function noteSeed(kind: NoteKind): string {
+  return kind === "design" ? DESIGN_NOTE : SCRATCH_SEED;
+}
+
+function loadNote() {
+  const editor = $("#code-editor") as HTMLTextAreaElement;
+  editor.value = localStorage.getItem(noteKey(currentNote)) ?? noteSeed(currentNote);
+}
+
+function saveNote() {
+  const editor = $("#code-editor") as HTMLTextAreaElement;
+  localStorage.setItem(noteKey(currentNote), editor.value);
+}
+
+/** Open Code mode showing one of the two notes. */
+function openNote(kind: NoteKind) {
+  saveNote();
+  currentNote = kind;
+  loadNote();
+  for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
+    tab.classList.toggle("active", tab.dataset.note === kind);
+  }
+  setMode("code");
+}
 
 function initCodeEditor() {
   const editor = $("#code-editor") as HTMLTextAreaElement;
-  editor.value = localStorage.getItem(NOTE_KEY) ?? DESIGN_NOTE;
+  loadNote();
+  for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
+    tab.addEventListener("click", () => {
+      saveNote();
+      currentNote = tab.dataset.note as NoteKind;
+      loadNote();
+      for (const t of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
+        t.classList.toggle("active", t === tab);
+      }
+    });
+  }
   $("#code-save").addEventListener("click", () => {
-    localStorage.setItem(NOTE_KEY, editor.value);
+    saveNote();
     const note = $("#code-saved");
     note.hidden = false;
     window.setTimeout(() => (note.hidden = true), 2000);
@@ -369,24 +845,76 @@ async function init() {
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
   }
-  // Rail: work/code switch modes; the rest keep the sphere view.
+  // Rail: every button opens its view; More opens its menu.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
-    btn.addEventListener("click", () => {
-      for (const b of document.querySelectorAll<HTMLButtonElement>(".rail-btn")) {
-        b.classList.toggle("active", b === btn);
-      }
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const section = btn.dataset.section;
-      if (section === "work") setMode("work");
-      else if (section === "code") setMode("code");
-      else setMode("experiment");
+      if (section === "more") {
+        const menu = $("#rail-menu");
+        menu.hidden = !menu.hidden;
+        return;
+      }
+      setMode(section as Mode);
     });
   }
+  // More menu: Artifacts opens the Artifacts tab, Documents the Documents tab.
+  for (const item of document.querySelectorAll<HTMLButtonElement>("#rail-menu button")) {
+    item.addEventListener("click", () => {
+      setArtifactTab(item.dataset.atab as "artifacts" | "documents");
+      setMode("artifacts");
+    });
+  }
+  // Artifact tabs.
+  for (const tab of document.querySelectorAll<HTMLButtonElement>("#artifact-tabs .tab")) {
+    tab.addEventListener("click", () => {
+      setArtifactTab(tab.dataset.atab as "artifacts" | "documents");
+    });
+  }
+  // Clicking anywhere else closes the popover menus.
+  document.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest("#rail-menu") && !target.closest(".rail-btn.more")) {
+      const railMenu = $("#rail-menu");
+      if (railMenu) railMenu.hidden = true;
+    }
+    if (!target.closest("#chat-menu") && !target.closest("#chat-menu-btn")) {
+      const chatMenu = $("#chat-menu");
+      if (chatMenu) chatMenu.hidden = true;
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenus();
+  });
+
+  // Search focuses the chat input.
+  $("#search-btn").addEventListener("click", () => {
+    ($("#chat-text") as HTMLInputElement).focus();
+  });
+  // Agent pause (right panel; the Agents view card wires its own button).
+  $("#agent-pause").addEventListener("click", toggleAgentPaused);
+  // Chat menu: clear the conversation.
+  $("#chat-menu-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const menu = $("#chat-menu");
+    menu.hidden = !menu.hidden;
+  });
+  $("#chat-clear").addEventListener("click", () => {
+    const log = $("#chat-log");
+    log.innerHTML = "";
+    const note = document.createElement("div");
+    note.className = "typing";
+    note.textContent = "Chat cleared — start a new message below.";
+    log.append(note);
+    closeMenus();
+  });
 
   // Work
   workItems = await getWorkItems();
   selectedWorkId = workItems[0]?.id ?? null;
   renderWorkList();
   renderWorkCards();
+  renderWorkFocus();
   if (selectedWorkId) {
     const item = workItems.find((w) => w.id === selectedWorkId);
     if (item) $("#objective-title").textContent = OBJECTIVES[item.id] ?? item.title;
@@ -403,8 +931,15 @@ async function init() {
   });
 
   // Collaboration + attention
-  renderSteps(await getCollaboration());
+  const steps = await getCollaboration();
+  renderSteps(steps);
   renderAttention(await getAttention());
+
+  // New views (all demonstration data, labelled in the UI).
+  renderAgents(steps);
+  renderEvidence();
+  renderLayers();
+  renderArtifacts();
 
   // Loom server status
   const status = await getLoomStatus();
