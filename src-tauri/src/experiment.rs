@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -51,31 +52,110 @@ fn new_id(prefix: &str) -> String {
     format!("{prefix}-{nanos}")
 }
 
+fn now_unix_secs() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Path for a preserved copy of a corrupt store file, next to the original.
+fn corrupt_backup_path(path: &PathBuf) -> PathBuf {
+    let mut p = path.clone().into_os_string();
+    p.push(format!(".corrupt-{}", now_unix_secs()));
+    PathBuf::from(p)
+}
+
 impl ExperimentStore {
-    pub fn load(path: PathBuf) -> Self {
-        if let Ok(text) = fs::read_to_string(&path) {
-            if let Ok(items) = serde_json::from_str::<Vec<Experiment>>(&text) {
-                return Self { path, items };
+    /// Load the store. A missing file starts empty (and is created). A file
+    /// that exists but cannot be read or parsed is **never** overwritten:
+    /// it is moved aside to `<name>.corrupt-<unix-secs>` and loading fails
+    /// with a message telling the user where the file went.
+    /// Arms left "running" by a previous app run are reset to "defined":
+    /// their run died with the process and can never complete.
+    pub fn load(path: PathBuf) -> Result<Self, String> {
+        match fs::read_to_string(&path) {
+            Ok(text) => match serde_json::from_str::<Vec<Experiment>>(&text) {
+                Ok(mut items) => {
+                    let mut any_reset = false;
+                    for exp in items.iter_mut() {
+                        let mut reset = false;
+                        for arm in exp.arms.iter_mut() {
+                            if arm.status == "running" {
+                                arm.status = "defined".to_string();
+                                reset = true;
+                            }
+                        }
+                        if reset {
+                            exp.status = self_status(exp);
+                            any_reset = true;
+                        }
+                    }
+                    let store = Self { path, items };
+                    if any_reset {
+                        store.save()?;
+                    }
+                    Ok(store)
+                }
+                Err(e) => {
+                    let backup = corrupt_backup_path(&path);
+                    let _ = fs::rename(&path, &backup);
+                    Err(format!(
+                        "experiments.json is corrupt ({e}). The unreadable file was moved to {} so nothing is lost. Fix or delete that file, then restart.",
+                        backup.display()
+                    ))
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                let store = Self {
+                    path,
+                    items: Vec::new(),
+                };
+                store.save()?;
+                Ok(store)
             }
+            Err(e) => Err(format!("Cannot read {}: {e}", path.display())),
         }
-        let store = Self {
-            path,
-            items: Vec::new(),
-        };
-        let _ = store.save();
-        store
     }
 
     pub fn items(&self) -> Vec<Experiment> {
         self.items.clone()
     }
 
+    /// Save atomically: write to a temp file in the same directory, fsync
+    /// it, then rename over the live file, so a crash mid-write can never
+    /// leave a truncated store behind.
     pub fn save(&self) -> Result<(), String> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let text = serde_json::to_string_pretty(&self.items).map_err(|e| e.to_string())?;
-        fs::write(&self.path, text).map_err(|e| e.to_string())
+        let tmp = self.path.with_extension("json.tmp");
+        {
+            let mut f = fs::File::create(&tmp).map_err(|e| e.to_string())?;
+            f.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+            f.sync_all().map_err(|e| e.to_string())?;
+        }
+        fs::rename(&tmp, &self.path).map_err(|e| e.to_string())?;
+        // Best-effort fsync of the parent directory so the rename is durable.
+        if let Some(parent) = self.path.parent() {
+            if let Ok(dir) = fs::File::open(parent) {
+                let _ = dir.sync_all();
+            }
+        }
+        Ok(())
+    }
+
+    /// Experiments with at least two finished arms and no decision yet —
+    /// the decisions currently waiting on the human.
+    pub fn awaiting_decision(&self) -> Vec<Experiment> {
+        self.items
+            .iter()
+            .filter(|e| {
+                e.decision.is_none() && e.arms.iter().filter(|a| a.status == "done").count() >= 2
+            })
+            .cloned()
+            .collect()
     }
 
     fn get_mut(&mut self, id: &str) -> Result<&mut Experiment, String> {
@@ -127,6 +207,10 @@ impl ExperimentStore {
             status: "defined".to_string(),
             result: String::new(),
         });
+        // A new arm changes the comparison set, so a previous decision no
+        // longer stands; recompute the status from arms + decision.
+        item.decision = None;
+        item.status = self_status(item);
         let out = item.clone();
         self.save()?;
         Ok(out)
@@ -140,6 +224,11 @@ impl ExperimentStore {
     ) -> Result<Experiment, String> {
         if !["defined", "running", "done"].contains(&status) {
             return Err(format!("Unknown arm status: {status}"));
+        }
+        if status == "done" {
+            return Err(
+                "An arm can only become done by recording a result (set_arm_result).".to_string(),
+            );
         }
         let item = self.get_mut(id)?;
         let arm = item
@@ -160,6 +249,9 @@ impl ExperimentStore {
         arm_id: &str,
         result: String,
     ) -> Result<Experiment, String> {
+        if result.trim().is_empty() {
+            return Err("Arm result cannot be empty.".to_string());
+        }
         let item = self.get_mut(id)?;
         let arm = item
             .arms
@@ -176,11 +268,27 @@ impl ExperimentStore {
 
     pub fn choose_arm(&mut self, id: &str, arm_id: &str) -> Result<Experiment, String> {
         let item = self.get_mut(id)?;
-        if !item.arms.iter().any(|a| a.id == arm_id) {
-            return Err(format!("Unknown arm: {arm_id}"));
+        let arm = item
+            .arms
+            .iter()
+            .find(|a| a.id == arm_id)
+            .ok_or_else(|| format!("Unknown arm: {arm_id}"))?;
+        if arm.status != "done" || arm.result.trim().is_empty() {
+            return Err("Arm has not run yet.".to_string());
         }
         item.decision = Some(arm_id.to_string());
         item.status = "decided".to_string();
+        let out = item.clone();
+        self.save()?;
+        Ok(out)
+    }
+
+    /// Revoke a decision (e.g. after a misclick) so the arms can be
+    /// compared again. The runs and their results are kept.
+    pub fn clear_decision(&mut self, id: &str) -> Result<Experiment, String> {
+        let item = self.get_mut(id)?;
+        item.decision = None;
+        item.status = self_status(item);
         let out = item.clone();
         self.save()?;
         Ok(out)

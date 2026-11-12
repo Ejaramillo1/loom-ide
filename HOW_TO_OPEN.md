@@ -1,68 +1,64 @@
-# How to build and open the Loom front end
+# How to build and open the Loom IDE (Tauri prototype)
 
-Building means putting the code together into a program you can run.
-Opening means starting that program. You need to build before you can open,
-and you need to build again after changing the code.
+This document is for the **Tauri 2 prototype** in this repo: a Rust backend
+(`src-tauri/`) with a TypeScript frontend (`src/`). It is not the old
+eframe/egui app — that one lives in `src/main.rs` with the root `Cargo.toml`
+and `run.sh`, is deprecated, and is not built by any command here.
 
-All commands below are typed in a terminal (a window where you type commands),
-from inside the app folder:
+All commands below are typed in a terminal, from the repo folder
+(the folder containing `package.json`).
 
-```
-cd /home/ed/.loom/app
-```
+## Prerequisites
 
-## Build it (only build, do not open)
+- Node.js 20+ and npm
+- Rust via rustup (see the main README, "Run it")
+- The Tauri system dependencies from the main README
+- The Loom server, for anything that talks to Loom
+  (`looms serve --http-port 5006`); without it the app opens, but
+  Loom-backed sections show honest empty states and errors — there is
+  no demo data.
 
-```
-cargo build
-```
+## Open it (development)
 
-This reads `Cargo.toml` (the list of what the program needs) and `src/main.rs`
-(the code), and puts the finished program here:
-
-```
-target/debug/loom-frontend
-```
-
-If nothing changed since the last build, this finishes in a second or two.
-If it shows an error, the program was not built — read the first error line,
-fix that place in the code, and run `cargo build` again.
-
-For a faster, tidier final version, use `cargo build --release` instead.
-That one lands in `target/release/loom-frontend`, and takes longer the first time.
-
-## Open it (after building)
-
-```
-./target/debug/loom-frontend
+```bash
+npm install   # first time only
+npm run tauri dev
 ```
 
-## Build and open in one go (easiest)
+This starts Vite (frontend on `http://localhost:1420`) and the Tauri
+desktop window. Edit the frontend and it reloads; edit Rust and the
+window rebuilds.
 
-```
-./run.sh
+## Frontend only (no Rust, in a browser)
+
+For quick visual iteration:
+
+```bash
+npm run dev      # http://localhost:1420
 ```
 
-This runs `cargo build` first — so it always picks up code changes — and
-then opens the program. Or let Cargo do both steps itself:
+Loom calls go through the `/api/loom` dev proxy to
+`http://localhost:5006`. Start the Loom server first, or the chat shows
+a connection error.
 
-```
-cargo run
+## Build installers (.deb / .AppImage)
+
+```bash
+npm run tauri build
+# bundles land in src-tauri/target/release/bundle/
 ```
 
 ## If it does not work
 
-- Make sure you are in `/home/ed/.loom/app` — `run.sh`, `Cargo.toml` and
-  `src/main.rs` all live there. Building from the folder above fails with
-  "could not find Cargo.toml".
-- If you see "Permission denied" for the launcher, run this once, then try again:
-
-```
-chmod +x run.sh
-```
-
-- If you see "cargo: command not found", Rust is not installed yet. Install it
-  from https://rustup.rs, close and reopen the terminal, then try again.
-- The front end opens on its own. The Loom server is optional: you can browse
-  agents and patterns without it, but Chat needs the server running (it is set
-  to `http://localhost:5006` at the top of the window).
+- If you see "cargo: command not found", Rust is not installed yet.
+  Install it from https://rustup.rs, close and reopen the terminal,
+  then try again.
+- If `npm run tauri dev` fails on missing system libraries (e.g.
+  `gdk-3.0.pc` not found), install the dependencies from the main
+  README's "System dependencies" section.
+- If the window opens but says "Loom offline", the Loom server is not
+  running: start it with `looms serve --http-port 5006`.
+- `npm run tauri dev` and `npm run dev` both use port 1420 for the
+  frontend; if it is already in use, stop the other one first.
+- Do **not** run `cargo build` at the repo root or `./run.sh`: that
+  builds the deprecated eframe app (`src/main.rs`), not this prototype.

@@ -54,49 +54,82 @@ transparent; that was a misunderstanding and was reverted.)
 
 ## Modes and how to reach them
 
-- **Experiment** — the luminous sphere (canvas 2D: radial gradients +
-  fine flowing contour lines + water reflection), states idle /
+- **Experiment** — a list + detail view: question, hypothesis, arms,
+  Run-arm (real weave calls against the Loom server), results, and a
+  decision card once ≥2 arms are done. The luminous sphere (canvas 2D:
+  radial gradients + fine flowing contour lines + water reflection)
+  is a compact state indicator in the sidebar, states idle /
   listening / processing / executing / attention / completed, with a
   caption in plain words. The sphere animation pauses when its view is
   hidden.
 - **Work** — the left panel is the work catalogue; the center is the
   selected work's detail view: full title and state, a control row for
   the planning preference and the supported local action, goal,
-  success criteria (or an honest empty state), artifacts or
-  "No artifacts attached", evidence or "No evidence attached".
+  editable success criteria (add/remove, persisted), a Workflows
+  section (list + Run + recent executions), artifacts with
+  Attach/Detach, and evidence from experiment decisions.
 - **Code** — a plain notes editor (design philosophy note + scratch
-  notes, saved locally, both starting empty). "Ask about this note"
+  notes, saved locally, both starting empty) plus the workspace
+  explorer: a read-only tree over the Loom workspace directory
+  (`~/.loom`), click a text file to open it. "Ask about this note"
   sends the note to Loom through the always-visible Conversation.
-- **Agents** — the agents in this workspace. Empty ("No agents
-  running") until the Loom server exposes live agents.
-- **Evidence** — what the claims rest on. Empty ("No evidence yet")
-  until the Loom server shares findings and traces.
+- **Agents** — the agents from `GET /v1/agents`: name, status dot,
+  uptime, active sessions, message count. Empty ("No agents running")
+  only when the server reports none.
+- **Evidence** — what the claims rest on: experiment decisions made in
+  this workspace. Empty ("No evidence yet") until a decision is made.
+  The Loom server exposes no findings/traces API, so there is nothing
+  else to show yet.
 - **Layers** — toggles for the scene layers: light beam, water
   reflection, glass panels, sphere.
 - **Artifacts** (footer mode, and the rail's ··· menu) — two tabs:
-  **Artifacts** (empty, "No artifacts yet", until the Loom server
-  shares them) and **Documents** (the two local notes; clicking one
-  opens it in Code mode).
+  **Artifacts** (the artifacts fetched from the Loom server, with the
+  work's session filter in Work detail) and **Documents** (the two
+  local notes; clicking one opens it in Code mode).
 
 Both navigation mechanisms — the icon rail and the footer mode
 switcher — show the same current destination.
 
 ## What it is
 
-- **Backend (Rust, `src-tauri/`)** — Tauri 2 commands:
-  - `get_work_items` / `add_work_item` / `set_work_status` /
-    `set_work_autonomy` — work items persist as structured JSON in
-    `<app-data>/loom-ide/work.json`, like the existing eframe app. The
-    store starts empty; work items come from the user creating them.
-  - `get_collaboration` / `get_attention` — empty until the Loom
-    server exposes live execution state.
-  - `get_loom_status` — a real `GET /health` against localhost:5006
-    (async, via the raw HTTP client below).
-  - `ask_loom` — a real `POST /v1/weave` on `http://localhost:5006`
-    with `{"query": ...}`. The Rust HTTP client reads framing
-    explicitly, including chunked responses from gRPC-gateway. When
-    the server cannot be reached, or answers without usable text, the
+- **Backend (Rust, `src-tauri/`)** — Tauri 2 commands (30):
+  - Work: `get_work_items` / `add_work_item` / `set_work_status` /
+    `set_work_autonomy` / `set_work_session` /
+    `set_work_success_criteria` / `set_work_artifacts` — work items
+    persist as structured JSON in `<app-data>/loom-ide/work.json`,
+    like the existing eframe app. The store starts empty; work items
+    come from the user creating them. Saves are atomic (temp file +
+    fsync + rename); a corrupt file is moved aside, never overwritten.
+  - Experiments: `get_experiments` / `add_experiment` /
+    `add_experiment_arm` / `set_experiment_arm_status` /
+    `set_experiment_arm_result` / `choose_experiment_arm` /
+    `clear_experiment_decision` — persisted in
+    `<app-data>/loom-ide/experiments.json`. Arms run as real weave
+    calls; a decision requires a finished arm with a real result.
+  - `get_collaboration` — empty until the Loom server exposes live
+    execution state. `get_attention` — experiment decisions waiting
+    on the human (≥2 arms done, no winner picked yet).
+  - `get_loom_status` — the real component check, `GET /v1/health`
+    against localhost:5006 (async, via the raw HTTP client below).
+    The plain `/health` route is a static stub and is not used.
+  - Sessions/agents/chat: `list_sessions` / `create_session` /
+    `list_agents` / `get_session_history` / `ask_loom` — a real
+    `POST /v1/weave` on `http://localhost:5006` with `{"query": ...}`.
+    The Rust HTTP client reads framing explicitly, including chunked
+    responses from gRPC-gateway. The gateway encodes 64-bit integers
+    as JSON strings; the backend parses them tolerantly. When the
+    server cannot be reached, or answers without usable text, the
     command fails and the UI shows the error. Nothing invents a reply.
+  - Workflows/artifacts: `list_workflows` / `execute_workflow` /
+    `get_workflow_execution` / `list_workflow_executions` /
+    `list_artifacts` (optionally scoped to one session). Workflow
+    runs are blocking; the execute response's `result` is surfaced as
+    evidence. Executions carry no work id on the server, so the list
+    is workspace-global.
+  - Workspace explorer: `list_workspace` / `list_directory` /
+    `read_file` — read-only over the Loom workspace directory
+    (`~/.loom`), canonicalized and contained; dotfiles skipped,
+    1 MB read cap.
 - **Frontend (Vite + TypeScript, `src/`)** — no framework: plain
   TypeScript + CSS, chosen deliberately because the UI is a static,
   design-driven layout and hand-written DOM/CSS gives the closest
@@ -225,7 +258,7 @@ npm run dev      # http://localhost:1420
 ## Project layout
 
 ```
-loom-ide-tauri/
+loom-ide/                  # Tauri prototype (this repo's current direction)
 ├── index.html            # app shell (header, main, footer, drawers)
 ├── src/
 │   ├── main.ts           # app logic, panes, chat, modes
@@ -235,10 +268,16 @@ loom-ide-tauri/
 ├── src-tauri/
 │   ├── src/lib.rs        # Tauri commands, Loom HTTP client
 │   ├── src/store.rs      # work-item JSON persistence (starts empty)
+│   ├── src/experiment.rs # experiment JSON persistence (starts empty)
 │   ├── src/main.rs       # entry point
 │   ├── tauri.conf.json   # window 1648×928, bundle id com.loom.ide
 │   └── capabilities/default.json
-└── README.md
+├── docs/                 # design docs (01-03) + research (research/04-08)
+├── README.md
+├── HOW_TO_OPEN.md        # how to run this prototype
+├── src/main.rs           # DEPRECATED eframe/egui app — do not extend
+├── Cargo.toml            # DEPRECATED eframe app manifest — do not use
+└── run.sh                # DEPRECATED eframe launcher — do not use
 ```
 
 ## Status / known gaps
@@ -248,20 +287,32 @@ loom-ide-tauri/
 - Code mode is a plain notes editor (no Monaco yet).
 - The Loom server integration is real-or-error: real `POST /v1/weave`
   when the server runs, a visible connection error otherwise. The
-  exact Loom HTTP interface still needs to be verified against the
-  real Loom server (never invent endpoints). The chunked-response
-  handling in the Rust client came from the backend-fix round.
-- Collaboration steps, attention items, evidence, and artifacts are
-  empty until Loom exposes live execution state; the UI shows honest
-  empty states meanwhile.
+  contracts were verified against the real Loom protos (see
+  `docs/loom-integration.md`); the gateway encodes 64-bit integers as
+  JSON strings and the backend parses them tolerantly.
+- Artifacts are listed (Work detail + Artifacts mode, optionally
+  scoped to the work's session); evidence shows experiment decisions.
+  Collaboration steps are still empty until Loom exposes live
+  execution state; attention items are the local experiment decisions
+  waiting on the human.
+- Workflow executions are workspace-global: the server attaches no
+  work id to an execution, so per-work attribution is impossible from
+  the API. Workflow runs are blocking (no streaming yet); long runs
+  can hit the client's 180 s read timeout.
+- No trace view: the server returns trace ids but `GetTrace` is
+  unimplemented server-side. No experiment comparison statistics,
+  no judges, no cost tracking yet.
 
 ## Historical note
 
 An earlier direction — a single-file eframe/egui desktop app
 (`src/main.rs`, 1,747 lines, on the `main` branch) with an Obsidian
 integration — is **historical**. The current direction is this Tauri 2
-prototype. The egui app is kept in the repo history for reference; do
-not extend it.
+prototype. The egui app is **still present in this branch's working
+tree** (`src/main.rs`, root `Cargo.toml` / `Cargo.lock`, `run.sh`) and
+`cargo build` at the repo root builds it; do not extend it, and do not
+run `cargo build` at the root expecting the prototype. Removing it from
+the tree is planned (it needs a real git delete, not a file edit).
 
 ## License
 

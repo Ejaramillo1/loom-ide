@@ -5,6 +5,7 @@ import {
   addWorkItem,
   askLoom,
   chooseExperimentArm,
+  clearExperimentDecision,
   createSession,
   executeWorkflow,
   getAttention,
@@ -12,6 +13,7 @@ import {
   getExperiments,
   getLoomStatus,
   getSessionHistory,
+  getWorkflowExecution,
   getWorkItems,
   listAgents,
   listArtifacts,
@@ -39,6 +41,7 @@ import {
   type Session,
   type Workflow,
   type WorkflowExecution,
+  type WorkflowResult,
   type WorkItem,
 } from "./api";
 import { Sphere, type SphereState } from "./sphere";
@@ -98,6 +101,9 @@ let currentNote: NoteKind = "design";
 let artifactTab: "artifacts" | "documents" = "artifacts";
 let loomReachable = false;
 let loomVerified = false;
+/** False until the first status probe resolves; the UI shows a neutral
+    "Checking Loom…" state instead of flashing "offline" meanwhile. */
+let loomStatusKnown = false;
 let collabSteps: CollabStep[] = [];
 let attentionItems: AttentionItem[] = [];
 let sessions: Session[] = [];
@@ -109,7 +115,13 @@ let selectedExperimentId: string | null = null;
 let workflows: Workflow[] = [];
 let executions: WorkflowExecution[] = [];
 let artifacts: Artifact[] = [];
+/** Artifacts for the selected work ("what this work produced"): scoped to
+    the work's session when it has one, otherwise the global list. */
+let workArtifacts: Artifact[] = [];
 let runningWorkflow: string | null = null;
+/** Workflow names for executions started in this session (the server does
+    not report a workflow name on executions). */
+const executionWorkflowNames = new Map<string, string>();
 let lastFocus: HTMLElement | null = null;
 const layerOn: Record<string, boolean> = {
   light: true,
@@ -152,21 +164,113 @@ function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Relative time from a unix-seconds timestamp: "Now" / "5m ago" / "2h ago". */
+function relativeTime(unixSeconds: number): string {
+  if (!unixSeconds || unixSeconds <= 0) return "Unknown";
+  const diff = Math.floor(Date.now() / 1000) - unixSeconds;
+  if (diff < 60) return "Now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+/** Short date/time for a unix-seconds timestamp ("Nov 12, 10:24 PM"). */
+function formatUnix(unixSeconds: number): string {
+  if (!unixSeconds || unixSeconds <= 0) return "";
+  return new Date(unixSeconds * 1000).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** Short time token for list rows: "Now" / "2h ago". */
 function timeLabel(item: WorkItem): string {
-  return item.updated_label === "Now"
-    ? "Now"
-    : `${item.updated_label} ago`;
+  return relativeTime(item.updated_at);
 }
 
 /** Metadata line: status + when it was updated. Autonomy is shown
     once, in its labeled control — never here. */
 function metaLabel(item: WorkItem): string {
-  const when =
-    item.updated_label === "Now"
-      ? "Updated now"
-      : `Updated ${item.updated_label} ago`;
-  return `${capitalize(item.status)} · ${when}`;
+  const when = relativeTime(item.updated_at);
+  return `${capitalize(item.status)} · ${when === "Now" ? "Updated now" : when === "Unknown" ? "Updated at an unknown time" : `Updated ${when}`}`;
+}
+
+// ---------------------------------------------------------------------------
+// Focus restoration (re-renders rebuild the DOM from scratch, which would
+// otherwise drop keyboard focus to <body> on every interaction)
+// ---------------------------------------------------------------------------
+
+function focusKey(el: HTMLElement): string | null {
+  if (el.id) return `id:${el.id}`;
+  const label = el.getAttribute("aria-label");
+  if (label) return `aria:${label}`;
+  const title = el.getAttribute("title");
+  if (title) return `title:${title}`;
+  const text = (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+  if (text) return `text:${el.tagName}:${text}`;
+  return null;
+}
+
+function findByFocusKey(key: string): HTMLElement | null {
+  if (key.startsWith("id:")) return document.getElementById(key.slice(3));
+  if (key.startsWith("aria:")) {
+    return document.querySelector(`[aria-label="${CSS.escape(key.slice(5))}"]`);
+  }
+  if (key.startsWith("title:")) {
+    return document.querySelector(`[title="${CSS.escape(key.slice(6))}"]`);
+  }
+  if (key.startsWith("text:")) {
+    const rest = key.slice(5);
+    const colon = rest.indexOf(":");
+    const tag = rest.slice(0, colon).toLowerCase();
+    const text = rest.slice(colon + 1);
+    for (const el of document.querySelectorAll<HTMLElement>(tag)) {
+      if ((el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80) === text) {
+        return el;
+      }
+    }
+  }
+  return null;
+}
+
+/** Run a DOM rebuild, then restore focus to the equivalent control (same
+    id / aria-label / title / text) when the focused one was destroyed. */
+function withFocusRestore(fn: () => void): void {
+  const active = document.activeElement as HTMLElement | null;
+  const key = active && active !== document.body ? focusKey(active) : null;
+  fn();
+  if (key) {
+    const next = findByFocusKey(key);
+    if (next && next !== document.activeElement) next.focus();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Loom reachability — tracks reality both ways instead of latching the
+// startup probe. Any successful Loom call marks the server reachable;
+// a connection failure marks it unreachable. The server-dependent views
+// re-render only when the state actually changes (or on the first probe).
+// ---------------------------------------------------------------------------
+
+function isLoomConnectionError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /Loom is unavailable|Failed to fetch|NetworkError|ECONNREFUSED/i.test(msg);
+}
+
+function setLoomReachable(reachable: boolean) {
+  const changed = loomStatusKnown && loomReachable !== reachable;
+  const firstProbe = !loomStatusKnown;
+  loomReachable = reachable;
+  loomStatusKnown = true;
+  renderStatusPill();
+  if (changed || firstProbe) {
+    renderWorkDetail();
+    renderAgents();
+    renderArtifacts();
+    renderInspectorContext();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -174,32 +278,34 @@ function metaLabel(item: WorkItem): string {
 // ---------------------------------------------------------------------------
 
 function renderWorkList() {
-  const list = document.querySelector<HTMLElement>("#work-list");
-  if (!list) return;
-  list.innerHTML = "";
-  for (const item of workItems) {
-    const li = document.createElement("li");
-    li.dataset.title = item.title.toLowerCase();
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "work-row" + (item.id === selectedWorkId ? " selected" : "");
-    btn.setAttribute("aria-pressed", String(item.id === selectedWorkId));
+  withFocusRestore(() => {
+    const list = document.querySelector<HTMLElement>("#work-list");
+    if (!list) return;
+    list.innerHTML = "";
+    for (const item of workItems) {
+      const li = document.createElement("li");
+      li.dataset.title = item.title.toLowerCase();
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "work-row" + (item.id === selectedWorkId ? " selected" : "");
+      btn.setAttribute("aria-pressed", String(item.id === selectedWorkId));
 
-    const dot = document.createElement("span");
-    dot.className = `work-dot ${item.status}`;
-    const title = document.createElement("span");
-    title.className = "work-title";
-    title.textContent = item.title;
-    const time = document.createElement("span");
-    time.className = "work-time";
-    time.textContent = timeLabel(item);
+      const dot = document.createElement("span");
+      dot.className = `work-dot ${item.status}`;
+      const title = document.createElement("span");
+      title.className = "work-title";
+      title.textContent = item.title;
+      const time = document.createElement("span");
+      time.className = "work-time";
+      time.textContent = timeLabel(item);
 
-    btn.append(dot, title, time);
-    btn.addEventListener("click", () => selectWork(item.id));
-    li.append(btn);
-    list.append(li);
-  }
-  applySearchFilter(($("#search-input") as HTMLInputElement).value);
+      btn.append(dot, title, time);
+      btn.addEventListener("click", () => selectWork(item.id));
+      li.append(btn);
+      list.append(li);
+    }
+    applySearchFilter(($("#search-input") as HTMLInputElement).value);
+  });
 }
 
 function selectWork(id: string) {
@@ -212,6 +318,7 @@ function selectWork(id: string) {
   renderWorkDetail();
   renderInspectorContext();
   syncSessionToWork();
+  void loadWorkArtifacts(id);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,72 +445,57 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
 // ---------------------------------------------------------------------------
 
 function renderWorkDetail() {
-  const wrap = document.querySelector<HTMLElement>("#work-detail");
-  if (!wrap) return;
-  wrap.innerHTML = "";
+  withFocusRestore(() => {
+    const wrap = document.querySelector<HTMLElement>("#work-detail");
+    if (!wrap) return;
+    wrap.innerHTML = "";
 
-  if (workItems.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "wd-empty";
-    const text = document.createElement("p");
-    text.textContent =
-      "No work yet. Create a work item to give this workspace something to focus on.";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn";
-    btn.textContent = "Create work";
-    btn.addEventListener("click", () => focusNewWork(btn));
-    empty.append(text, btn);
-    wrap.append(empty);
-    return;
-  }
+    if (workItems.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "wd-empty";
+      const text = document.createElement("p");
+      text.textContent =
+        "No work yet. Create a work item to give this workspace something to focus on.";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn";
+      btn.textContent = "Create work";
+      btn.addEventListener("click", () => focusNewWork(btn));
+      empty.append(text, btn);
+      wrap.append(empty);
+      return;
+    }
 
-  const item = workItems.find((w) => w.id === selectedWorkId);
-  if (!item) {
-    const empty = document.createElement("div");
-    empty.className = "wd-empty";
-    const text = document.createElement("p");
-    text.textContent = "Select a work item from the list.";
-    empty.append(text);
-    wrap.append(empty);
-    return;
-  }
+    const item = workItems.find((w) => w.id === selectedWorkId);
+    if (!item) {
+      const empty = document.createElement("div");
+      empty.className = "wd-empty";
+      const text = document.createElement("p");
+      text.textContent = "Select a work item from the list.";
+      empty.append(text);
+      wrap.append(empty);
+      return;
+    }
 
-  wrap.append(buildWorkSummary(item));
+    wrap.append(buildWorkSummary(item));
 
-  const scroll = document.createElement("div");
-  scroll.className = "wd-scroll";
+    const scroll = document.createElement("div");
+    scroll.className = "wd-scroll";
 
-  // Goal: the work item's own title is its goal statement.
-  scroll.append(simpleSection("Goal", item.title));
+    // Success criteria — editable by the human.
+    scroll.append(buildSuccessCriteria(item));
 
-  // Success criteria — editable by the human.
-  scroll.append(buildSuccessCriteria(item));
+    // Workflows — run real Loom workflows under this work item.
+    scroll.append(buildWorkflowsSection());
 
-  // Workflows — run real Loom workflows under this work item.
-  scroll.append(buildWorkflowsSection());
+    // Artifacts — attach real Loom artifacts.
+    scroll.append(buildArtifactsSection(item));
 
-  // Artifacts — attach real Loom artifacts.
-  scroll.append(buildArtifactsSection(item));
+    // Evidence — experiment decisions + Loom findings (honest).
+    scroll.append(buildEvidenceSection());
 
-  // Evidence — experiment decisions + Loom findings (honest).
-  scroll.append(buildEvidenceSection());
-
-  wrap.append(scroll);
-}
-
-function simpleSection(heading: string, text: string | null): HTMLElement {
-  const section = document.createElement("section");
-  section.className = "wd-section";
-  const h = document.createElement("h4");
-  h.textContent = heading;
-  section.append(h);
-  if (text !== null) {
-    const p = document.createElement("p");
-    p.textContent = text;
-    section.append(p);
-  }
-  return section;
+    wrap.append(scroll);
+  });
 }
 
 // ---- Success criteria (editable, local) ----
@@ -424,7 +516,7 @@ function buildSuccessCriteria(item: WorkItem): HTMLElement {
   } else {
     const ul = document.createElement("ul");
     ul.className = "criteria-list";
-    for (const c of criteria) {
+    criteria.forEach((c, i) => {
       const li = document.createElement("li");
       const text = document.createElement("span");
       text.textContent = c;
@@ -432,13 +524,18 @@ function buildSuccessCriteria(item: WorkItem): HTMLElement {
       remove.type = "button";
       remove.className = "icon-btn small";
       remove.title = "Remove criterion";
+      remove.setAttribute("aria-label", `Remove criterion: ${c}`);
       remove.textContent = "✕";
       remove.addEventListener("click", () => {
-        saveCriteria(item.id, criteria.filter((x) => x !== c));
+        // Remove by index: duplicate criterion text removes only one copy.
+        void saveCriteria(
+          item.id,
+          criteria.filter((_, idx) => idx !== i),
+        );
       });
       li.append(text, remove);
       ul.append(li);
-    }
+    });
     section.append(ul);
   }
 
@@ -453,26 +550,45 @@ function buildSuccessCriteria(item: WorkItem): HTMLElement {
   add.className = "btn ghost";
   add.textContent = "Add";
   form.append(input, add);
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const v = input.value.trim();
     if (!v) return;
-    saveCriteria(item.id, [...criteria, v]);
-    input.value = "";
+    // Disable while saving so two rapid submits cannot race on the same
+    // stale snapshot; the input clears only after a successful save.
+    input.disabled = true;
+    add.disabled = true;
+    const ok = await saveCriteria(item.id, [...criteria, v]);
+    if (ok) {
+      input.value = "";
+    } else {
+      input.disabled = false;
+      add.disabled = false;
+    }
   });
   section.append(form);
   return section;
 }
 
-async function saveCriteria(workId: string, criteria: string[]) {
+/** In-flight criteria saves, per work item: a second save while one is
+    running would read the same stale snapshot and drop a criterion. */
+const criteriaSaving = new Set<string>();
+
+async function saveCriteria(workId: string, criteria: string[]): Promise<boolean> {
+  if (criteriaSaving.has(workId)) return false;
+  criteriaSaving.add(workId);
   try {
     const updated = await setWorkSuccessCriteria(workId, criteria);
     workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
     renderWorkDetail();
+    return true;
   } catch (err) {
     addChatError(
       `Could not save the criteria: ${err instanceof Error ? err.message : String(err)}`,
     );
+    return false;
+  } finally {
+    criteriaSaving.delete(workId);
   }
 }
 
@@ -489,11 +605,16 @@ function buildWorkflowsSection(): HTMLElement {
   refresh.type = "button";
   refresh.className = "icon-btn small";
   refresh.title = "Refresh workflows";
+  refresh.setAttribute("aria-label", "Refresh workflows");
   refresh.textContent = "↻";
   refresh.addEventListener("click", () => refreshWorkflows());
   head.append(h, refresh);
   section.append(head);
 
+  if (!loomStatusKnown) {
+    section.append(emptyP("Checking the Loom server…"));
+    return section;
+  }
   if (!loomReachable) {
     section.append(emptyP("The Loom server is offline — workflows are not available."));
     return section;
@@ -528,9 +649,11 @@ function buildWorkflowsSection(): HTMLElement {
     section.append(ul);
   }
 
+  // Executions are workspace-global (the server does not attribute them
+  // to a work item), so the heading says so.
   const execLabel = document.createElement("p");
   execLabel.className = "wd-sub-label";
-  execLabel.textContent = "Executions";
+  execLabel.textContent = "Recent executions (all work)";
   section.append(execLabel);
   if (executions.length === 0) {
     section.append(emptyP("No executions yet."));
@@ -542,10 +665,17 @@ function buildWorkflowsSection(): HTMLElement {
       const status = document.createElement("span");
       status.className = `exp-status ${ex.status}`;
       status.textContent = ex.status;
+      const name = document.createElement("span");
+      name.className = "execution-name";
+      name.textContent =
+        executionWorkflowNames.get(ex.id) ?? ex.result?.pattern_type ?? "Workflow";
+      const when = document.createElement("span");
+      when.className = "execution-time";
+      when.textContent = formatUnix(ex.started_at);
       const id = document.createElement("span");
       id.className = "execution-id";
       id.textContent = ex.id.slice(0, 12);
-      li.append(status, id);
+      li.append(status, name, when, id);
       if (ex.error) {
         const err = document.createElement("span");
         err.className = "execution-error";
@@ -559,18 +689,48 @@ function buildWorkflowsSection(): HTMLElement {
   return section;
 }
 
+async function refreshExecutionsList() {
+  try {
+    executions = await listWorkflowExecutions();
+    setLoomReachable(true);
+  } catch (err) {
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+    /* keep the previous list */
+  }
+}
+
 async function refreshWorkflows() {
   try {
     workflows = await listWorkflows();
-  } catch {
+    setLoomReachable(true);
+  } catch (err) {
     workflows = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
   }
-  try {
-    executions = await listWorkflowExecutions();
-  } catch {
-    executions = [];
-  }
+  await refreshExecutionsList();
   renderWorkDetail();
+}
+
+/** Poll one execution until it leaves a running state (or attempts run
+    out), so the list stops showing a stale status after a run. */
+async function pollWorkflowExecution(executionId: string) {
+  for (let i = 0; i < 5; i++) {
+    const current = executions.find((e) => e.id === executionId);
+    if (current && current.status !== "pending" && current.status !== "running") {
+      return;
+    }
+    await new Promise((r) => window.setTimeout(r, 1500));
+    try {
+      const ex = await getWorkflowExecution(executionId);
+      setLoomReachable(true);
+      const idx = executions.findIndex((e) => e.id === executionId);
+      if (idx >= 0) executions[idx] = ex;
+      else executions = [ex, ...executions];
+    } catch (err) {
+      if (isLoomConnectionError(err)) setLoomReachable(false);
+      return;
+    }
+  }
 }
 
 async function runWorkflow(name: string) {
@@ -579,11 +739,16 @@ async function runWorkflow(name: string) {
   renderWorkDetail();
   setSphereState("executing");
   try {
-    await executeWorkflow(name);
-    try {
-      executions = await listWorkflowExecutions();
-    } catch {
-      /* keep the previous list */
+    // execute_workflow returns the run's own result, so the UI can show
+    // the run's actual output instead of only re-listing executions.
+    const res = await executeWorkflow(name);
+    setLoomReachable(true);
+    if (res.execution_id) {
+      executionWorkflowNames.set(res.execution_id, name);
+      await refreshExecutionsList();
+      await pollWorkflowExecution(res.execution_id);
+    } else {
+      await refreshExecutionsList();
     }
     runningWorkflow = null;
     renderWorkDetail();
@@ -592,9 +757,11 @@ async function runWorkflow(name: string) {
       if (sphereState === "completed") setSphereState("idle");
     }, 3000);
   } catch (err) {
+    await refreshExecutionsList();
     runningWorkflow = null;
     renderWorkDetail();
     setSphereState("idle");
+    if (isLoomConnectionError(err)) setLoomReachable(false);
     addChatError(
       `Workflow "${name}" failed: ${err instanceof Error ? err.message : String(err)}`,
     );
@@ -614,24 +781,29 @@ function buildArtifactsSection(item: WorkItem): HTMLElement {
   refresh.type = "button";
   refresh.className = "icon-btn small";
   refresh.title = "Refresh artifacts";
+  refresh.setAttribute("aria-label", "Refresh artifacts");
   refresh.textContent = "↻";
   refresh.addEventListener("click", () => refreshArtifacts());
   head.append(h, refresh);
   section.append(head);
 
+  if (!loomStatusKnown) {
+    section.append(emptyP("Checking the Loom server…"));
+    return section;
+  }
   if (!loomReachable) {
     section.append(emptyP("The Loom server is offline — artifacts are not available."));
     return section;
   }
-  if (artifacts.length === 0) {
-    section.append(emptyP("No artifacts on the Loom server yet."));
+  if (workArtifacts.length === 0) {
+    section.append(emptyP("No artifacts for this work yet."));
     return section;
   }
 
   const attached = new Set(item.artifact_ids ?? []);
   const ul = document.createElement("ul");
   ul.className = "artifact-list";
-  for (const a of artifacts) {
+  for (const a of workArtifacts) {
     const li = document.createElement("li");
     const info = document.createElement("div");
     info.className = "artifact-info";
@@ -649,7 +821,10 @@ function buildArtifactsSection(item: WorkItem): HTMLElement {
     toggle.type = "button";
     toggle.className = "btn" + (isAttached ? "" : " ghost");
     toggle.textContent = isAttached ? "Detach" : "Attach";
-    toggle.addEventListener("click", () => toggleArtifact(item, a.id, isAttached));
+    toggle.addEventListener("click", () => {
+      toggle.disabled = true;
+      void toggleArtifact(item, a.id, isAttached);
+    });
     li.append(info, toggle);
     ul.append(li);
   }
@@ -657,16 +832,51 @@ function buildArtifactsSection(item: WorkItem): HTMLElement {
   return section;
 }
 
+/** Load the selected work's artifacts ("what this work produced"): scoped
+    to the work's session when it has one, otherwise the global list. */
+async function loadWorkArtifacts(workId: string) {
+  const item = workItems.find((w) => w.id === workId);
+  if (!item) return;
+  if (!item.session_id) {
+    workArtifacts = [...artifacts];
+    renderWorkDetail();
+    return;
+  }
+  try {
+    const list = await listArtifacts(item.session_id);
+    if (selectedWorkId !== workId) return;
+    workArtifacts = list;
+    setLoomReachable(true);
+    renderWorkDetail();
+  } catch (err) {
+    if (selectedWorkId !== workId) return;
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+    workArtifacts = [];
+    renderWorkDetail();
+  }
+}
+
 async function refreshArtifacts() {
   try {
     artifacts = await listArtifacts();
-  } catch {
+    setLoomReachable(true);
+  } catch (err) {
+    if (isLoomConnectionError(err)) setLoomReachable(false);
     artifacts = [];
   }
+  if (selectedWorkId) await loadWorkArtifacts(selectedWorkId);
   renderWorkDetail();
+  renderArtifacts();
 }
 
+/** In-flight artifact toggles, per artifact id: two quick toggles would
+    otherwise read the same stale snapshot and the second would undo the
+    first. */
+const artifactSaving = new Set<string>();
+
 async function toggleArtifact(item: WorkItem, artifactId: string, currentlyAttached: boolean) {
+  if (artifactSaving.has(artifactId)) return;
+  artifactSaving.add(artifactId);
   const ids = new Set(item.artifact_ids ?? []);
   if (currentlyAttached) ids.delete(artifactId);
   else ids.add(artifactId);
@@ -674,14 +884,56 @@ async function toggleArtifact(item: WorkItem, artifactId: string, currentlyAttac
     const updated = await setWorkArtifacts(item.id, [...ids]);
     workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
     renderWorkDetail();
+    renderArtifacts();
   } catch (err) {
+    // Re-render to restore the toggle's previous state.
+    renderWorkDetail();
     addChatError(
       `Could not update artifacts: ${err instanceof Error ? err.message : String(err)}`,
     );
+  } finally {
+    artifactSaving.delete(artifactId);
   }
 }
 
-// ---- Evidence (experiment decisions now; Loom findings later) ----
+// ---- Evidence (experiment decisions + workflow results; workspace-wide) ----
+
+/** The run's actual output, preferring the merged output over per-agent
+    outputs. Null when the result carries no readable output. */
+function workflowResultText(result: WorkflowResult | null | undefined): string | null {
+  if (!result) return null;
+  if (result.merged_output?.trim()) return result.merged_output.trim();
+  const outs = (result.agent_results ?? [])
+    .map((r) => r.output?.trim())
+    .filter((o): o is string => Boolean(o));
+  if (outs.length > 0) return outs.join("\n\n");
+  return null;
+}
+
+interface EvidenceItem {
+  title: string;
+  detail: string;
+}
+
+/** Everything the Evidence surfaces draw on: decided experiments plus the
+    recorded output of workflow runs. Workspace-wide — experiments and
+    executions are not attributed to a work item. */
+function evidenceItems(): EvidenceItem[] {
+  const items: EvidenceItem[] = [];
+  for (const e of experiments.filter((x) => x.decision)) {
+    const arm = e.arms.find((a) => a.id === e.decision);
+    items.push({ title: e.title, detail: `Chose ${arm?.label ?? e.decision}` });
+  }
+  for (const ex of executions) {
+    const text = workflowResultText(ex.result);
+    if (!text) continue;
+    const name =
+      executionWorkflowNames.get(ex.id) ?? ex.result?.pattern_type ?? "Workflow";
+    const detail = text.length > 400 ? `${text.slice(0, 400)}…` : text;
+    items.push({ title: `${name} — ${ex.status}`, detail });
+  }
+  return items;
+}
 
 function buildEvidenceSection(): HTMLElement {
   const section = document.createElement("section");
@@ -690,19 +942,18 @@ function buildEvidenceSection(): HTMLElement {
   h.textContent = "Evidence";
   section.append(h);
 
-  const decided = experiments.filter((e) => e.decision);
-  if (decided.length === 0) {
+  const items = evidenceItems();
+  if (items.length === 0) {
     section.append(
-      emptyP("No findings yet. Experiment decisions appear here as evidence once made."),
+      emptyP("No findings yet. Experiment decisions and workflow results appear here as evidence once made."),
     );
     return section;
   }
   const ul = document.createElement("ul");
   ul.className = "evidence-list";
-  for (const e of decided) {
+  for (const item of items) {
     const li = document.createElement("li");
-    const arm = e.arms.find((a) => a.id === e.decision);
-    li.textContent = `${e.title}: chose ${arm?.label ?? e.decision}`;
+    li.textContent = `${item.title}: ${item.detail}`;
     ul.append(li);
   }
   section.append(ul);
@@ -743,10 +994,18 @@ function renderSteps(steps: CollabStep[]) {
       li.className = "step";
       const label = document.createElement("span");
       label.className = "step-label";
-      label.textContent = loomReachable ? "No agents registered" : "Loom offline";
+      label.textContent = !loomStatusKnown
+        ? "Checking Loom…"
+        : loomReachable
+          ? "No agents registered"
+          : "Loom offline";
       li.append(label);
       list.append(li);
-      $("#agent-status").textContent = "No agents running";
+      $("#agent-status").textContent = !loomStatusKnown
+        ? "Checking Loom…"
+        : loomReachable
+          ? "No agents running"
+          : "Loom offline";
       const prog = $("#agent-progress");
       if (prog) prog.textContent = "";
       return;
@@ -836,6 +1095,17 @@ function renderAttention(items: AttentionItem[]) {
     li.append(row);
     list.append(li);
   }
+}
+
+/** Reload the attention list from the backend (experiments waiting for a
+    decision are real attention items) and re-render the panel. */
+async function refreshAttention() {
+  try {
+    attentionItems = await getAttention();
+  } catch {
+    attentionItems = [];
+  }
+  renderAttention(attentionItems);
 }
 
 // ---------------------------------------------------------------------------
@@ -946,11 +1216,17 @@ function renderAgents() {
     const empty = document.createElement("div");
     empty.className = "flat-row empty-row";
     const title = document.createElement("strong");
-    title.textContent = loomReachable ? "No agents registered" : "Loom offline";
+    title.textContent = !loomStatusKnown
+      ? "Checking the Loom server…"
+      : loomReachable
+        ? "No agents registered"
+        : "Loom offline";
     const text = document.createElement("p");
-    text.textContent = loomReachable
-      ? "No agents are registered with the Loom server yet. When you send a message, the answering agent appears here."
-      : "The Loom server is not reachable, so no agents are visible.";
+    text.textContent = !loomStatusKnown
+      ? "Waiting for the Loom server status."
+      : loomReachable
+        ? "No agents are registered with the Loom server yet. When you send a message, the answering agent appears here."
+        : "The Loom server is not reachable, so no agents are visible.";
     empty.append(title, text);
     list.append(empty);
     return;
@@ -975,26 +1251,75 @@ function renderAgents() {
 }
 
 // ---------------------------------------------------------------------------
-// Evidence view — empty until the Loom server shares findings
+// Evidence view — decided experiments + workflow results (workspace-wide)
 // ---------------------------------------------------------------------------
 
 function renderEvidence() {
   const list = $("#evidence-list");
   list.innerHTML = "";
-  const empty = document.createElement("div");
-  empty.className = "flat-row empty-row";
-  const title = document.createElement("strong");
-  title.textContent = "No evidence yet";
-  const text = document.createElement("p");
-  text.textContent =
-    "Evidence appears here when the Loom server shares findings and traces.";
-  empty.append(title, text);
-  list.append(empty);
+  const items = evidenceItems();
+  if (items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "flat-row empty-row";
+    const title = document.createElement("strong");
+    title.textContent = "No evidence yet";
+    const text = document.createElement("p");
+    text.textContent =
+      "Evidence appears here when experiment decisions are made or workflows produce results.";
+    empty.append(title, text);
+    list.append(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement("div");
+    row.className = "flat-row";
+    const head = document.createElement("div");
+    head.className = "ev-head";
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+    head.append(title);
+    const detail = document.createElement("p");
+    detail.className = "ev-detail";
+    detail.textContent = item.detail;
+    row.append(head, detail);
+    list.append(row);
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Layers view
 // ---------------------------------------------------------------------------
+
+const LAYERS_KEY = "loom-ide-tauri:layers";
+
+function loadLayers() {
+  try {
+    const raw = localStorage.getItem(LAYERS_KEY);
+    if (!raw) return;
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    for (const key of Object.keys(layerOn)) {
+      if (typeof obj[key] === "boolean") layerOn[key] = obj[key];
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function saveLayers() {
+  try {
+    localStorage.setItem(LAYERS_KEY, JSON.stringify(layerOn));
+  } catch {
+    /* ignore */
+  }
+}
+
+function applyLayerClasses() {
+  const scene = document.querySelector(".scene");
+  if (!scene) return;
+  for (const [id, on] of Object.entries(layerOn)) {
+    scene.classList.toggle(`no-${id}`, !on);
+  }
+}
 
 function renderLayers() {
   const list = $("#layers-list");
@@ -1021,6 +1346,7 @@ function renderLayers() {
         .querySelector(".scene")
         ?.classList.toggle(`no-${layer.id}`, !layerOn[layer.id]);
       toggle.setAttribute("aria-checked", String(layerOn[layer.id]));
+      saveLayers();
     });
     row.append(text, toggle);
     list.append(row);
@@ -1035,6 +1361,22 @@ function setArtifactTab(tab: "artifacts" | "documents") {
   artifactTab = tab;
   for (const btn of document.querySelectorAll<HTMLButtonElement>("#artifact-tabs .tab")) {
     btn.classList.toggle("active", btn.dataset.atab === tab);
+  }
+  renderArtifacts();
+  if (tab === "artifacts") {
+    // Keep the global list fresh when the view is opened.
+    void refreshGlobalArtifacts();
+  }
+}
+
+/** Reload the global artifact list (for the Artifacts view). */
+async function refreshGlobalArtifacts() {
+  try {
+    artifacts = await listArtifacts();
+    setLoomReachable(true);
+  } catch (err) {
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+    /* keep the previous list */
   }
   renderArtifacts();
 }
@@ -1069,16 +1411,71 @@ function renderArtifacts() {
     }
     return;
   }
-  // Artifacts come from the Loom server when it shares them.
-  const empty = document.createElement("div");
-  empty.className = "flat-row empty-row";
-  const title = document.createElement("strong");
-  title.textContent = "No artifacts yet";
-  const text = document.createElement("p");
-  text.textContent =
-    "Artifacts appear here when the Loom server shares them.";
-  empty.append(title, text);
-  list.append(empty);
+  // Artifacts come from the Loom server (the global list, same rows as the
+  // Work detail's Artifacts section, with the attach toggle when a work
+  // is selected).
+  if (!loomStatusKnown) {
+    const empty = document.createElement("div");
+    empty.className = "flat-row empty-row";
+    const title = document.createElement("strong");
+    title.textContent = "Checking the Loom server…";
+    empty.append(title);
+    list.append(empty);
+    return;
+  }
+  if (!loomReachable) {
+    const empty = document.createElement("div");
+    empty.className = "flat-row empty-row";
+    const title = document.createElement("strong");
+    title.textContent = "Loom offline";
+    const text = document.createElement("p");
+    text.textContent = "The Loom server is not reachable, so no artifacts are visible.";
+    empty.append(title, text);
+    list.append(empty);
+    return;
+  }
+  if (artifacts.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "flat-row empty-row";
+    const title = document.createElement("strong");
+    title.textContent = "No artifacts yet";
+    const text = document.createElement("p");
+    text.textContent = "Artifacts appear here when the Loom server shares them.";
+    empty.append(title, text);
+    list.append(empty);
+    return;
+  }
+  const item = workItems.find((w) => w.id === selectedWorkId);
+  const attached = new Set(item?.artifact_ids ?? []);
+  for (const a of artifacts) {
+    const row = document.createElement("div");
+    row.className = "flat-row";
+    const info = document.createElement("div");
+    info.className = "artifact-info";
+    const name = document.createElement("strong");
+    name.textContent = a.name;
+    info.append(name);
+    const meta = [a.source, a.purpose].filter(Boolean).join(" · ");
+    if (meta) {
+      const span = document.createElement("span");
+      span.textContent = meta;
+      info.append(span);
+    }
+    row.append(info);
+    if (item) {
+      const isAttached = attached.has(a.id);
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "btn" + (isAttached ? "" : " ghost");
+      toggle.textContent = isAttached ? "Detach" : "Attach";
+      toggle.addEventListener("click", () => {
+        toggle.disabled = true;
+        void toggleArtifact(item, a.id, isAttached);
+      });
+      row.append(toggle);
+    }
+    list.append(row);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1212,8 +1609,13 @@ function addChatError(text: string) {
 async function sendChat(text: string) {
   const clean = text.trim();
   if (!clean) return;
+  // Capture the work at send time: the user may switch work while the
+  // reply is in flight, and the reply (and the session link) belongs to
+  // the work it was sent from.
+  const workId = selectedWorkId;
+  const cacheKey = workId ?? UNASSIGNED_KEY;
   addChatMessage("user", clean);
-  if (selectedWorkId) cacheChatMessage(selectedWorkId, "user", clean);
+  cacheChatMessage(cacheKey, "user", clean);
   setSphereState("processing");
 
   const log = $("#chat-log");
@@ -1231,18 +1633,38 @@ async function sendChat(text: string) {
     );
     typing.remove();
     loomVerified = true;
-    renderStatusPill();
-    addChatMessage("loom", reply.text, reply);
-    if (selectedWorkId) cacheChatMessage(selectedWorkId, "loom", reply.text);
+    setLoomReachable(true);
+    // Append to the visible log only if this work is still selected; the
+    // reply is always cached under the work it was sent from.
+    if (selectedWorkId === workId) {
+      addChatMessage("loom", reply.text, reply);
+    }
+    cacheChatMessage(cacheKey, "loom", reply.text);
     // Refresh agent activity: the answering agent's counters just changed.
     await refreshAgents();
-    // Adopt the session the server reports (it may have auto-created one).
+    // Adopt the session the server reports (it may have auto-created one)
+    // and link it to the work the message was sent from.
     if (reply.session_id) {
-      selectedSessionId = reply.session_id;
       if (!sessions.some((s) => s.id === reply.session_id)) {
         await refreshSessions();
       }
-      renderSessionBar();
+      if (workId) {
+        try {
+          const linked = await setWorkSession(workId, reply.session_id);
+          workItems = workItems.map((w) => (w.id === linked.id ? linked : w));
+          renderWorkList();
+          if (selectedWorkId === workId) {
+            selectedSessionId = reply.session_id;
+            renderSessionBar();
+            void loadWorkArtifacts(workId);
+          }
+        } catch {
+          /* link is best-effort */
+        }
+      } else if (selectedWorkId === workId) {
+        selectedSessionId = reply.session_id;
+        renderSessionBar();
+      }
     }
     setSphereState("completed");
     window.setTimeout(() => {
@@ -1250,8 +1672,11 @@ async function sendChat(text: string) {
     }, 3000);
   } catch (err) {
     typing.remove();
-    // Keep the failed text in the composer so it can be retried.
+    // Keep the failed text in the composer and in storage so it survives
+    // an app close after a failed send.
     ($("#chat-text") as HTMLInputElement).value = clean;
+    localStorage.setItem(CHAT_DRAFT_KEY, clean);
+    if (isLoomConnectionError(err)) setLoomReachable(false);
     const detail = err instanceof Error ? err.message : String(err);
     const guidance = /looms serve|Start the Loom/i.test(detail)
       ? ""
@@ -1298,9 +1723,10 @@ function renderSessionBar() {
     opt.textContent = sessionLabel(s);
     sel.append(opt);
   }
-  const want = sessions.some((s) => s.id === previous) ? previous : "";
-  sel.value = want;
-  selectedSessionId = want || null;
+  // Render only: never drop the selection here. If the adopted session is
+  // not in the list yet, the dropdown shows "No session" until the next
+  // refresh brings it — the selection itself survives.
+  sel.value = sessions.some((s) => s.id === previous) ? previous : "";
   sel.disabled = sessions.length === 0;
 }
 
@@ -1324,17 +1750,18 @@ function renderAgentBar() {
       a.status && a.status !== "running" ? `${a.name} (${a.status})` : a.name;
     sel.append(opt);
   }
-  const want = agents.some((a) => (a.name || a.id) === previous) ? previous : "";
-  sel.value = want;
-  selectedAgentId = want || null;
+  // Render only: the selection is owned by the caller, never by this render.
+  sel.value = agents.some((a) => (a.name || a.id) === previous) ? previous : "";
   sel.disabled = agents.length === 0;
 }
 
 async function refreshSessions() {
   try {
     sessions = await listSessions();
-  } catch {
+    setLoomReachable(true);
+  } catch (err) {
     sessions = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
   }
   renderSessionBar();
 }
@@ -1342,11 +1769,15 @@ async function refreshSessions() {
 async function refreshAgents() {
   try {
     agents = await listAgents();
-  } catch {
+    setLoomReachable(true);
+  } catch (err) {
     agents = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
   }
   renderAgentBar();
   renderAgents();
+  // The inspector shows the same agents; keep it in sync with the Agents view.
+  renderInspectorContext();
 }
 
 // ---------------------------------------------------------------------------
@@ -1373,14 +1804,23 @@ interface CachedChatMsg {
 }
 
 const CHAT_CACHE_KEY = "loom-ide-tauri:chat-cache";
+/** Cache key for messages sent with no work selected. */
+const UNASSIGNED_KEY = "__unassigned";
+/** Per-work cap, and a rough total cap for the serialized cache. */
+const CHAT_CACHE_MAX_PER_WORK = 100;
+const CHAT_CACHE_MAX_BYTES = 4_000_000;
 const chatCache = new Map<string, CachedChatMsg[]>();
+let chatCacheWarned = false;
 
 function loadChatCache() {
   try {
     const raw = localStorage.getItem(CHAT_CACHE_KEY);
     if (raw) {
       const obj = JSON.parse(raw) as Record<string, CachedChatMsg[]>;
-      for (const [k, v] of Object.entries(obj)) chatCache.set(k, v);
+      for (const [k, v] of Object.entries(obj)) {
+        // Prune stale oversized entries from older runs.
+        chatCache.set(k, Array.isArray(v) ? v.slice(-CHAT_CACHE_MAX_PER_WORK) : []);
+      }
     }
   } catch {
     /* ignore */
@@ -1391,16 +1831,41 @@ function saveChatCache() {
   try {
     const obj: Record<string, CachedChatMsg[]> = {};
     for (const [k, v] of chatCache) obj[k] = v;
-    localStorage.setItem(CHAT_CACHE_KEY, JSON.stringify(obj));
+    let serialized = JSON.stringify(obj);
+    // Shrink oldest-first until the cache fits localStorage: halve every
+    // work's history, then drop whole conversations (keeping the current
+    // work's) until it fits.
+    let perWork = CHAT_CACHE_MAX_PER_WORK;
+    while (serialized.length > CHAT_CACHE_MAX_BYTES && perWork > 1) {
+      perWork = Math.max(1, Math.floor(perWork / 2));
+      for (const [k, v] of chatCache) chatCache.set(k, v.slice(-perWork));
+      const trimmed: Record<string, CachedChatMsg[]> = {};
+      for (const [k, v] of chatCache) trimmed[k] = v;
+      serialized = JSON.stringify(trimmed);
+    }
+    if (serialized.length > CHAT_CACHE_MAX_BYTES) {
+      for (const k of [...chatCache.keys()]) {
+        if (k !== (selectedWorkId ?? UNASSIGNED_KEY)) chatCache.delete(k);
+      }
+      const trimmed: Record<string, CachedChatMsg[]> = {};
+      for (const [k, v] of chatCache) trimmed[k] = v;
+      serialized = JSON.stringify(trimmed);
+    }
+    localStorage.setItem(CHAT_CACHE_KEY, serialized);
   } catch {
-    /* ignore */
+    if (!chatCacheWarned) {
+      chatCacheWarned = true;
+      addChatError(
+        "Chat history could not be saved on this device (browser storage is full or unavailable). Messages still show for this session, but may not survive a restart.",
+      );
+    }
   }
 }
 
 function cacheChatMessage(workId: string, who: "user" | "loom", text: string) {
   const msgs = chatCache.get(workId) ?? [];
   msgs.push({ who, text });
-  chatCache.set(workId, msgs);
+  chatCache.set(workId, msgs.slice(-CHAT_CACHE_MAX_PER_WORK));
   saveChatCache();
 }
 
@@ -1417,25 +1882,29 @@ function renderChatMessages(msgs: CachedChatMsg[]) {
 }
 
 /** Show the conversation for a work item: the cached copy first, the Loom
-    session history only when there is no cache for that work yet. */
+    session history only when there is no cache for that work yet. With no
+    work selected, the unassigned conversation is shown instead. */
 function loadChatForWork(workId: string | null, sessionId: string | null) {
-  const cached = workId ? chatCache.get(workId) : undefined;
+  const key = workId ?? UNASSIGNED_KEY;
+  const cached = chatCache.get(key);
   if (cached && cached.length > 0) {
     renderChatMessages(cached);
     return;
   }
   if (sessionId) {
-    loadChatHistory(sessionId, workId);
+    // No cached copy: the visible log belongs to another work (or is
+    // empty), so clear it before the history fetch.
+    clearChat();
+    void loadChatHistory(sessionId, workId);
   } else {
     clearChat();
   }
 }
 
 async function loadChatHistory(sessionId: string, workId: string | null) {
-  const log = $("#chat-log");
-  log.innerHTML = "";
   try {
     const messages = await getSessionHistory(sessionId);
+    setLoomReachable(true);
     const msgs: CachedChatMsg[] = messages
       .filter((m) => m.content && m.content.trim())
       .map((m) => ({
@@ -1443,11 +1912,14 @@ async function loadChatHistory(sessionId: string, workId: string | null) {
         text: m.content,
       }));
     if (workId) {
-      chatCache.set(workId, msgs);
+      chatCache.set(workId, msgs.slice(-CHAT_CACHE_MAX_PER_WORK));
       saveChatCache();
     }
     renderChatMessages(msgs);
-  } catch {
+  } catch (err) {
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+    // Leave the log untouched: the previous conversation stays visible
+    // instead of vanishing on a failed fetch.
     showChatHint();
   }
 }
@@ -1460,16 +1932,18 @@ function syncSessionToWork() {
   if (sid) {
     selectedSessionId = sid;
     const sess = sessions.find((s) => s.id === sid);
-    if (sess?.agent_id) {
-      selectedAgentId = sess.agent_id;
-      renderAgentBar();
-    }
+    // A session with no agent resets the selector to Default instead of
+    // leaving the previous work's agent selected.
+    selectedAgentId = sess?.agent_id || null;
+    renderAgentBar();
     renderSessionBar();
     loadChatForWork(selectedWorkId, sid);
   } else {
     selectedSessionId = null;
+    selectedAgentId = null;
+    renderAgentBar();
     renderSessionBar();
-    clearChat();
+    loadChatForWork(selectedWorkId, null);
   }
 }
 
@@ -1607,32 +2081,37 @@ function selectExperiment(id: string | null) {
 }
 
 function renderExperiments() {
-  const list = $("#exp-list");
-  list.innerHTML = "";
-  if (experiments.length === 0) {
-    const empty = document.createElement("li");
-    empty.className = "exp-empty";
-    empty.textContent = "No experiments yet.";
-    list.append(empty);
-  } else {
-    for (const e of experiments) {
-      const li = document.createElement("li");
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "exp-row" + (e.id === selectedExperimentId ? " selected" : "");
-      const title = document.createElement("span");
-      title.className = "exp-row-title";
-      title.textContent = e.title;
-      const status = document.createElement("span");
-      status.className = `exp-status ${e.status}`;
-      status.textContent = expStatusLabel(e);
-      btn.append(title, status);
-      btn.addEventListener("click", () => selectExperiment(e.id));
-      li.append(btn);
-      list.append(li);
+  withFocusRestore(() => {
+    const list = $("#exp-list");
+    list.innerHTML = "";
+    if (experiments.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "exp-empty";
+      empty.textContent = "No experiments yet.";
+      list.append(empty);
+    } else {
+      for (const e of experiments) {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "exp-row" + (e.id === selectedExperimentId ? " selected" : "");
+        if (e.id === selectedExperimentId) {
+          btn.setAttribute("aria-current", "true");
+        }
+        const title = document.createElement("span");
+        title.className = "exp-row-title";
+        title.textContent = e.title;
+        const status = document.createElement("span");
+        status.className = `exp-status ${e.status}`;
+        status.textContent = expStatusLabel(e);
+        btn.append(title, status);
+        btn.addEventListener("click", () => selectExperiment(e.id));
+        li.append(btn);
+        list.append(li);
+      }
     }
-  }
-  renderExperimentDetail();
+    renderExperimentDetail();
+  });
 }
 
 function expField(label: string, text: string): HTMLElement {
@@ -1707,6 +2186,12 @@ function renderExperimentDetail() {
     const label = document.createElement("strong");
     label.textContent = `Decision: ${decided?.label ?? exp.decision}`;
     dec.append(label);
+    const change = document.createElement("button");
+    change.type = "button";
+    change.className = "btn ghost";
+    change.textContent = "Change decision";
+    change.addEventListener("click", () => clearExperimentDecisionHandler(exp.id));
+    dec.append(change);
     wrap.append(dec);
   } else if (doneArms.length >= 2) {
     const dec = document.createElement("div");
@@ -1769,6 +2254,27 @@ function buildArmRow(exp: Experiment, arm: ExperimentArm): HTMLElement {
     : "The Loom server is offline — an arm run needs it.";
   run.addEventListener("click", () => runExperimentArm(exp, arm));
   actions.append(run);
+  if (arm.status === "running") {
+    // Escape hatch for an arm stuck mid-run (e.g. the app closed while
+    // it was running and the revert never landed).
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "btn ghost";
+    reset.textContent = "Reset";
+    reset.title = "Mark this arm as not running so it can run again.";
+    reset.addEventListener("click", async () => {
+      try {
+        const updated = await setExperimentArmStatus(exp.id, arm.id, "defined");
+        replaceExperiment(updated);
+        renderExperiments();
+      } catch (err) {
+        addChatError(
+          `Could not reset the arm: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    });
+    actions.append(reset);
+  }
   row.append(actions);
   return row;
 }
@@ -1858,6 +2364,7 @@ async function decideExperiment(expId: string, armId: string) {
     const updated = await chooseExperimentArm(expId, armId);
     replaceExperiment(updated);
     renderExperiments();
+    await refreshAttention();
     setSphereState("attention");
     window.setTimeout(() => {
       if (sphereState === "attention") setSphereState("idle");
@@ -1869,12 +2376,31 @@ async function decideExperiment(expId: string, armId: string) {
   }
 }
 
+/** Revoke a recorded decision so the experiment can be decided again. */
+async function clearExperimentDecisionHandler(expId: string) {
+  try {
+    const updated = await clearExperimentDecision(expId);
+    replaceExperiment(updated);
+    renderExperiments();
+    await refreshAttention();
+  } catch (err) {
+    addChatError(
+      `Could not change the decision: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 /** Run one arm as a real Loom request in the current session. */
 async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
   if (!loomReachable) {
     addChatError("The Loom server is offline — an arm run needs it.");
     return;
   }
+  // Capture the work at send time: the reply (and the session link) belong
+  // to the work the run was started from, even if the user switches work
+  // while it is in flight.
+  const workId = selectedWorkId;
+  const cacheKey = workId ?? UNASSIGNED_KEY;
   try {
     const running = await setExperimentArmStatus(exp.id, arm.id, "running");
     replaceExperiment(running);
@@ -1894,9 +2420,7 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
   ].join("\n");
 
   addChatMessage("user", `Run experiment arm: ${arm.label}`);
-  if (selectedWorkId) {
-    cacheChatMessage(selectedWorkId, "user", `Run experiment arm: ${arm.label}`);
-  }
+  cacheChatMessage(cacheKey, "user", `Run experiment arm: ${arm.label}`);
   setSphereState("executing");
   const log = $("#chat-log");
   const typing = document.createElement("div");
@@ -1913,35 +2437,49 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
     );
     typing.remove();
     loomVerified = true;
-    renderStatusPill();
-    addChatMessage("loom", reply.text, reply);
-    if (selectedWorkId) cacheChatMessage(selectedWorkId, "loom", reply.text);
+    setLoomReachable(true);
+    // Append to the visible log only if this work is still selected; the
+    // reply is always cached under the work the run was started from.
+    if (selectedWorkId === workId) {
+      addChatMessage("loom", reply.text, reply);
+    }
+    cacheChatMessage(cacheKey, "loom", reply.text);
     await refreshAgents();
-    // Adopt the session the server reports (it may have auto-created one).
+    // Adopt the session the server reports (it may have auto-created one)
+    // and link it to the work the run was started from.
     if (reply.session_id) {
-      selectedSessionId = reply.session_id;
       if (!sessions.some((s) => s.id === reply.session_id)) {
         await refreshSessions();
       }
-      renderSessionBar();
-      if (selectedWorkId) {
+      if (workId) {
         try {
-          const linked = await setWorkSession(selectedWorkId, reply.session_id);
+          const linked = await setWorkSession(workId, reply.session_id);
           workItems = workItems.map((w) => (w.id === linked.id ? linked : w));
+          renderWorkList();
+          if (selectedWorkId === workId) {
+            selectedSessionId = reply.session_id;
+            renderSessionBar();
+            void loadWorkArtifacts(workId);
+          }
         } catch {
           /* link is best-effort */
         }
+      } else if (selectedWorkId === workId) {
+        selectedSessionId = reply.session_id;
+        renderSessionBar();
       }
     }
     const done = await setExperimentArmResult(exp.id, arm.id, reply.text);
     replaceExperiment(done);
     renderExperiments();
+    await refreshAttention();
     setSphereState("completed");
     window.setTimeout(() => {
       if (sphereState === "completed") setSphereState("idle");
     }, 3000);
   } catch (err) {
     typing.remove();
+    if (isLoomConnectionError(err)) setLoomReachable(false);
     try {
       const reverted = await setExperimentArmStatus(exp.id, arm.id, "defined");
       replaceExperiment(reverted);
@@ -1971,14 +2509,24 @@ const ALL_VIEWS: Mode[] = [
 ];
 
 function closeMenus() {
+  setChatMenu(false);
+}
+
+/** Open/close the chat menu, keeping aria-expanded in sync. */
+function setChatMenu(open: boolean) {
   const chatMenu = $("#chat-menu");
-  if (chatMenu) chatMenu.hidden = true;
+  if (chatMenu) chatMenu.hidden = !open;
+  $("#chat-menu-btn").setAttribute("aria-expanded", String(open));
 }
 
 function renderStatusPill() {
   const pill = $("#loom-status");
   const text = $("#loom-status-text");
-  if (loomVerified) {
+  if (!loomStatusKnown) {
+    text.textContent = "Checking Loom…";
+    pill.classList.remove("live");
+    pill.title = "Checking whether the Loom server answers on localhost:5006.";
+  } else if (loomVerified) {
     text.textContent = "Connected to Loom";
     pill.classList.add("live");
     pill.title = "A verified Loom response was received from localhost:5006.";
@@ -2044,6 +2592,9 @@ function loadNote() {
 }
 
 function saveNote() {
+  // A workspace file is open in the editor, not a note: saving here would
+  // overwrite the current note with the file's text.
+  if (openFilePath) return;
   const editor = $("#code-editor") as HTMLTextAreaElement;
   localStorage.setItem(noteKey(currentNote), editor.value);
 }
@@ -2104,7 +2655,7 @@ async function init() {
     const target = e.target as HTMLElement;
     if (!target.closest("#chat-menu") && !target.closest("#chat-menu-btn")) {
       const chatMenu = $("#chat-menu");
-      if (chatMenu) chatMenu.hidden = true;
+      if (chatMenu && !chatMenu.hidden) setChatMenu(false);
     }
   });
   document.addEventListener("keydown", (e) => {
@@ -2120,6 +2671,25 @@ async function init() {
       } else {
         closeMenus();
       }
+      return;
+    }
+    // Focus trap for the modal left drawer: Tab cycles within it instead
+    // of moving into the page behind the scrim.
+    if (e.key === "Tab" && document.body.classList.contains("left-open")) {
+      const drawer = $("#left-col");
+      const focusables = [...drawer.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
+      )].filter((el) => el.offsetParent !== null);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   });
 
@@ -2132,9 +2702,15 @@ async function init() {
     else openLeftDrawer(e.currentTarget as HTMLElement);
   });
   $("#context-toggle").addEventListener("click", (e) => {
-    // The inspector holds Context only. In drawer mode this opens it;
-    // its ✕ button or Escape closes it.
-    openInspector(e.currentTarget as HTMLElement);
+    // A real toggle at drawer widths; at desktop widths the inspector is
+    // always visible, so the button is a no-op there.
+    if (isInspectorDrawer()) {
+      if (document.body.classList.contains("inspector-open")) {
+        closeInspector();
+      } else {
+        openInspector(e.currentTarget as HTMLElement);
+      }
+    }
   });
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
   $("#right-close").addEventListener("click", () => closeInspector());
@@ -2162,16 +2738,14 @@ async function init() {
   $("#chat-menu-btn").addEventListener("click", (e) => {
     e.stopPropagation();
     const menu = $("#chat-menu");
-    menu.hidden = !menu.hidden;
+    setChatMenu(!menu.hidden);
   });
   $("#chat-clear").addEventListener("click", () => {
     const log = $("#chat-log");
     log.innerHTML = "";
     showChatHint();
-    if (selectedWorkId) {
-      chatCache.delete(selectedWorkId);
-      saveChatCache();
-    }
+    chatCache.delete(selectedWorkId ?? UNASSIGNED_KEY);
+    saveChatCache();
     closeMenus();
   });
 
@@ -2218,12 +2792,22 @@ async function init() {
     }
   });
 
-  // Collaboration + attention (empty until the Loom server exposes them).
+  // Collaboration + attention (attention is real: experiments waiting
+  // for a decision). The status probe runs first so the first paint does
+  // not flash "offline" while the server is actually up.
+  try {
+    const status = await getLoomStatus();
+    setLoomReachable(status.online);
+  } catch {
+    setLoomReachable(false);
+  }
   collabSteps = await getCollaboration();
   attentionItems = await getAttention();
   renderInspectorContext();
 
   // Workspace views.
+  loadLayers();
+  applyLayerClasses();
   renderAgents();
   renderEvidence();
   renderLayers();
@@ -2239,29 +2823,30 @@ async function init() {
   renderExperiments();
   $("#exp-new").addEventListener("click", () => openNewExperimentForm());
 
-  // Loom server status: "Server reachable" is the TCP probe;
-  // "Connected to Loom" only after a verified live reply.
-  const status = await getLoomStatus();
-  loomReachable = status.online;
-  renderStatusPill();
-
   // Workflows + artifacts (real Loom server; honest empty when offline).
   try {
     workflows = await listWorkflows();
-  } catch {
+    setLoomReachable(true);
+  } catch (err) {
     workflows = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
   }
   try {
     executions = await listWorkflowExecutions();
-  } catch {
+    setLoomReachable(true);
+  } catch (err) {
     executions = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
   }
   try {
     artifacts = await listArtifacts();
-  } catch {
+    setLoomReachable(true);
+  } catch (err) {
     artifacts = [];
+    if (isLoomConnectionError(err)) setLoomReachable(false);
   }
   renderWorkDetail();
+  if (selectedWorkId) void loadWorkArtifacts(selectedWorkId);
 
   // Sessions + agents (from the Loom server). The selected work item's
   // session is the source of truth for the conversation; switch to it.
@@ -2269,6 +2854,23 @@ async function init() {
   await refreshSessions();
   loadChatCache();
   syncSessionToWork();
+  // Restore the saved session/agent selection when no work item supplies
+  // one (the keys were previously written but never read back).
+  if (!selectedSessionId) {
+    const savedSession = localStorage.getItem(SESSION_KEY);
+    if (savedSession && sessions.some((s) => s.id === savedSession)) {
+      selectedSessionId = savedSession;
+      renderSessionBar();
+      loadChatForWork(selectedWorkId, savedSession);
+    }
+  }
+  if (!selectedAgentId) {
+    const savedAgent = localStorage.getItem(AGENT_KEY);
+    if (savedAgent && agents.some((a) => (a.name || a.id) === savedAgent)) {
+      selectedAgentId = savedAgent;
+      renderAgentBar();
+    }
+  }
 
   $("#session-select").addEventListener("change", async (e) => {
     const v = (e.target as HTMLSelectElement).value;
@@ -2280,11 +2882,15 @@ async function init() {
       try {
         const updated = await setWorkSession(selectedWorkId, v || null);
         workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
+        renderWorkList();
       } catch {
         /* link is best-effort */
       }
+      void loadWorkArtifacts(selectedWorkId);
     }
-    if (v) loadChatHistory(v, selectedWorkId);
+    // Cache-first: the work's cached conversation survives a session
+    // change, and the log is only replaced once the history fetch succeeds.
+    if (v) loadChatForWork(selectedWorkId, v);
     else clearChat();
   });
   $("#agent-select").addEventListener("change", (e) => {
@@ -2304,9 +2910,15 @@ async function init() {
         try {
           const updated = await setWorkSession(selectedWorkId, created.id);
           workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
+          renderWorkList();
         } catch {
           /* link is best-effort */
         }
+        // A new session starts a fresh thread: the work's cached
+        // conversation is cleared with it (same as "Clear chat").
+        chatCache.delete(selectedWorkId);
+        saveChatCache();
+        void loadWorkArtifacts(selectedWorkId);
       }
       clearChat();
       focusChat();

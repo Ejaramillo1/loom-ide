@@ -13,6 +13,10 @@ export interface WorkItem {
   status: "active" | "paused";
   autonomy: "manual" | "assisted" | "collaborative" | "delegated";
   updated_label: string;
+  // Unix seconds of the last mutation (0 for items written before the
+  // backend tracked it). The UI renders relative time from this; the
+  // label above is legacy.
+  updated_at: number;
   // The Loom session associated with this work item (if any).
   session_id?: string | null;
   success_criteria?: string[];
@@ -113,6 +117,24 @@ export interface WorkflowExecution {
   started_at: number;
   completed_at: number;
   error: string;
+  // The run's recorded output, when the server returns it.
+  result?: WorkflowResult | null;
+}
+
+export interface WorkflowResult {
+  pattern_type?: string;
+  agent_results?: { agent_id?: string; output?: string }[];
+  merged_output?: string;
+  duration_ms?: number;
+  cost?: number;
+  trace_id?: string;
+}
+
+export interface ExecuteWorkflowResponse {
+  execution_id: string;
+  // The run's recorded output, when the server returns it with the
+  // execute response.
+  result?: WorkflowResult | null;
 }
 
 export interface Artifact {
@@ -121,6 +143,8 @@ export interface Artifact {
   purpose: string;
   source: string;
   created_at: number;
+  // The session that produced this artifact, when the server reports it.
+  session_id?: string;
 }
 
 const IN_TAURI =
@@ -166,6 +190,7 @@ export async function addWorkItem(title: string): Promise<WorkItem> {
       status: "paused",
       autonomy: "collaborative",
       updated_label: "Now",
+      updated_at: Math.floor(Date.now() / 1000),
     };
     saveLocalWorkItems([item, ...items]);
     return item;
@@ -215,8 +240,9 @@ export async function setWorkSession(
   return invoke<WorkItem>("set_work_session", { id, sessionId });
 }
 
-// The Loom server does not expose step-by-step execution or attention
-// items yet, so these return empty until it does. No seed data.
+// The Loom server does not expose step-by-step execution yet, so
+// collaboration stays empty. Attention is real: the backend returns the
+// experiment decisions already waiting locally. No seed data.
 export async function getCollaboration(): Promise<CollabStep[]> {
   if (!IN_TAURI) return [];
   return invoke<CollabStep[]>("get_collaboration");
@@ -225,6 +251,20 @@ export async function getCollaboration(): Promise<CollabStep[]> {
 export async function getAttention(): Promise<AttentionItem[]> {
   if (!IN_TAURI) return [];
   return invoke<AttentionItem[]>("get_attention");
+}
+
+// Commands below run only inside the Tauri app. In a plain browser
+// (vite dev) they throw a clear error instead of a raw invoke failure.
+async function invokeCmd<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  if (!IN_TAURI) {
+    throw new Error(
+      `"${command}" needs the Tauri app — it is not available in the browser preview.`,
+    );
+  }
+  return invoke<T>(command, args);
 }
 
 export async function getLoomStatus(): Promise<LoomStatus> {
@@ -274,42 +314,42 @@ export async function askLoom(
 // ---- Sessions + agents (real Loom server; fail honestly when offline) ----
 
 export async function listSessions(): Promise<Session[]> {
-  return invoke<Session[]>("list_sessions");
+  return invokeCmd<Session[]>("list_sessions");
 }
 
 export async function createSession(
   name?: string,
   agentId?: string,
 ): Promise<Session> {
-  return invoke<Session>("create_session", { name, agentId });
+  return invokeCmd<Session>("create_session", { name, agentId });
 }
 
 export async function listAgents(): Promise<Agent[]> {
-  return invoke<Agent[]>("list_agents");
+  return invokeCmd<Agent[]>("list_agents");
 }
 
 export async function getSessionHistory(sessionId: string): Promise<HistoryMessage[]> {
-  return invoke<HistoryMessage[]>("get_session_history", { sessionId });
+  return invokeCmd<HistoryMessage[]>("get_session_history", { sessionId });
 }
 
 // ---- Workspace explorer (local filesystem; works without the server) ----
 
 export async function listWorkspace(): Promise<DirEntry[]> {
-  return invoke<DirEntry[]>("list_workspace");
+  return invokeCmd<DirEntry[]>("list_workspace");
 }
 
 export async function listDirectory(path: string): Promise<DirEntry[]> {
-  return invoke<DirEntry[]>("list_directory", { path });
+  return invokeCmd<DirEntry[]>("list_directory", { path });
 }
 
 export async function readFile(path: string): Promise<string> {
-  return invoke<string>("read_file", { path });
+  return invokeCmd<string>("read_file", { path });
 }
 
 // ---- Experiments (local definitions; arms run through real Loom calls) ----
 
 export async function getExperiments(): Promise<Experiment[]> {
-  return invoke<Experiment[]>("get_experiments");
+  return invokeCmd<Experiment[]>("get_experiments");
 }
 
 export async function addExperiment(
@@ -317,7 +357,7 @@ export async function addExperiment(
   question: string,
   hypothesis: string,
 ): Promise<Experiment> {
-  return invoke<Experiment>("add_experiment", { title, question, hypothesis });
+  return invokeCmd<Experiment>("add_experiment", { title, question, hypothesis });
 }
 
 export async function addExperimentArm(
@@ -325,7 +365,7 @@ export async function addExperimentArm(
   label: string,
   config: string,
 ): Promise<Experiment> {
-  return invoke<Experiment>("add_experiment_arm", { id, label, config });
+  return invokeCmd<Experiment>("add_experiment_arm", { id, label, config });
 }
 
 export async function setExperimentArmStatus(
@@ -333,7 +373,7 @@ export async function setExperimentArmStatus(
   armId: string,
   status: string,
 ): Promise<Experiment> {
-  return invoke<Experiment>("set_experiment_arm_status", { id, armId, status });
+  return invokeCmd<Experiment>("set_experiment_arm_status", { id, armId, status });
 }
 
 export async function setExperimentArmResult(
@@ -341,14 +381,18 @@ export async function setExperimentArmResult(
   armId: string,
   result: string,
 ): Promise<Experiment> {
-  return invoke<Experiment>("set_experiment_arm_result", { id, armId, result });
+  return invokeCmd<Experiment>("set_experiment_arm_result", { id, armId, result });
 }
 
 export async function chooseExperimentArm(
   id: string,
   armId: string,
 ): Promise<Experiment> {
-  return invoke<Experiment>("choose_experiment_arm", { id, armId });
+  return invokeCmd<Experiment>("choose_experiment_arm", { id, armId });
+}
+
+export async function clearExperimentDecision(id: string): Promise<Experiment> {
+  return invokeCmd<Experiment>("clear_experiment_decision", { id });
 }
 
 // ---- Work detail: success criteria + attachments (local, via work store) ----
@@ -357,30 +401,40 @@ export async function setWorkSuccessCriteria(
   id: string,
   criteria: string[],
 ): Promise<WorkItem> {
-  return invoke<WorkItem>("set_work_success_criteria", { id, criteria });
+  return invokeCmd<WorkItem>("set_work_success_criteria", { id, criteria });
 }
 
 export async function setWorkArtifacts(
   id: string,
   artifactIds: string[],
 ): Promise<WorkItem> {
-  return invoke<WorkItem>("set_work_artifacts", { id, artifactIds });
+  return invokeCmd<WorkItem>("set_work_artifacts", { id, artifactIds });
 }
 
 // ---- Workflows + artifacts (real Loom server) ----
 
 export async function listWorkflows(): Promise<Workflow[]> {
-  return invoke<Workflow[]>("list_workflows");
+  return invokeCmd<Workflow[]>("list_workflows");
 }
 
-export async function executeWorkflow(workflowRef: string): Promise<string> {
-  return invoke<string>("execute_workflow", { workflowRef });
+export async function executeWorkflow(
+  workflowRef: string,
+): Promise<ExecuteWorkflowResponse> {
+  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef });
+}
+
+export async function getWorkflowExecution(
+  executionId: string,
+): Promise<WorkflowExecution> {
+  return invokeCmd<WorkflowExecution>("get_workflow_execution", { executionId });
 }
 
 export async function listWorkflowExecutions(): Promise<WorkflowExecution[]> {
-  return invoke<WorkflowExecution[]>("list_workflow_executions");
+  return invokeCmd<WorkflowExecution[]>("list_workflow_executions");
 }
 
-export async function listArtifacts(): Promise<Artifact[]> {
-  return invoke<Artifact[]>("list_artifacts");
+export async function listArtifacts(sessionId?: string): Promise<Artifact[]> {
+  return sessionId
+    ? invokeCmd<Artifact[]>("list_artifacts", { sessionId })
+    : invokeCmd<Artifact[]>("list_artifacts");
 }

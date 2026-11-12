@@ -79,7 +79,7 @@ not just *what*; it lets people rehearse at lower autonomy; it keeps a visible
 trail of what they decided so they can learn from their own history.
 
 - Design rule: every automated step keeps a "show me how" view. Skill use is
-  measured, not assumed (see `07-validation-strategy.md`).
+  measured, not assumed (see `research/07-validation-strategy.md`).
 
 ## Quiet Complexity — what it means in practice
 

@@ -10,11 +10,11 @@ established findings kept separate from our own speculation.*
 - **Transfer** = our judgement about how that principle applies to an
   AI-native work surface. Defensible, but not proven here.
 - **Speculative** = a hypothesis this project should test, not assume.
-  Each one is picked up again in `07-validation-strategy.md`.
+  Each one is picked up again in `research/07-validation-strategy.md`.
 
 No runtime behaviour of Loom was tested for this document. Loom claims are
 limited to what its own documentation states (see
-`05-loom-architecture-assessment.md`).
+`research/05-loom-assessment.md`).
 
 ## Part 1 — The minimalist designers
 
@@ -110,7 +110,7 @@ this project did not re-run any of these studies.
 | S6 | Seeing how the system did something preserves the person's own skill. | Watching is not doing; skill may still fade. |
 
 Each speculation maps to a testable hypothesis in
-`07-validation-strategy.md`.
+`research/07-validation-strategy.md`.
 
 ## What this means for the design, in one paragraph
 
@@ -121,4 +121,4 @@ harder to build: a small number of persistent, honestly-labelled objects;
 automation whose level the person sets and can feel; evidence that is one
 step away rather than on display; and interruptions that are rare enough to
 mean something. That is Quiet Complexity, and it is the standard the concepts
-in `04-ux-concepts.md` are judged against.
+in `research/04-ux-concepts.md` are judged against.

@@ -43,6 +43,9 @@ export class Sphere {
 
   setState(state: SphereState) {
     this.state = state;
+    // Under reduced motion there is no animation loop, so repaint now or
+    // the tint freezes on the first state.
+    if (this.reducedMotion) this.draw(0);
   }
 
   startAnimation() {

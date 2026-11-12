@@ -2,7 +2,7 @@
 
 *The objects people work with, how they relate, and how control moves between
 person and system. No code — this is the contract the concepts in
-`04-ux-concepts.md` share.*
+`research/04-ux-concepts.md` share.*
 
 ## The fundamental objects
 
@@ -33,7 +33,7 @@ state, evidence, and a control setting. Chat remains available as a way to
 | **Trust** | Not a setting — an outcome. The interface supports it by showing track record (past evidence) rather than asking for it. |
 | **Identity** | Which agent or person did this. Shown in provenance; agents are named by role ("researcher"), never dressed as people. |
 | **Time** | Every object shows age and last change. Stale evidence looks stale. Checkpoints make "go back to before this" a normal action. |
-| **Collaboration** | More than one person (or a person plus system) on the same object, with clear ownership per piece of work. Loom's task system explicitly does *not* yet solve simultaneous human/agent editing of the same task — flagged as a gap in `05-loom-architecture-assessment.md`. |
+| **Collaboration** | More than one person (or a person plus system) on the same object, with clear ownership per piece of work. Loom's task system explicitly does *not* yet solve simultaneous human/agent editing of the same task — flagged as a gap in `research/05-loom-assessment.md`. |
 
 ## Relationships
 

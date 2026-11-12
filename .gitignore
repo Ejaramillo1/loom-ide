@@ -16,6 +16,19 @@ dist-ssr
 src-tauri/target/
 src-tauri/gen/
 
+# Build-tooling state (not source): Craft Anything / investigation files
+# committed by mistake in 2026-11-11 — kept out of future commits.
+craft.json
+feed.json
+transcript.json
+usage.json
+build-activity.log
+investigation.cany/
+capture/
+checks/
+inbox/
+pinned/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

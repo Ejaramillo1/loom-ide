@@ -12,4 +12,7 @@ You need Node.js and npm installed. The launcher installs the project's dependen
 
 To open the desktop window instead, run `npm run tauri dev` from the project folder. This also requires Rust and the Tauri system dependencies described in the main README.
 
-The interface works without a Loom server using labeled demonstration data. To use live chat, start your configured Loom server separately with `looms serve --http-port 5006`.
+The interface works without a Loom server, but with honest empty states
+and errors instead of data: there is no demonstration data anywhere in
+the app. To use live chat, start your configured Loom server separately
+with `looms serve --http-port 5006`.
