@@ -333,6 +333,14 @@ select {
   font-weight: 600;
 }
 
+/* The Conversation toggle is always shown: the panel is closed by
+   default at every width, so the toggle is the way to open it. (The
+   Work and Context toggles only appear at drawer widths, where the
+   panels they control hide behind a drawer.) */
+#chat-toggle {
+  display: inline-flex;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -562,17 +570,23 @@ select {
   color: var(--muted);
 }
 
-/* ---------- Conversation, always live in the left column ---------- */
+/* ---------- Conversation, on demand in the left column ---------- */
 /* The chat sits directly below the work list, not in a drawer or a
-   tab: it is always rendered and the input is always ready to type.
-   The work list keeps the flexible share of the column; the chat keeps
-   a fixed share (clamped so it stays usable at short window heights). */
-.left-col .work-panel {
+   tab. It is closed by default, so the work list takes the full
+   column while it is closed. When open, the work list keeps a fixed
+   share of the column and the chat keeps the rest (clamped so it
+   stays usable at short window heights). */
+.left-col .left-chat {
+  display: none;
+}
+
+body.chat-open .left-col .work-panel {
   flex: 0 0 36%;
   min-height: 120px;
 }
 
-.left-col .left-chat {
+body.chat-open .left-col .left-chat {
+  display: flex;
   flex: 1 1 auto;
   min-height: 320px;
   border-top: 1px solid rgba(221, 213, 208, 0.7);
@@ -2272,4 +2286,242 @@ select {
 .evidence-list li {
   padding: 5px 0;
   font-size: 13.5px;
+}
+
+/* ---------- Intent header (pinned above the work detail, Work mode) ---------- */
+/* Lives inside #view-work, so it only shows in Work mode and stays
+   pinned while the detail below scrolls. */
+
+.intent-header {
+  flex-shrink: 0;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.intent-header .field-error {
+  padding-left: 0;
+}
+
+.intent-label {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.intent-statement {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+.intent-why {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.intent-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.intent-badge {
+  font-size: 11.5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.intent-badge.done {
+  color: var(--ok);
+  border-color: rgba(63, 122, 84, 0.4);
+}
+
+.intent-checklist {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.intent-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13.5px;
+}
+
+.intent-checklist li span {
+  flex: 1;
+  min-width: 0;
+}
+
+.intent-checklist li.done span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.intent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Empty state: one line that creates the first intent. */
+
+.intent-empty-prompt {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.intent-empty-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.intent-empty-form input {
+  flex: 1;
+  min-width: 200px;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+}
+
+/* Inline editor (in the header area, no modal). */
+
+.intent-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.intent-editor h3 {
+  font-size: 16px;
+}
+
+.intent-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.intent-field-label {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.intent-field input[type="text"],
+.intent-field textarea {
+  font-size: 13.5px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.intent-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.intent-field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.intent-criteria-edit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.intent-criteria-edit li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.intent-criteria-edit li input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.intent-history ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.intent-history li {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.intent-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn.danger {
+  color: var(--danger);
+}
+
+/* Work detail: the intent its work belongs to. */
+
+.ws-intent {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12.5px;
+}
+
+.ws-intent-label {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.ws-intent-link {
+  color: var(--agent-deep);
+  text-align: left;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.ws-intent-link:hover {
+  text-decoration: underline;
 }

@@ -6,11 +6,14 @@ import {
   askLoom,
   chooseExperimentArm,
   clearExperimentDecision,
+  createIntent,
   createSession,
+  deleteIntent,
   executeWorkflow,
   getAttention,
   getCollaboration,
   getExperiments,
+  getIntents,
   getLoomStatus,
   getSessionHistory,
   getWorkflowExecution,
@@ -23,13 +26,17 @@ import {
   listWorkflows,
   listWorkspace,
   readFile,
+  setActiveIntent,
   setExperimentArmResult,
   setExperimentArmStatus,
+  setIntentAcceptance,
   setWorkArtifacts,
   setWorkAutonomy,
   setWorkSession,
   setWorkStatus,
   setWorkSuccessCriteria,
+  updateIntent,
+  type AcceptanceCriterion,
   type Agent,
   type Artifact,
   type AttentionItem,
@@ -38,6 +45,8 @@ import {
   type DirEntry,
   type Experiment,
   type ExperimentArm,
+  type Intent,
+  type IntentAutonomy,
   type Session,
   type Workflow,
   type WorkflowExecution,
@@ -95,6 +104,11 @@ const NOTE_DOCS: { id: string; title: string; detail: string; kind: NoteKind }[]
 
 let workItems: WorkItem[] = [];
 let selectedWorkId: string | null = null;
+/** Intents (the primary object): one intent owns many pieces of work. */
+let intents: Intent[] = [];
+let activeIntentId: string | null = null;
+/** The intent editor open in the pinned header; null when closed. */
+let intentEditor: { mode: "create" } | { mode: "edit"; id: string } | null = null;
 let mode: Mode = "experiment";
 let sphereState: SphereState = "idle";
 let currentNote: NoteKind = "design";
@@ -322,6 +336,528 @@ function selectWork(id: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Intent header, pinned above the work detail in Work mode (Concept B,
+// "Intent lives as pinned header"). Shows the active intent: what the
+// person wants, why, what "done" means, and how much freedom the
+// system has. One intent owns many pieces of work.
+// ---------------------------------------------------------------------------
+
+/** Autonomy levels from the interaction model: L1 Manual, L2 Assisted,
+    L3 Collaborative, L4 Delegated. */
+const AUTONOMY_LEVELS: Record<IntentAutonomy, { level: number; label: string }> = {
+  manual: { level: 1, label: "Manual" },
+  assisted: { level: 2, label: "Assisted" },
+  collaborative: { level: 3, label: "Collaborative" },
+  delegated: { level: 4, label: "Delegated" },
+};
+
+function autonomyLabel(a: IntentAutonomy): string {
+  const entry = AUTONOMY_LEVELS[a];
+  return `L${entry.level} · ${entry.label}`;
+}
+
+function activeIntent(): Intent | null {
+  return intents.find((i) => i.id === activeIntentId) ?? null;
+}
+
+/** Reload intents from the backend (or the browser fallback) and
+    re-render the pinned header. */
+async function refreshIntents(): Promise<void> {
+  try {
+    const list = await getIntents();
+    intents = list.intents;
+    activeIntentId = list.active_intent_id;
+  } catch {
+    intents = [];
+    activeIntentId = null;
+  }
+  renderIntentHeader();
+}
+
+function renderIntentHeader() {
+  withFocusRestore(() => {
+    const header = document.querySelector<HTMLElement>("#intent-header");
+    if (!header) return;
+    header.innerHTML = "";
+    if (intentEditor) {
+      header.append(buildIntentEditor(intentEditor));
+      return;
+    }
+    if (intents.length === 0) {
+      header.append(buildIntentEmptyState());
+      return;
+    }
+    const active = activeIntent();
+    if (!active) {
+      header.append(buildIntentChooser());
+      return;
+    }
+    header.append(buildIntentSummary(active));
+  });
+}
+
+/** No intents at all: one line invites creating one. */
+function buildIntentEmptyState(): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "intent-empty";
+  const label = document.createElement("p");
+  label.className = "intent-label";
+  label.textContent = "Intent";
+  const prompt = document.createElement("p");
+  prompt.className = "intent-empty-prompt";
+  prompt.textContent = "What are you trying to do?";
+  const form = document.createElement("form");
+  form.className = "intent-empty-form";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "State the intent, in one line…";
+  input.setAttribute("aria-label", "New intent");
+  const create = document.createElement("button");
+  create.type = "submit";
+  create.className = "btn";
+  create.textContent = "Create intent";
+  const error = document.createElement("span");
+  error.className = "field-error";
+  error.hidden = true;
+  form.append(input, create, error);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const statement = input.value.trim();
+    if (!statement) return;
+    clearFieldError(error);
+    try {
+      const created = await createIntent({ statement });
+      await setActiveIntent(created.id);
+      await refreshIntents();
+    } catch (err) {
+      showFieldError(
+        error,
+        `Could not create the intent: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
+  root.append(label, prompt, form);
+  return root;
+}
+
+/** Intents exist but none is active: choose one. */
+function buildIntentChooser(): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "intent-summary";
+  const label = document.createElement("p");
+  label.className = "intent-label";
+  label.textContent = "Intent";
+  const text = document.createElement("p");
+  text.className = "intent-why";
+  text.textContent = "No active intent. Choose one to work on.";
+  const actions = document.createElement("div");
+  actions.className = "intent-actions";
+  actions.append(buildIntentSwitchSelect(), newIntentButton());
+  root.append(label, text, actions);
+  return root;
+}
+
+/** Dropdown of all intents; picking one makes it the active intent. */
+function buildIntentSwitchSelect(): HTMLSelectElement {
+  const select = document.createElement("select");
+  select.className = "autonomy-select";
+  select.setAttribute("aria-label", "Switch active intent");
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Switch intent…";
+  select.append(placeholder);
+  for (const intent of intents) {
+    const opt = document.createElement("option");
+    opt.value = intent.id;
+    opt.textContent = intent.statement;
+    if (intent.id === activeIntentId) opt.selected = true;
+    select.append(opt);
+  }
+  select.addEventListener("change", async () => {
+    if (!select.value) return;
+    try {
+      await setActiveIntent(select.value);
+      intentEditor = null;
+      await refreshIntents();
+    } catch (err) {
+      addChatError(
+        `Could not switch intent: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      renderIntentHeader();
+    }
+  });
+  return select;
+}
+
+function newIntentButton(): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn";
+  btn.textContent = "New intent";
+  btn.addEventListener("click", () => {
+    intentEditor = { mode: "create" };
+    renderIntentHeader();
+    document
+      .querySelector<HTMLInputElement>("#intent-header .intent-statement-input")
+      ?.focus();
+  });
+  return btn;
+}
+
+/** The active intent: statement, version badge, acceptance checklist,
+    autonomy label, status. */
+function buildIntentSummary(intent: Intent): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "intent-summary";
+
+  const label = document.createElement("p");
+  label.className = "intent-label";
+  label.textContent = "Intent";
+  root.append(label);
+
+  const statement = document.createElement("p");
+  statement.className = "intent-statement";
+  statement.textContent = intent.statement;
+  root.append(statement);
+
+  if (intent.why) {
+    const why = document.createElement("p");
+    why.className = "intent-why";
+    why.textContent = intent.why;
+    root.append(why);
+  }
+
+  const badges = document.createElement("div");
+  badges.className = "intent-badges";
+  const version = document.createElement("span");
+  version.className = "intent-badge";
+  version.textContent = `v${intent.version}`;
+  version.title = "Version. Editing the statement, why, or autonomy creates a new version.";
+  const autonomy = document.createElement("span");
+  autonomy.className = "intent-badge";
+  autonomy.textContent = autonomyLabel(intent.autonomy);
+  const status = document.createElement("span");
+  status.className = "intent-badge" + (intent.status === "done" ? " done" : "");
+  status.textContent = intent.status === "done" ? "Done" : "Active";
+  badges.append(version, autonomy, status);
+  root.append(badges);
+
+  // Acceptance checklist: ticking toggles a criterion (no version bump).
+  const criteria = intent.acceptance ?? [];
+  if (criteria.length === 0) {
+    const none = document.createElement("p");
+    none.className = "intent-why";
+    none.textContent = "No acceptance criteria yet. Edit the intent to add what done means.";
+    root.append(none);
+  } else {
+    const ul = document.createElement("ul");
+    ul.className = "intent-checklist";
+    criteria.forEach((c, i) => {
+      const li = document.createElement("li");
+      if (c.done) li.className = "done";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = c.done;
+      box.setAttribute("aria-label", `Mark done: ${c.text}`);
+      box.addEventListener("change", async () => {
+        const next = criteria.map((item, idx) =>
+          idx === i ? { ...item, done: box.checked } : item,
+        );
+        try {
+          await setIntentAcceptance({ id: intent.id, criteria: next });
+          await refreshIntents();
+        } catch (err) {
+          box.checked = !box.checked;
+          addChatError(
+            `Could not save the acceptance: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      });
+      const text = document.createElement("span");
+      text.textContent = c.text;
+      li.append(box, text);
+      ul.append(li);
+    });
+    root.append(ul);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "intent-actions";
+  actions.append(buildIntentSwitchSelect());
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "btn";
+  edit.textContent = "Edit";
+  edit.addEventListener("click", () => {
+    intentEditor = { mode: "edit", id: intent.id };
+    renderIntentHeader();
+    document
+      .querySelector<HTMLInputElement>("#intent-header .intent-statement-input")
+      ?.focus();
+  });
+  actions.append(edit, newIntentButton());
+  root.append(actions);
+  return root;
+}
+
+/** One row of the editor's acceptance list: done box, text, remove. */
+function buildCriterionRow(text: string, done: boolean): HTMLLIElement {
+  const li = document.createElement("li");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = done;
+  box.setAttribute("aria-label", "Criterion done");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = text;
+  input.setAttribute("aria-label", "Acceptance criterion");
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "icon-btn small";
+  remove.title = "Remove criterion";
+  remove.setAttribute("aria-label", `Remove criterion: ${text}`);
+  remove.textContent = "✕";
+  remove.addEventListener("click", () => li.remove());
+  li.append(box, input, remove);
+  return li;
+}
+
+/** Read the editor's acceptance rows from the DOM (rows are added and
+    removed in place, so the editor never rebuilds under the user's
+    keystrokes). */
+function readCriterionRows(list: HTMLUListElement): AcceptanceCriterion[] {
+  const out: AcceptanceCriterion[] = [];
+  for (const li of list.querySelectorAll("li")) {
+    const text =
+      (li.querySelector("input[type='text']") as HTMLInputElement)?.value ?? "";
+    const done =
+      (li.querySelector("input[type='checkbox']") as HTMLInputElement)?.checked ??
+      false;
+    if (text.trim()) out.push({ text: text.trim(), done });
+  }
+  return out;
+}
+
+/** Inline editor in the header area (no modal): statement, why,
+    acceptance criteria, autonomy, status, plus the read-only version
+    history and delete (edit mode only). */
+function buildIntentEditor(
+  editor: { mode: "create" } | { mode: "edit"; id: string },
+): HTMLElement {
+  const existing =
+    editor.mode === "edit" ? intents.find((i) => i.id === editor.id) : undefined;
+  const form = document.createElement("form");
+  form.className = "intent-editor";
+
+  const heading = document.createElement("h3");
+  heading.textContent = editor.mode === "create" ? "New intent" : "Edit intent";
+  form.append(heading);
+
+  const statementField = document.createElement("label");
+  statementField.className = "intent-field";
+  const statementLabel = document.createElement("span");
+  statementLabel.className = "intent-field-label";
+  statementLabel.textContent = "What are you trying to do?";
+  const statementInput = document.createElement("input");
+  statementInput.type = "text";
+  statementInput.className = "intent-statement-input";
+  statementInput.value = existing?.statement ?? "";
+  statementInput.setAttribute("aria-label", "Intent statement");
+  statementField.append(statementLabel, statementInput);
+  form.append(statementField);
+
+  const whyField = document.createElement("label");
+  whyField.className = "intent-field";
+  const whyLabel = document.createElement("span");
+  whyLabel.className = "intent-field-label";
+  whyLabel.textContent = "Why does it matter?";
+  const whyInput = document.createElement("textarea");
+  whyInput.rows = 2;
+  whyInput.value = existing?.why ?? "";
+  whyInput.setAttribute("aria-label", "Why this intent matters");
+  whyField.append(whyLabel, whyInput);
+  form.append(whyField);
+
+  const accField = document.createElement("div");
+  accField.className = "intent-field";
+  const accLabel = document.createElement("span");
+  accLabel.className = "intent-field-label";
+  accLabel.textContent = "Acceptance: what done means";
+  const accList = document.createElement("ul");
+  accList.className = "intent-criteria-edit";
+  for (const c of existing?.acceptance ?? []) {
+    accList.append(buildCriterionRow(c.text, c.done));
+  }
+  const accAdd = document.createElement("div");
+  accAdd.className = "add-criterion";
+  const accInput = document.createElement("input");
+  accInput.type = "text";
+  accInput.placeholder = "Add a criterion…";
+  accInput.setAttribute("aria-label", "New acceptance criterion");
+  const accAddBtn = document.createElement("button");
+  accAddBtn.type = "button";
+  accAddBtn.className = "btn ghost";
+  accAddBtn.textContent = "Add";
+  accAddBtn.addEventListener("click", () => {
+    const text = accInput.value.trim();
+    if (!text) return;
+    accList.append(buildCriterionRow(text, false));
+    accInput.value = "";
+    accInput.focus();
+  });
+  accAdd.append(accInput, accAddBtn);
+  accField.append(accLabel, accList, accAdd);
+  form.append(accField);
+
+  const row = document.createElement("div");
+  row.className = "intent-editor-row";
+  const autonomyField = document.createElement("label");
+  autonomyField.className = "intent-field inline";
+  const autonomyLabelEl = document.createElement("span");
+  autonomyLabelEl.className = "intent-field-label";
+  autonomyLabelEl.textContent = "Autonomy";
+  const autonomySelect = document.createElement("select");
+  autonomySelect.className = "autonomy-select";
+  autonomySelect.setAttribute("aria-label", "Autonomy level");
+  for (const level of ["manual", "assisted", "collaborative", "delegated"] as const) {
+    const opt = document.createElement("option");
+    opt.value = level;
+    opt.textContent = autonomyLabel(level);
+    if ((existing?.autonomy ?? "collaborative") === level) opt.selected = true;
+    autonomySelect.append(opt);
+  }
+  autonomyField.append(autonomyLabelEl, autonomySelect);
+  const statusField = document.createElement("label");
+  statusField.className = "intent-field inline";
+  const statusLabelEl = document.createElement("span");
+  statusLabelEl.className = "intent-field-label";
+  statusLabelEl.textContent = "Status";
+  const statusSelect = document.createElement("select");
+  statusSelect.className = "autonomy-select";
+  statusSelect.setAttribute("aria-label", "Intent status");
+  for (const s of ["active", "done"] as const) {
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = capitalize(s);
+    if ((existing?.status ?? "active") === s) opt.selected = true;
+    statusSelect.append(opt);
+  }
+  statusField.append(statusLabelEl, statusSelect);
+  row.append(autonomyField, statusField);
+  form.append(row);
+
+  if (existing && existing.history.length > 0) {
+    const hist = document.createElement("div");
+    hist.className = "intent-history";
+    const histLabel = document.createElement("p");
+    histLabel.className = "intent-field-label";
+    histLabel.textContent = "Previous versions";
+    hist.append(histLabel);
+    const ul = document.createElement("ul");
+    for (const h of existing.history) {
+      const li = document.createElement("li");
+      const when = h.updated_at > 0 ? ` (${formatUnix(h.updated_at)})` : "";
+      li.textContent = `v${h.version}: ${h.statement}${when}`;
+      ul.append(li);
+    }
+    hist.append(ul);
+    form.append(hist);
+  }
+
+  const error = document.createElement("span");
+  error.className = "field-error";
+  error.hidden = true;
+
+  const actions = document.createElement("div");
+  actions.className = "intent-editor-actions";
+  const save = document.createElement("button");
+  save.type = "submit";
+  save.className = "btn";
+  save.textContent = editor.mode === "create" ? "Create intent" : "Save changes";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "btn ghost";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => {
+    intentEditor = null;
+    renderIntentHeader();
+  });
+  actions.append(save, cancel);
+  if (editor.mode === "edit" && existing) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn ghost danger";
+    del.textContent = "Delete intent";
+    del.addEventListener("click", async () => {
+      clearFieldError(error);
+      del.disabled = true;
+      try {
+        await deleteIntent(existing.id);
+        intentEditor = null;
+        await refreshIntents();
+        renderWorkDetail();
+      } catch (err) {
+        del.disabled = false;
+        showFieldError(error, err instanceof Error ? err.message : String(err));
+      }
+    });
+    actions.append(del);
+  }
+  form.append(actions, error);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const statement = statementInput.value.trim();
+    if (!statement) {
+      showFieldError(error, "State the intent in one line first.");
+      statementInput.focus();
+      return;
+    }
+    clearFieldError(error);
+    save.disabled = true;
+    const criteria = readCriterionRows(accList);
+    const why = whyInput.value.trim();
+    const autonomy = autonomySelect.value as IntentAutonomy;
+    const status = statusSelect.value as "active" | "done";
+    try {
+      if (editor.mode === "create") {
+        const created = await createIntent({ statement, why, acceptance: criteria, autonomy });
+        await setActiveIntent(created.id);
+        if (status === "done") {
+          await updateIntent({ id: created.id, status: "done" });
+        }
+        intentEditor = null;
+        await refreshIntents();
+      } else if (existing) {
+        const updated = await updateIntent({
+          id: existing.id,
+          statement,
+          why,
+          autonomy,
+          status,
+        });
+        // Acceptance is a separate call and never bumps the version.
+        const criteriaChanged =
+          JSON.stringify(updated.acceptance) !== JSON.stringify(criteria);
+        if (criteriaChanged) {
+          await setIntentAcceptance({ id: existing.id, criteria });
+        }
+        intentEditor = null;
+        await refreshIntents();
+      }
+    } catch (err) {
+      save.disabled = false;
+      showFieldError(
+        error,
+        `Could not save the intent: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
+
+  return form;
+}
+
+// ---------------------------------------------------------------------------
 // Work summary component (spec section 6) — the detail view's header.
 // Title on its own first row, metadata on its own line, controls below
 // the text. Never clamps the full title.
@@ -358,6 +894,40 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
   meta.className = "ws-meta";
   meta.textContent = metaLabel(item);
   body.append(title, meta);
+
+  // The intent this work belongs to: clicking it makes that intent the
+  // active one. Work created before intents existed has none and shows
+  // no line.
+  const intent = item.intent_id
+    ? intents.find((i) => i.id === item.intent_id)
+    : undefined;
+  if (intent) {
+    const intentRow = document.createElement("div");
+    intentRow.className = "ws-intent";
+    const intentLabel = document.createElement("span");
+    intentLabel.className = "ws-intent-label";
+    intentLabel.textContent = "Intent:";
+    const intentBtn = document.createElement("button");
+    intentBtn.type = "button";
+    intentBtn.className = "ws-intent-link";
+    intentBtn.textContent = intent.statement;
+    intentBtn.title = "Make this intent the active one";
+    intentBtn.addEventListener("click", async () => {
+      try {
+        await setActiveIntent(intent.id);
+        intentEditor = null;
+        await refreshIntents();
+        renderWorkDetail();
+      } catch (err) {
+        addChatError(
+          `Could not switch intent: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    });
+    intentRow.append(intentLabel, intentBtn);
+    body.append(intentRow);
+  }
+
   top.append(dot, body);
 
   // Row 2: planning preference + supported local action.
@@ -1129,7 +1699,7 @@ function updateScrim() {
 }
 
 // The inspector holds Context only now. The chat lives in the left
-// column and is always visible, so there is no tab to switch and no
+// column and opens on demand, so there is no tab to switch and no
 // inspector state for the conversation.
 function openInspector(opener?: HTMLElement) {
   if (opener) lastFocus = opener;
@@ -1152,13 +1722,59 @@ function closeInspector() {
   }
 }
 
-/** The chat lives in the left column and is always visible; this just
-    brings it into view (opening the left drawer on narrow screens) and
-    focuses the message box. */
-function focusChat(from?: HTMLElement) {
-  if (isLeftDrawer()) {
-    openLeftDrawer(from);
+// ---------------------------------------------------------------------------
+// Conversation panel — on demand, closed by default
+// ---------------------------------------------------------------------------
+
+const CHAT_OPEN_KEY = "loom-ide-tauri:chat-open";
+
+/** Whether the Conversation panel is open. Closed by default: the work
+    objects are the record, and the chat is a way to create and discuss
+    them, not the place they live. */
+let chatOpen = false;
+
+function loadChatOpen() {
+  try {
+    const raw = localStorage.getItem(CHAT_OPEN_KEY);
+    if (!raw) return;
+    const value = JSON.parse(raw) as unknown;
+    if (typeof value === "boolean") chatOpen = value;
+  } catch {
+    /* ignore */
   }
+}
+
+function saveChatOpen() {
+  try {
+    localStorage.setItem(CHAT_OPEN_KEY, JSON.stringify(chatOpen));
+  } catch {
+    /* ignore */
+  }
+}
+
+function applyChatOpen() {
+  document.body.classList.toggle("chat-open", chatOpen);
+  $("#chat-toggle").setAttribute("aria-expanded", String(chatOpen));
+}
+
+/** Show or hide the Conversation panel in place. Opening it on narrow
+    screens also opens the left drawer, so the panel is reachable there.
+    Hiding it changes nothing about the conversation: the session
+    binding, the per-work cache, and the draft are all untouched. */
+function setChatOpen(open: boolean, opener?: HTMLElement) {
+  chatOpen = open;
+  saveChatOpen();
+  applyChatOpen();
+  if (open && isLeftDrawer()) {
+    openLeftDrawer(opener);
+  }
+}
+
+/** The chat lives in the left column and opens on demand; this opens
+    it (and the left drawer on narrow screens) and focuses the message
+    box. */
+function focusChat(from?: HTMLElement) {
+  setChatOpen(true, from);
   ($("#chat-text") as HTMLInputElement).focus();
 }
 
@@ -2712,6 +3328,11 @@ async function init() {
       }
     }
   });
+  $("#chat-toggle").addEventListener("click", (e) => {
+    // A real toggle at every width: the Conversation panel is closed by
+    // default, so this is the way to open it on wide screens too.
+    setChatOpen(!chatOpen, e.currentTarget as HTMLElement);
+  });
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
   $("#right-close").addEventListener("click", () => closeInspector());
   $("#scrim").addEventListener("click", () => closeLeftDrawer());
@@ -2749,7 +3370,17 @@ async function init() {
     closeMenus();
   });
 
+  // Intent header: pinned above the work detail in Work mode. It lives
+  // inside #view-work, so it only shows in Work mode. Created here (not
+  // in index.html) so the header renders from state, like the work
+  // detail below it.
+  const intentHeader = document.createElement("header");
+  intentHeader.id = "intent-header";
+  intentHeader.className = "intent-header";
+  $("#view-work").prepend(intentHeader);
+
   // Work
+  await refreshIntents();
   workItems = await getWorkItems();
   selectedWorkId = workItems[0]?.id ?? null;
   renderWorkList();
@@ -2764,9 +3395,12 @@ async function init() {
     const title = input.value.trim();
     if (!title) return;
     try {
-      const item = await addWorkItem(title);
+      const item = await addWorkItem(title, activeIntentId);
       workItems = [item, ...workItems];
       input.value = "";
+      // The backend may have auto-created a one-line intent for this
+      // work when no intent was active; pick it up in the header.
+      await refreshIntents();
       // Give the new work its own Loom session when the server is up.
       if (loomReachable) {
         try {
@@ -2806,6 +3440,8 @@ async function init() {
   renderInspectorContext();
 
   // Workspace views.
+  loadChatOpen();
+  applyChatOpen();
   loadLayers();
   applyLayerClasses();
   renderAgents();

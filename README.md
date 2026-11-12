@@ -20,10 +20,10 @@ whitespace.
 
 Three rows, no absolute positioning:
 
-- **Header (~56px)** — current objective, Work and Context toggles,
+- **Header (~56px)** — current objective, Work, Context, and Conversation toggles,
   a search input that filters the work list, and the Loom status pill.
 - **Main (flexible)** — icon rail (48px), work catalogue (~260px)
-  with the Conversation always live below the work list, center floor
+  with the Conversation available on demand below the work list, center floor
   (min ~520px), right inspector (~280px, Context only).
 - **Footer (~56px)** — the mode switcher, in normal flow:
   **Experiment · Work · Code · Agents · Evidence · Layers · Artifacts**.
@@ -35,9 +35,10 @@ scrolling bodies and never clip.
 the right inspector behind the labeled **Context** toggle. < ~1100px
 also moves the left catalogue behind the **Work** toggle. The
 Conversation is not a drawer or a tab: it lives in the left column
-directly below the work list, and it is always visible and ready to
-type — in every mode, at every width. Below ~1100px it travels with
-the left drawer, so it is reached through the **Work** toggle there.
+directly below the work list, opened on demand with the
+**Conversation** toggle in the header and closed by default, in every
+mode, at every width. Below ~1100px it travels with the left drawer,
+so opening it there opens the drawer too.
 An unsent message is saved as you type, so it survives closing the
 drawer and restarting the app. Drawers close with Escape and return
 focus to the control that opened them. Drawers span only the main
@@ -72,7 +73,8 @@ transparent; that was a misunderstanding and was reverted.)
   notes, saved locally, both starting empty) plus the workspace
   explorer: a read-only tree over the Loom workspace directory
   (`~/.loom`), click a text file to open it. "Ask about this note"
-  sends the note to Loom through the always-visible Conversation.
+  sends the note to Loom through the Conversation (opening it first
+  if it is closed).
 - **Agents** — the agents from `GET /v1/agents`: name, status dot,
   uptime, active sessions, message count. Empty ("No agents running")
   only when the server reports none.
@@ -92,7 +94,7 @@ switcher — show the same current destination.
 
 ## What it is
 
-- **Backend (Rust, `src-tauri/`)** — Tauri 2 commands (30):
+- **Backend (Rust, `src-tauri/`)** — Tauri 2 commands (36):
   - Work: `get_work_items` / `add_work_item` / `set_work_status` /
     `set_work_autonomy` / `set_work_session` /
     `set_work_success_criteria` / `set_work_artifacts` — work items
@@ -100,6 +102,21 @@ switcher — show the same current destination.
     like the existing eframe app. The store starts empty; work items
     come from the user creating them. Saves are atomic (temp file +
     fsync + rename); a corrupt file is moved aside, never overwritten.
+  - Intents: `get_intents` / `create_intent` / `update_intent` /
+    `set_intent_acceptance` / `set_active_intent` / `delete_intent` —
+    an Intent is what the person wants, why, what "done" means
+    (acceptance checklist), and how much freedom the system has.
+    Persisted in `<app-data>/loom-ide/intents.json` with the same
+    atomic-save and corrupt-file protection as work items. One intent
+    owns many work items; the active intent is pinned at the top of
+    the workspace. No work exists without an intent: creating work
+    with no active intent auto-creates a one-line intent from its
+    title. Work inherits its intent's autonomy, and a work item's
+    autonomy can never be raised above its intent's level. Editing an
+    intent's statement, why, or autonomy bumps its version and keeps
+    the previous version in history; ticking acceptance criteria does
+    not bump the version. An intent with work attached cannot be
+    deleted until that work is moved or removed.
   - Experiments: `get_experiments` / `add_experiment` /
     `add_experiment_arm` / `set_experiment_arm_status` /
     `set_experiment_arm_result` / `choose_experiment_arm` /

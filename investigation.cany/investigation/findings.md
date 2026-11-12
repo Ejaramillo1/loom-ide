@@ -1,4 +1,0 @@
-# Findings
-
-- **fnd_1** The partial Loom source inventory includes Go packages for agent configuration/registry/context/memory/session storage, TUI adapters, MCP/Supabase/Teradata backends, artifacts, collaboration and generated protobuf/gRPC gateway files. This establishes file presence, not implementation behavior. (Seen it; evidence: ev_9d0bef30a39ddbcd1cd218156e54f8a48b18e0db54b0bc4c854f2b961874f8a0)
-- **fnd_2** The filenames suggest a Go agent orchestration architecture: a terminal interface fronts configurable agents with tool/backend integrations, memory/session handling and workflow patterns. Exact initialization and request flow remain unverified because source text could not be read with available investigation tools. (Best guess; evidence: ev_9d0bef30a39ddbcd1cd218156e54f8a48b18e0db54b0bc4c854f2b961874f8a0)
