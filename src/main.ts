@@ -484,9 +484,11 @@ function isLeftDrawer(): boolean {
 }
 
 function updateScrim() {
-  const open =
-    document.body.classList.contains("inspector-open") ||
-    document.body.classList.contains("left-open");
+  // The inspector (Context / Conversation) is a non-modal drawer: it never
+  // raises the scrim and never closes on an outside click, so it stays put
+  // while the user works elsewhere in the app. Only the left (work)
+  // drawer is modal and raises the scrim.
+  const open = document.body.classList.contains("left-open");
   $("#scrim").hidden = !open;
 }
 
@@ -509,9 +511,15 @@ function openInspector(tab: "context" | "conversation", opener?: HTMLElement) {
     document.body.classList.add("inspector-open");
     toggle.setAttribute("aria-expanded", "true");
     updateScrim();
-    ($("#right-close") as HTMLButtonElement).focus();
   } else {
     toggle.setAttribute("aria-expanded", "true");
+  }
+  // The conversation opens ready to type: focus goes to the message box.
+  // Focus must never land on the drawer's close button — a focused close
+  // button fires on the first Space or Enter, which closed the panel
+  // while the user was trying to write a message.
+  if (tab === "conversation") {
+    ($("#chat-text") as HTMLInputElement).focus();
   }
 }
 
@@ -710,6 +718,19 @@ function applySearchFilter(query: string) {
 // Chat — starts empty; no invented replies. When the Loom server cannot
 // be reached, the failure is shown as a connection error.
 // ---------------------------------------------------------------------------
+
+/** The unsent message, kept across close/reopen (and app restarts). */
+const CHAT_DRAFT_KEY = "loom-ide-tauri:chat-draft";
+
+function saveChatDraft() {
+  const input = $("#chat-text") as HTMLInputElement;
+  localStorage.setItem(CHAT_DRAFT_KEY, input.value);
+}
+
+function restoreChatDraft() {
+  const input = $("#chat-text") as HTMLInputElement;
+  input.value = localStorage.getItem(CHAT_DRAFT_KEY) ?? "";
+}
 
 function showChatHint() {
   const log = $("#chat-log");
@@ -1026,15 +1047,16 @@ async function init() {
     else openLeftDrawer(e.currentTarget as HTMLElement);
   });
   $("#context-toggle").addEventListener("click", (e) => {
-    if (document.body.classList.contains("inspector-open")) closeInspector();
-    else openInspector("context", e.currentTarget as HTMLElement);
+    // Switching tabs never closes the inspector. Only its ✕ button or
+    // Escape closes it, so the conversation stays put while in use.
+    openInspector("context", e.currentTarget as HTMLElement);
   });
   $("#conversation-btn").addEventListener("click", (e) => {
     openInspector("conversation", e.currentTarget as HTMLElement);
   });
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
   $("#right-close").addEventListener("click", () => closeInspector());
-  $("#scrim").addEventListener("click", () => closeDrawers());
+  $("#scrim").addEventListener("click", () => closeLeftDrawer());
   window.addEventListener("resize", () => {
     if (!isInspectorDrawer()) {
       document.body.classList.remove("inspector-open");
@@ -1120,13 +1142,17 @@ async function init() {
   loomReachable = status.online;
   renderStatusPill();
 
-  // Chat starts empty, with a short hint.
+  // Chat starts empty, with a short hint. A draft typed earlier is
+  // restored, so closing the panel never loses an unsent message.
   showChatHint();
+  restoreChatDraft();
+  $("#chat-text").addEventListener("input", saveChatDraft);
   $("#chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = $("#chat-text") as HTMLInputElement;
     const text = input.value;
     input.value = "";
+    localStorage.removeItem(CHAT_DRAFT_KEY);
     await sendChat(text);
   });
 
