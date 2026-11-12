@@ -30,6 +30,8 @@ use store::{
 
 #[cfg(test)]
 mod gateway_tests;
+#[cfg(test)]
+mod workspace_tests;
 
 /// Deserialize an `i64` that may arrive either as a JSON number or as a
 /// JSON string. The Loom gateway (grpc-gateway / protojson) encodes every
@@ -1654,15 +1656,12 @@ struct DirEntry {
 }
 
 /// List a directory's entries: directories first, then files, each
-/// alphabetically; hidden entries (dotfiles) are skipped.
+/// alphabetically. Include dotfiles so files such as .gitignore are visible.
 fn list_dir_entries(dir: &Path) -> Result<Vec<DirEntry>, String> {
     let read = std::fs::read_dir(dir).map_err(|e| format!("Cannot read {}: {e}", dir.display()))?;
     let mut out: Vec<DirEntry> = Vec::new();
     for entry in read.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
-            continue;
-        }
         let path = entry.path();
         out.push(DirEntry {
             name,
@@ -1690,6 +1689,76 @@ fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
         return Err(format!("Not a directory: {}", target.display()));
     }
     list_dir_entries(&target)
+}
+
+/// Create a single entry without replacing anything that already exists.
+fn create_workspace_entry_at(
+    root: &Path,
+    parent: &str,
+    name: &str,
+    is_dir: bool,
+) -> Result<DirEntry, String> {
+    let name = name.trim();
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains(['/', '\\'])
+        || name.chars().any(char::is_control)
+    {
+        return Err(
+            "Enter a file or folder name without path separators or control characters.".into(),
+        );
+    }
+    let root = root
+        .canonicalize()
+        .map_err(|e| format!("Workspace not found: {e}"))?;
+    let requested = Path::new(parent);
+    let parent = if requested.is_absolute() {
+        requested.to_path_buf()
+    } else {
+        root.join(requested)
+    };
+    let parent = parent
+        .canonicalize()
+        .map_err(|e| format!("Cannot open destination folder: {e}"))?;
+    if !parent.starts_with(&root) {
+        return Err("Destination is outside the workspace.".into());
+    }
+    if !parent.is_dir() {
+        return Err("Destination is not a folder.".into());
+    }
+    let target = parent.join(name);
+    let result = if is_dir {
+        std::fs::create_dir(&target)
+    } else {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map(|_| ())
+    };
+    result.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            format!("An entry named \"{name}\" already exists in this folder.")
+        } else {
+            format!("Could not create \"{name}\": {e}")
+        }
+    })?;
+    Ok(DirEntry {
+        name: name.into(),
+        path: target.display().to_string(),
+        is_dir,
+    })
+}
+
+#[tauri::command]
+fn create_workspace_file(parent: String, name: String) -> Result<DirEntry, String> {
+    create_workspace_entry_at(&loom_data_dir(), &parent, &name, false)
+}
+
+#[tauri::command]
+fn create_workspace_directory(parent: String, name: String) -> Result<DirEntry, String> {
+    create_workspace_entry_at(&loom_data_dir(), &parent, &name, true)
 }
 
 /// Read a text file from within the workspace, bounded and UTF-8 only.
@@ -1828,6 +1897,8 @@ pub fn run() {
             clear_experiment_decision,
             list_workspace,
             list_directory,
+            create_workspace_file,
+            create_workspace_directory,
             read_file
         ])
         .run(tauri::generate_context!())

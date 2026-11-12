@@ -791,6 +791,14 @@ export async function listDirectory(path: string): Promise<DirEntry[]> {
   return invokeCmd<DirEntry[]>("list_directory", { path });
 }
 
+export async function createWorkspaceFile(parent: string, name: string): Promise<DirEntry> {
+  return invokeCmd<DirEntry>("create_workspace_file", { parent, name });
+}
+
+export async function createWorkspaceDirectory(parent: string, name: string): Promise<DirEntry> {
+  return invokeCmd<DirEntry>("create_workspace_directory", { parent, name });
+}
+
 export async function readFile(path: string): Promise<string> {
   return invokeCmd<string>("read_file", { path });
 }

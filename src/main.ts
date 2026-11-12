@@ -8,6 +8,8 @@ import {
   clearExperimentDecision,
   createIntent,
   createSession,
+  createWorkspaceDirectory,
+  createWorkspaceFile,
   deleteIntent,
   executeWorkflow,
   getAgent,
@@ -3268,14 +3270,93 @@ function syncSessionToWork() {
 }
 
 // ---------------------------------------------------------------------------
-// Workspace explorer — a read-only tree over the Loom workspace (~/.loom).
-// Lists all its directories and files; clicking a text file opens it in the
-// editor read-only. Independent of the Loom server.
+// Workspace explorer over the Loom workspace (~/.loom). Files and folders
+// can be created; text files open read-only. Independent of the Loom server.
 // ---------------------------------------------------------------------------
 
 const dirCache = new Map<string, DirEntry[]>();
 const expandedDirs = new Set<string>();
 let openFilePath: string | null = null;
+let fileCreation: { kind: "file" | "folder"; parent: string } | null = null;
+let fileCreationPending = false;
+
+function beginFileCreation(kind: "file" | "folder", parent = "") {
+  if (fileCreationPending) return;
+  fileCreation = { kind, parent };
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) menu.open = false;
+  $("#file-create-form").hidden = false;
+  $("#file-create-label").textContent = kind === "file" ? "File name" : "Folder name";
+  $("#file-create-submit").textContent = kind === "file" ? "Create file" : "Create folder";
+  $("#file-create-destination").textContent = parent ? `In: ${parent}` : "In: workspace root";
+  $("#file-create-error").hidden = true;
+  $("#file-tree-status").hidden = true;
+  const input = $("#file-create-name") as HTMLInputElement;
+  input.value = "";
+  input.placeholder = kind === "file" ? "Filename, including extension" : "Folder name";
+  input.focus();
+}
+
+function cancelFileCreation() {
+  if (fileCreationPending) return;
+  const kind = fileCreation?.kind;
+  fileCreation = null;
+  $("#file-create-form").hidden = true;
+  $(kind === "folder" ? "#file-new-folder" : "#file-new-file").focus();
+}
+
+async function submitFileCreation(event: SubmitEvent) {
+  event.preventDefault();
+  if (!fileCreation || fileCreationPending) return;
+  const { kind, parent } = fileCreation;
+  const input = $("#file-create-name") as HTMLInputElement;
+  const name = input.value.trim();
+  const error = $("#file-create-error");
+  if (!name) {
+    error.textContent = "Enter a name.";
+    error.hidden = false;
+    input.focus();
+    return;
+  }
+  fileCreationPending = true;
+  const controls = document.querySelectorAll<HTMLInputElement | HTMLButtonElement>("#file-create-form input, #file-create-form button");
+  controls.forEach((control) => control.disabled = true);
+  $("#file-create-submit").textContent = "Creating…";
+  error.hidden = true;
+  let created: DirEntry;
+  try {
+    created = kind === "file"
+      ? await createWorkspaceFile(parent, name)
+      : await createWorkspaceDirectory(parent, name);
+  } catch (err) {
+    error.textContent = err instanceof Error ? err.message : String(err);
+    error.hidden = false;
+    return;
+  } finally {
+    fileCreationPending = false;
+    controls.forEach((control) => control.disabled = false);
+    $("#file-create-submit").textContent = kind === "file" ? "Create file" : "Create folder";
+    if (!error.hidden) input.focus();
+  }
+  // Creation succeeded. A failed refresh must not invite a duplicate retry.
+  fileCreation = null;
+  $("#file-create-form").hidden = true;
+  const status = $("#file-tree-status");
+  status.hidden = false;
+  status.textContent = `Created ${kind}: ${created.name}`;
+  try {
+    dirCache.set(parent, parent ? await listDirectory(parent) : await listWorkspace());
+    if (parent) expandedDirs.add(parent);
+    if (created.is_dir) {
+      expandedDirs.add(created.path);
+      dirCache.set(created.path, []);
+    }
+    renderFileTree();
+  } catch (err) {
+    status.textContent = `Created ${kind}: ${created.name}. Could not refresh the folder: ${err instanceof Error ? err.message : String(err)}. Use Refresh to reload it.`;
+  }
+  if (!created.is_dir) await openFile(created.path);
+  else $("#file-new-folder").focus();
+}
 
 function renderFileTree() {
   const tree = $("#file-tree");
@@ -3313,6 +3394,43 @@ function appendTreeNodes(parent: HTMLElement, entries: DirEntry[], depth: number
       btn.addEventListener("click", () => openFile(entry.path));
     }
     row.append(btn);
+    if (entry.is_dir) {
+      const actions = document.createElement("details");
+      actions.className = "tree-actions";
+      const toggle = document.createElement("summary");
+      toggle.textContent = "⋯";
+      toggle.title = `Create in ${entry.name}`;
+      toggle.setAttribute("aria-label", `Actions for folder ${entry.name}`);
+      const menu = document.createElement("div");
+      menu.className = "tree-action-menu";
+      for (const kind of ["file", "folder"] as const) {
+        const create = document.createElement("button");
+        create.type = "button";
+        create.textContent = kind === "file" ? "New file" : "New folder";
+        create.addEventListener("click", () => beginFileCreation(kind, entry.path));
+        menu.append(create);
+      }
+      actions.append(toggle, menu);
+      actions.addEventListener("toggle", () => {
+        if (actions.open) {
+          for (const other of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) {
+            if (other !== actions) other.open = false;
+          }
+        }
+      });
+      row.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        actions.open = true;
+        menu.querySelector("button")?.focus();
+      });
+      actions.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          actions.open = false;
+          toggle.focus();
+        }
+      });
+      row.append(actions);
+    }
     parent.append(row);
     if (entry.is_dir && expandedDirs.has(entry.path)) {
       appendTreeNodes(parent, dirCache.get(entry.path) ?? [], depth + 1);
@@ -4369,10 +4487,25 @@ async function init() {
   });
 
   // Workspace explorer (local filesystem; independent of the server).
+  $("#file-new-file").addEventListener("click", () => beginFileCreation("file"));
+  $("#file-new-folder").addEventListener("click", () => beginFileCreation("folder"));
+  $("#file-create-form").addEventListener("submit", (event) => {
+    void submitFileCreation(event as SubmitEvent);
+  });
+  $("#file-create-cancel").addEventListener("click", cancelFileCreation);
+  $("#file-create-name").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelFileCreation();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element) || event.target.closest(".tree-actions")) return;
+    for (const menu of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) menu.open = false;
+  });
   $("#file-tree-refresh").addEventListener("click", () => {
-    dirCache.delete("");
+    dirCache.clear();
     expandedDirs.clear();
-    openFilePath = null;
     loadWorkspaceTree();
   });
   loadWorkspaceTree();

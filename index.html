@@ -133,8 +133,23 @@
                 <aside class="file-tree" aria-label="Workspace files">
                   <div class="file-tree-head">
                     <span>Workspace</span>
-                    <button class="icon-btn small" id="file-tree-refresh" type="button" title="Refresh" aria-label="Refresh workspace">↻</button>
+                    <div class="file-tree-actions">
+                      <button class="icon-btn small" id="file-new-file" type="button" title="New file in workspace" aria-label="New file in workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 12v6M9 15h6"/></svg></button>
+                      <button class="icon-btn small" id="file-new-folder" type="button" title="New folder in workspace" aria-label="New folder in workspace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2zM12 11v6M9 14h6"/></svg></button>
+                      <button class="icon-btn small" id="file-tree-refresh" type="button" title="Refresh" aria-label="Refresh workspace">↻</button>
+                    </div>
                   </div>
+                  <form id="file-create-form" class="file-create-form" hidden>
+                    <label id="file-create-label" for="file-create-name">File name</label>
+                    <p id="file-create-destination" class="file-create-destination"></p>
+                    <input id="file-create-name" type="text" required autocomplete="off" spellcheck="false" aria-describedby="file-create-error" />
+                    <p id="file-create-error" class="file-create-error" role="alert" hidden></p>
+                    <div class="file-create-buttons">
+                      <button id="file-create-submit" class="btn" type="submit">Create file</button>
+                      <button id="file-create-cancel" class="btn ghost" type="button">Cancel</button>
+                    </div>
+                  </form>
+                  <p id="file-tree-status" class="file-tree-status" role="status" hidden></p>
                   <div id="file-tree" class="file-tree-body"></div>
                 </aside>
                 <div class="code-panel">
