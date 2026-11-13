@@ -9,6 +9,20 @@ Workbench. It remains a prototype, but both Editor Play Mode and a standalone
 Linux player have been verified. It uses the same dark palette as
 `../design-tokens.json`.
 
+## Embedded in Tauri
+
+With the Unity Editor connected, run from the repository root:
+
+```bash
+unity command script eval --file Tools/BuildWeb.cs \
+  --project-path "$PWD/unity-memory-palace" --timeout 900 --format json
+npm run tauri dev
+```
+
+Choose **Spatial → Enter workbench**. WebGL files are generated into ignored `public/spatial/`; build them before packaging Tauri. Use the Vite URL or Tauri application, rather than opening source `index.html` with `file://`.
+
+Embedded object memories are read from the default repository vault’s `10 Fleeting Notes` folder. **Keep at bench** creates a new note; previous saves remain intact. Reopening an object reads its newest spatial note, including body edits made in Living Workbench. Use **Knowledge → Refresh files from disk** there to discover saves. Custom vaults and moved/renamed spatial files are not tracked.
+
 ## Open and use
 
 From the repository root:
@@ -34,8 +48,7 @@ The scene reads only the number of records in Tauri's `work.json` and
 unreadable or unrecognized files appear as zero records. Unity never changes or
 repairs those files.
 
-Text kept with a spatial object uses Unity PlayerPrefs and is not yet synced to
-the Workbench vault or Loom server.
+Editor and standalone object memories use Unity PlayerPrefs. The embedded WebGL player uses the native vault bridge instead; these PlayerPrefs are not migrated. The WebGL player does not read local Tauri record counts or connect to the Loom server.
 
 ## Source and verification
 

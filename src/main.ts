@@ -1,5 +1,6 @@
 import "./theme";
 import { openLivingWorkbench } from "./api";
+import { installSpatialWorkbench } from "./spatial";
 import "./style.css";
 import {
   addExperiment,
@@ -85,7 +86,7 @@ import { installAppMenu, textEditingActions } from "./app-menu";
 // State
 // ---------------------------------------------------------------------------
 
-type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "artifacts";
+type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "artifacts" | "spatial";
 
 type NoteKind = "design" | "scratch";
 type RightTab = "context" | "conversation";
@@ -135,7 +136,7 @@ let intents: Intent[] = [];
 let activeIntentId: string | null = null;
 /** The intent editor open in the pinned header; null when closed. */
 let intentEditor: { mode: "create" } | { mode: "edit"; id: string } | null = null;
-let mode: Mode = "code";
+let mode: Mode = "spatial";
 let sphereState: SphereState = "idle";
 let currentNote: NoteKind | null = null;
 let artifactTab: "artifacts" | "documents" = "artifacts";
@@ -4402,6 +4403,7 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
 // ---------------------------------------------------------------------------
 
 const ALL_VIEWS: Mode[] = [
+  "spatial",
   "experiment",
   "work",
   "code",
@@ -4733,9 +4735,19 @@ async function init() {
   rightWasDrawer = isRightDrawer();
   applyRightPane();
   initAppMenu();
-  // The initial Code view is usable before any Loom requests finish.
+  // Initialize local views before any Loom requests finish.
   initCodeEditor();
   initWorkspaceExplorer();
+  installSpatialWorkbench();
+  $("#open-living-workbench").addEventListener("click", async () => {
+    const status = $("#workbench-navigation-status");
+    try {
+      await openLivingWorkbench();
+      status.textContent = "Living Workbench opened. Return here through File → Go to Tauri environment.";
+    } catch (error) {
+      status.textContent = String(error);
+    }
+  });
   // The footer provides the primary mode navigation.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));

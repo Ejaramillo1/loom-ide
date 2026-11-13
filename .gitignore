@@ -42,6 +42,7 @@ pinned/
 target/
 
 # Unity Memory Palace: keep source and settings, ignore generated state/builds.
+public/spatial/
 unity-memory-palace/[Ll]ibrary/
 unity-memory-palace/[Tt]emp/
 unity-memory-palace/[Oo]bj/
@@ -58,3 +59,6 @@ unity-memory-palace/Assets/TutorialInfo.meta
 unity-memory-palace/Assets/TutorialInfo/
 unity-memory-palace/Assets/Scenes/SampleScene.unity*
 docs/unity-resolute-workbench-selected.png
+
+# Generated WebGL Burst output.
+unity-memory-palace/Data/

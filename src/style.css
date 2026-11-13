@@ -814,6 +814,14 @@ button, input, textarea, select { accent-color: var(--agent); }
   display: none;
 }
 
+.scene[data-mode="spatial"] .main { grid-template-columns: minmax(0, 1fr); }
+.scene[data-mode="spatial"] :is(.left-col, .right-col, #work-toggle) { display: none; }
+#view-spatial { border-radius: var(--radius-panel); overflow: hidden; background: var(--reading); }
+#spatial-status { color: var(--muted); font-size: 12px; margin: 0; padding: 0 16px 8px; }
+#workbench-navigation-status:empty { display: none; }
+#workbench-navigation-status { color: var(--muted); font-size: 12px; margin: 0; padding: 0 16px 8px; }
+#spatial-frame { border: 0; width: 100%; flex: 1; min-height: 0; }
+
 #sphere {
   width: 148px;
   height: 148px;

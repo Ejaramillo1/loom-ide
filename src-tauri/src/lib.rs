@@ -24,8 +24,26 @@ mod experiment;
 #[path = "../../shared/navigation.rs"]
 mod navigation;
 use experiment::{Experiment, ExperimentStore};
+mod spatial;
 mod store;
 mod workspace;
+
+#[tauri::command]
+fn save_spatial_memory(object: String, body: String) -> Result<String, String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("Repository unavailable")?
+        .join("native-app/Research Vault");
+    spatial::save(&root, &object, &body)
+}
+#[tauri::command]
+fn read_spatial_memory(object: String) -> Result<String, String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("Repository unavailable")?
+        .join("native-app/Research Vault");
+    spatial::read(&root, &object)
+}
 use store::{
     AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem, WorkStore,
     autonomy_rank,
@@ -1924,6 +1942,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_living_workbench,
+            save_spatial_memory,
+            read_spatial_memory,
             get_work_items,
             add_work_item,
             set_work_status,

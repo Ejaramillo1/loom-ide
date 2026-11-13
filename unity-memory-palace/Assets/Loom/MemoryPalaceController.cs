@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -37,6 +38,24 @@ namespace Loom.MemoryPalace
         float distance = 11f;
         bool reduceMotion;
         string draft = "";
+        string savedDraft = "";
+        string saveStatus = "";
+        bool saving;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")] static extern void LoomMemory(string action, string objectName, string body);
+#endif
+        [Serializable] sealed class MemoryResult { public bool ok; public string action; public string body; public string message; }
+        public void OnMemoryResult(string json)
+        {
+            var result = JsonUtility.FromJson<MemoryResult>(json);
+            saving = false;
+            saveStatus = result.message;
+            if (result.ok)
+            {
+                if (result.action == "read") draft = result.body;
+                savedDraft = draft;
+            }
+        }
         LocalDataSummary localData;
         GUIStyle titleStyle;
         GUIStyle bodyStyle;
@@ -198,6 +217,9 @@ namespace Loom.MemoryPalace
                 "Experiments" => $"{portal.Description} · {localData.ExperimentCount} saved",
                 _ => portal.Description,
             };
+#if UNITY_WEBGL && !UNITY_EDITOR
+            description = portal.Description;
+#endif
             anchor.Initialize(portal.Name, description, portal.Color, label.transform);
             return anchor;
         }
@@ -222,6 +244,7 @@ namespace Loom.MemoryPalace
 
         void ReadPointer()
         {
+            if (selected != null) return;
             var mouse = Mouse.current;
             if (mouse == null) return;
             var position = mouse.position.ReadValue();
@@ -244,6 +267,7 @@ namespace Loom.MemoryPalace
         void PickMemory()
         {
             hovered = null;
+            if (selected != null) return;
             var mouse = Mouse.current;
             if (mouse == null || UnityEngine.EventSystems.EventSystem.current != null
                 && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
@@ -253,32 +277,56 @@ namespace Loom.MemoryPalace
             if (hovered != null && mouse.leftButton.wasPressedThisFrame)
             {
                 selected = hovered;
+#if UNITY_WEBGL && !UNITY_EDITOR
+                draft = savedDraft = "";
+                saving = true;
+                saveStatus = "Opening memory…";
+                LoomMemory("read", selected.Key, "");
+#else
                 draft = PlayerPrefs.GetString($"loom.memory.{selected.Key}", "");
+                savedDraft = draft;
+                saveStatus = "";
+#endif
             }
         }
 
         void OnGUI()
         {
             EnsureStyles();
+            var scale = Mathf.Min(1f, Screen.width / 1000f, Screen.height / 520f);
+            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
+            var width = Screen.width / scale;
             GUI.Label(new Rect(28f, 22f, 620f, 38f), "LOOM  /  RESOLUTE WORKBENCH", titleStyle);
             GUI.Label(new Rect(30f, 60f, 700f, 28f), "A spatial bench for making knowledge · select a tool or workpiece", smallStyle);
 
-            if (GUI.Button(new Rect(Screen.width - 172f, 24f, 144f, 34f), reduceMotion ? "Motion: reduced" : "Motion: ambient"))
+            if (GUI.Button(new Rect(width - 172f, 24f, 144f, 34f), reduceMotion ? "Motion: reduced" : "Motion: ambient"))
                 reduceMotion = !reduceMotion;
 
             if (selected == null) return;
-            var panel = new Rect(Screen.width - 352f, 82f, 324f, 300f);
+            var panel = new Rect(width - 352f, 82f, 324f, 360f);
             GUI.Box(panel, GUIContent.none);
             GUI.Label(new Rect(panel.x + 20f, panel.y + 18f, panel.width - 40f, 32f), selected.Key, titleStyle);
             GUI.Label(new Rect(panel.x + 20f, panel.y + 56f, panel.width - 40f, 50f), selected.Description, bodyStyle);
             GUI.Label(new Rect(panel.x + 20f, panel.y + 116f, panel.width - 40f, 24f), "Work kept with this object", smallStyle);
+            GUI.enabled = !saving;
             draft = GUI.TextArea(new Rect(panel.x + 20f, panel.y + 144f, panel.width - 40f, 92f), draft, 600);
             if (GUI.Button(new Rect(panel.x + 20f, panel.y + 248f, 132f, 34f), "Keep at bench"))
             {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                saving = true;
+                saveStatus = "Saving to vault…";
+                LoomMemory("save", selected.Key, draft);
+#else
                 PlayerPrefs.SetString($"loom.memory.{selected.Key}", draft);
                 PlayerPrefs.Save();
+                savedDraft = draft;
+                saveStatus = "Saved locally in this player.";
+#endif
             }
-            if (GUI.Button(new Rect(panel.x + 164f, panel.y + 248f, 140f, 34f), "Close")) selected = null;
+            GUI.enabled = !saving;
+            if (GUI.Button(new Rect(panel.x + 164f, panel.y + 248f, 140f, 34f), draft == savedDraft ? "Close" : "Discard & close")) selected = null;
+            GUI.enabled = true;
+            GUI.Label(new Rect(panel.x + 20f, panel.y + 290f, panel.width - 40f, 62f), saveStatus, bodyStyle);
         }
 
         void EnsureStyles()
@@ -348,12 +396,16 @@ namespace Loom.MemoryPalace
 
             public static LocalDataSummary Load()
             {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                return new LocalDataSummary(0, 0);
+#else
                 var dataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
                 if (string.IsNullOrWhiteSpace(dataHome))
                     dataHome = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
                 var root = Path.Combine(dataHome, "com.loom.ide", "loom-ide");
                 return new LocalDataSummary(CountArray(Path.Combine(root, "work.json")),
                     CountArray(Path.Combine(root, "experiments.json")));
+#endif
             }
 
             static int CountArray(string path)

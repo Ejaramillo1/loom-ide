@@ -12,7 +12,7 @@
            (Experiment overview only), translucent panels above it.
            The window is opaque; depth comes from layering, not from
            seeing the desktop through the app. -->
-      <div class="scene" data-mode="code">
+      <div class="scene" data-mode="spatial">
         <div class="scene-light" aria-hidden="true"></div>
 
         <!-- ======================= Header (row 1) ======================= -->
@@ -90,6 +90,12 @@
 
           <!-- Center: workspace -->
           <section class="center" aria-label="Workspace">
+            <div id="view-spatial" class="view">
+              <div class="mode-head"><h2>Spatial Workbench</h2><button id="open-living-workbench" class="btn" type="button">Living Workbench ↗</button><button id="spatial-load" class="btn" type="button">Enter workbench</button></div>
+              <p id="workbench-navigation-status" role="status"></p>
+              <p id="spatial-status" role="status">Unity inside Loom. Keep at bench saves a new memory to the Living Workbench vault.</p>
+              <iframe id="spatial-frame" title="Resolute Spatial Workbench" allow="fullscreen"></iframe>
+            </div>
             <div id="view-experiment" class="view view-experiment" hidden>
               <div class="mode-head">
                 <div>
@@ -120,7 +126,7 @@
               <div id="work-detail" class="work-detail"></div>
             </div>
 
-            <div id="view-code" class="view view-code">
+            <div id="view-code" class="view view-code" hidden>
               <div class="mode-head code-mode-head">
                 <div>
                   <h2>Code</h2>
@@ -305,7 +311,7 @@
         <!-- ======================= Footer (row 3) ======================= -->
         <footer class="app-footer">
           <nav class="mode-nav" aria-label="Workspace mode">
-            <button class="mode-btn active" data-mode="code" type="button" aria-current="page">
+            <button class="mode-btn" data-mode="code" type="button">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6L3 12l5 6" /><path d="M16 6l5 6-5 6" /></svg>
               <span class="mode-label">Code</span>
             </button>
@@ -325,6 +331,7 @@
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" /></svg>
               <span class="mode-label">Evidence</span>
             </button>
+            <button class="mode-btn active" data-mode="spatial" type="button" aria-current="page">Spatial</button>
           </nav>
         </footer>
 
@@ -355,6 +362,12 @@
       <p>Loom is a human-centered development environment for work, experiments, and collaboration with AI agents.</p>
       <button id="app-help-close" class="btn" type="button" autofocus>Close</button>
     </dialog>
+    <script>
+      if (location.protocol === "file:") {
+        document.body.style.cssText = "margin:0;padding:48px;background:#10121f;color:#f5f5fa;font:16px/1.6 system-ui";
+        document.body.innerHTML = '<main style="max-width:640px;margin:auto"><h1>Open Loom through its application server</h1><p>This is the source HTML. Its styles and TypeScript need Vite or the Tauri app.</p><p><a style="color:#8ec8ff" href="http://127.0.0.1:1420/">Open the running Loom preview</a></p><p>If the preview is unavailable, run <code>npm run dev</code> from the repository.</p></main>';
+      }
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

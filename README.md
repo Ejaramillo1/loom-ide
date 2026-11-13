@@ -14,12 +14,15 @@ All three surfaces are active and live in this repository:
 | Resolute Spatial Workbench | `unity-memory-palace/` — Unity 6, URP, C# | A game-like workbench with ambient movement, spatial tools/workpieces and memories stored on objects |
 
 **The merge is ongoing.** Tauri and Living Workbench have normal application
-windows; the Unity surface is a source-driven prototype with a verified local
-Linux player build. The three surfaces still have separate local state and some partial Loom integrations. Shared
+windows. Unity can also run in Tauri’s Spatial tab through a locally built WebGL player. Spatial notes use the default Living Workbench vault; other state and Loom integrations remain partial. Shared
 appearance and read-only record discovery do not imply a unified database or
 agent runtime.
 
 ## Latest additions and modifications
+
+- **Living Workbench access:** Spatial includes a direct Living Workbench button. Desktop Tauri activates the existing native window or starts it when closed; browser preview explains that this action requires the desktop app.
+- **Spatial landing view:** Loom opens directly into Spatial and loads Unity automatically. Code and other tools remain available in the bottom navigation.
+- **Embedded Spatial tab:** builds Unity WebGL into `public/spatial/`, then loads it inside the existing Tauri window. Object memories append notes to the native vault and read the latest saved version. Generated player files stay outside Git.
 
 - **Resolute Spatial Workbench:** a Unity 6 URP project now lives inside this
   repository. Its first scene treats Loom as a carpenter's bench for making
@@ -113,7 +116,7 @@ See [the Workbench README](native-app/README.md) for vault and preview details.
   camera responds gently to the pointer. Reduced motion stops travel, floating
   and rotation rather than merely shortening them.
 - **Interactive objects:** clicking a workpiece opens its role and a local text
-  area. **Keep at bench** persists that note through Unity PlayerPrefs.
+  area. In Tauri, **Keep at bench** appends a native vault note and reopening the object reads its latest saved memory. Editor/standalone players retain PlayerPrefs.
 - **Existing Loom records:** the Work and Experiments descriptions report counts
   from Tauri's existing JSON stores. Unity reads them defensively and never
   writes, migrates or repairs them.
@@ -194,7 +197,7 @@ and **43762** (Workbench), separately from Loom. Starting another instance focus
 the registered window. After updating an executable, close and reopen that
 application once to load its new code.
 
-Open the spatial workbench with the installed Unity CLI and press Play in the
+For the embedded Spatial tab, follow the WebGL build instructions in [the Unity README](unity-memory-palace/README.md). For Editor Play Mode, open the spatial workbench with the installed Unity CLI and press Play in the
 Editor:
 
 ```bash
@@ -240,7 +243,7 @@ including real filesystem access, require Tauri.
 | Workbench Work overview | Reads Tauri's JSON records on load/Refresh. It does not duplicate or migrate them. |
 | Tauri chat cache/drafts and appearance | WebView/browser storage; separate from the native vault's preferences and chat state. |
 | Loom sessions, agents, workflows and artifacts | Owned by the Loom server; native imports are local snapshots of selected metadata. |
-| Unity spatial memories | Unity PlayerPrefs, keyed by workpiece. Unity also reads Tauri's work/experiment JSON counts and never writes those stores. |
+| Unity spatial memories | Embedded WebGL reads/appends notes in `native-app/Research Vault/10 Fleeting Notes`. Each save preserves earlier versions. Editor/standalone uses PlayerPrefs separately. |
 
 Build output, local vaults, test data and tooling caches are ignored by Git.
 The published screenshots and audit documents are tracked intentionally.
@@ -322,9 +325,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
   pause/resume/cancel controls are not connected through these interfaces.
 - The two data models remain separate. Theme/window integration is not a data
   migration, and a shared local folder is not automatic model context.
-- Unity is not yet embedded into the Tauri window or packaged as a player. It
-  reads only Work/Experiment counts; object memories are still Unity-local, and
-  there is no bidirectional spatial editing bridge.
+- Spatial requires a generated WebGL build (see the Unity README). Its bridge uses the default repository vault, not custom vault paths. Refresh files from disk in native Knowledge to see new saves. Moving a spatial note outside the fleeting folder removes it from object lookup. Remote memory and automatic refresh are not integrated.
 
 ## Project layout
 
