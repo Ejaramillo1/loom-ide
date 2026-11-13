@@ -8,11 +8,13 @@ Build with `cargo build --offline`, then run `target/debug/living-workbench`. Kn
 
 Phoenix is deferred. The current workbench works offline without external observability services.
 
+When a Loom server is running on `localhost:5006`, the workbench connects to it over plain HTTP (no new dependencies). **Test connection** in the conversation footer probes the server and reports "Connected to Loom" or "Loom offline". When connected, chat sends the message to Loom (`POST /v1/weave`) and shows its reply, or the error honestly; when offline, the existing local keyword replies run unchanged. **Sync from Loom** in the Knowledge header pulls sessions, agents, and artifacts into the vault as notes (kinds `session`, `agent`, `artifact`, stored under `50 Projects/Agent Memory/Sessions`, `.../Agents`, and `.../Artifacts`); items already synced are skipped. The vault folders are clickable filters, so the synced objects are browsable like any other notes.
+
 ## Source and verification
 
-This native workbench lives in `app/` in the `Ejaramillo1/loom-ide` repository, on the `tauri-prototype` branch. Keep its Rust source, Cargo.lock, documentation and licensed fonts together. Build output, screenshots, test vaults and the local Research Vault are excluded by `app/.gitignore`.
+This native workbench lives in `native-app/` in the `Ejaramillo1/loom-ide` repository, on the `tauri-prototype` branch. Keep its Rust source, Cargo.lock, documentation and licensed fonts together. Build output, screenshots, test vaults and the local Research Vault are excluded by `native-app/.gitignore`.
 
-From the repository root, run `cargo test --offline --manifest-path app/Cargo.toml` and `cargo build --offline --manifest-path app/Cargo.toml`. To exercise the desktop workflow, run `app/target/debug/living-workbench --self-test /tmp/loom-self-test.json`; this creates an isolated test vault and writes a JSON result plus a screenshot. A graphical session is required.
+From the repository root, run `cargo test --offline --manifest-path native-app/Cargo.toml` and `cargo build --offline --manifest-path native-app/Cargo.toml`. To exercise the desktop workflow, run `native-app/target/debug/living-workbench --self-test /tmp/loom-self-test.json`; this creates an isolated test vault and writes a JSON result plus a screenshot. A graphical session is required.
 
 The mandatory 1600 × 900 blue/lavender specification governs the visual design. Picture 1 supplies the atmospheric home and knowledge-workspace references; the earlier warm and architectural concepts in pictures 2–4 are superseded. Home keeps the sphere at (630, 435), the conversation at (1170, 140), and the six-item navigation at (320, 790) at the reference size. On smaller windows the sphere remains below the intent, and conversation opens as a drawer.
 

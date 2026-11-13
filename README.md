@@ -57,18 +57,25 @@ transparent; that was a misunderstanding and was reverted.)
 
 - **Experiment** — a list + detail view: question, hypothesis, arms,
   Run-arm (real weave calls against the Loom server), results, and a
-  decision card once ≥2 arms are done. The luminous sphere (canvas 2D:
+  decision card once ≥2 arms are done. The view uses the full window
+  width: the list stays in the left sidebar and the detail on the right.
+  The luminous sphere (canvas 2D:
   radial gradients + fine flowing contour lines + water reflection)
   is a compact state indicator in the sidebar, states idle /
   listening / processing / executing / attention / completed, with a
   caption in plain words. The sphere animation pauses when its view is
   hidden.
 - **Work** — the left panel is the work catalogue; the center is the
-  selected work's detail view: full title and state, a control row for
-  the planning preference and the supported local action, goal,
-  editable success criteria (add/remove, persisted), a Workflows
-  section (list + Run + recent executions), artifacts with
-  Attach/Detach, and evidence from experiment decisions.
+  selected work's detail view: a Today summary at the top (active intent,
+  work counts active/paused, attention waiting), then full title and state,
+  a control row for the planning preference and the supported local action,
+  goal, editable success criteria (add/remove, persisted), a Workflows
+  section (list + Run + recent executions), a Sessions section (Loom
+  sessions with agent, state, and message count; clicking one selects it
+  in the chat session bar and loads its detail), artifacts with
+  Attach/Detach, and evidence from experiment decisions. The new-work form
+  has a Capture idea button that creates a work item titled `Idea: ...`
+  linked to the active intent.
 - **Code** — the default workspace is a blank canvas backed by a separate
   `Loom` folder in Documents. It lists only files in that folder, with no
   document opened automatically. Create files/folders or use **File → Open
@@ -93,7 +100,7 @@ transparent; that was a misunderstanding and was reverted.)
 
 ## What it is
 
-- **Backend (Rust, `src-tauri/`)** — Tauri 2 commands (36):
+- **Backend (Rust, `src-tauri/`)** — Tauri 2 commands (54):
   - Work: `get_work_items` / `add_work_item` / `set_work_status` /
     `set_work_autonomy` / `set_work_session` /
     `set_work_success_criteria` / `set_work_artifacts` — work items
@@ -136,6 +143,14 @@ transparent; that was a misunderstanding and was reverted.)
     as JSON strings; the backend parses them tolerantly. When the
     server cannot be reached, or answers without usable text, the
     command fails and the UI shows the error. Nothing invents a reply.
+  - Loom server details: `get_session` / `list_tools` / `get_trace` /
+    `get_agent` / `list_models` / `list_providers` / `switch_model` /
+    `get_artifact` / `get_artifact_content` / `search_artifacts` /
+    `get_artifact_stats` / `get_server_config` / `get_storage_status` —
+    read-only server state (traces, tools, models, providers, artifact
+    content with base64 decoding, server config and storage status).
+    `get_trace`, `switch_model`, `get_artifact`, `get_artifact_content`
+    and `search_artifacts` are not wired to the UI yet.
   - Workflows/artifacts: `list_workflows` / `execute_workflow` /
     `get_workflow_execution` / `list_workflow_executions` /
     `list_artifacts` (optionally scoped to one session). Workflow
@@ -364,21 +379,7 @@ loom-ide/                  # Tauri prototype (this repo's current direction)
 ├── HOW_TO_OPEN.md        # how to run this prototype
 ├── src/main.rs           # DEPRECATED eframe/egui app — do not extend
 ├── Cargo.toml            # DEPRECATED eframe app manifest — do not use
-├── run.sh                # DEPRECATED eframe launcher — do not use
-├── native-app/           # MERGED: eframe/egui "living-workbench" native workbench
-│   ├── src/              # main.rs, adapter.rs, knowledge.rs, mechanics.rs,
-│   │   │                 # scene.rs, visual.rs (native UI + local vault)
-│   ├── Cargo.toml        # living-workbench v0.1.0 (eframe 0.29.1)
-│   ├── Cargo.lock
-│   ├── assets/           # Inter fonts
-│   ├── docs/             # native investigation (pseudocode, verification)
-│   ├── CREDITS.md
-│   ├── MECHANICS.md
-│   ├── mechanics.json
-│   └── README.md
-│   (target/, test-data/, Research Vault/, .loom/, shots/ excluded — build
-│    output and runtime vault data)
-└── ...
+└── run.sh                # DEPRECATED eframe launcher — do not use
 ```
 
 ## Status / known gaps

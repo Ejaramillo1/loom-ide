@@ -1234,6 +1234,151 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
 // Work detail view (the selected work; the catalogue stays on the left)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Today summary — the top of the Work detail: the active intent, how much
+// work is active vs paused, and what is waiting for attention. Built from
+// the same state the rest of the screen uses (loaded via getWorkItems,
+// getIntents and getAttention); attention is re-fetched when the summary
+// renders so the count is fresh. No due dates: work items have none.
+// ---------------------------------------------------------------------------
+
+/** One honest line for the attention state. No em dashes in user copy. */
+function attentionLine(items: AttentionItem[]): string {
+  if (items.length === 0) return "Attention: nothing waiting.";
+  const titles = items
+    .slice(0, 3)
+    .map((i) => i.title)
+    .join("; ");
+  const extra = items.length > 3 ? ` (${items.length - 3} more)` : "";
+  return `Attention: ${items.length} waiting: ${titles}${extra}`;
+}
+
+function buildTodaySummary(): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section today-summary";
+  const h = document.createElement("h4");
+  h.textContent = "Today";
+  section.append(h);
+
+  const intent = activeIntent();
+  const intentLine = document.createElement("p");
+  intentLine.textContent = intent
+    ? `Working on: ${intent.statement}`
+    : "No active intent. Set an intent to give today a focus.";
+  section.append(intentLine);
+
+  const active = workItems.filter((w) => w.status === "active").length;
+  const paused = workItems.filter((w) => w.status === "paused").length;
+  const counts = document.createElement("p");
+  counts.textContent = `Work: ${active} active, ${paused} paused.`;
+  section.append(counts);
+
+  const attention = document.createElement("p");
+  attention.className = "today-attention";
+  attention.textContent = attentionLine(attentionItems);
+  section.append(attention);
+  // Fresh attention from the backend; the line updates in place when it
+  // lands, and the inspector shows the same items.
+  void refreshTodayAttention(attention);
+  return section;
+}
+
+/** Re-fetch attention for the Today summary and update its line in place. */
+async function refreshTodayAttention(line: HTMLParagraphElement): Promise<void> {
+  try {
+    const items = await getAttention();
+    attentionItems = items;
+    if (!line.isConnected) return;
+    line.textContent = attentionLine(items);
+    renderAttention(items);
+  } catch {
+    // Keep the state the screen already showed; the inspector stays as is.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sessions list — the Work detail shows every Loom session (from the
+// listSessions state): name, agent, state, message count. Clicking a row
+// selects that session in the chat session bar (renderSessionBar) and
+// loads its detail in the inspector (refreshSessionDetail +
+// renderInspectorContext). When the chat panel is open the conversation
+// switches to it as well. There is no Projects view here: the Tauri app
+// has no Projects concept.
+// ---------------------------------------------------------------------------
+
+function sessionAgentName(s: Session): string {
+  if (s.agent_name?.trim()) return s.agent_name;
+  const agent = agents.find((a) => a.id === s.agent_id);
+  if (agent?.name) return agent.name;
+  return "Default agent";
+}
+
+function buildSessionsSection(): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section sessions-section";
+  const h = document.createElement("h4");
+  h.textContent = `Sessions (${sessions.length})`;
+  section.append(h);
+
+  if (!loomStatusKnown) {
+    section.append(emptyP("Checking the Loom server…"));
+    return section;
+  }
+  if (!loomReachable) {
+    section.append(
+      emptyP("The Loom server is offline, so sessions are not available."),
+    );
+    return section;
+  }
+  if (sessions.length === 0) {
+    section.append(emptyP("No sessions yet."));
+    return section;
+  }
+
+  const ul = document.createElement("ul");
+  ul.className = "session-list";
+  for (const s of sessions) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className =
+      "session-row" + (s.id === selectedSessionId ? " selected" : "");
+    btn.setAttribute("aria-pressed", String(s.id === selectedSessionId));
+    const name = document.createElement("span");
+    name.className = "session-row-name";
+    name.textContent = s.name?.trim() ? s.name : `Session ${s.id.slice(0, 8)}`;
+    const meta = document.createElement("span");
+    meta.className = "session-row-meta";
+    const messages =
+      s.conversation_count === 1
+        ? "1 message"
+        : `${s.conversation_count} messages`;
+    meta.textContent = `${sessionAgentName(s)} · ${s.state} · ${messages}`;
+    btn.append(name, meta);
+    btn.addEventListener("click", () => {
+      void selectSessionFromWork(s.id);
+    });
+    li.append(btn);
+    ul.append(li);
+  }
+  section.append(ul);
+  return section;
+}
+
+/** Select a session from the Work detail's Sessions list: show it in the
+    chat session bar, load its detail in the inspector, and switch the
+    conversation when the chat panel is open. */
+async function selectSessionFromWork(sessionId: string): Promise<void> {
+  const session = sessions.find((s) => s.id === sessionId);
+  if (!session) return;
+  selectedSessionId = sessionId;
+  localStorage.setItem(SESSION_KEY, sessionId);
+  renderSessionBar();
+  await refreshSessionDetail(sessionId);
+  renderInspectorContext();
+  if (chatOpen) loadChatForWork(selectedWorkId, sessionId);
+}
+
 function renderWorkDetail() {
   withFocusRestore(() => {
     const wrap = document.querySelector<HTMLElement>("#work-detail");
@@ -1267,7 +1412,9 @@ function renderWorkDetail() {
       return;
     }
 
+    wrap.append(buildTodaySummary());
     wrap.append(buildWorkSummary(item));
+    wrap.append(buildSessionsSection());
 
     const scroll = document.createElement("div");
     scroll.className = "wd-scroll";
@@ -4516,15 +4663,14 @@ async function init() {
     const item = workItems.find((w) => w.id === selectedWorkId);
     if (item) $("#objective-title").textContent = item.title;
   }
-  $("#new-work-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const input = $("#new-work-input") as HTMLInputElement;
-    const title = input.value.trim();
-    if (!title) return;
+  // Create one work item from a title: the form submit and Capture idea
+  // share this path, so both link to the active intent and both get a
+  // best-effort Loom session when the server is up.
+  async function createWorkItemFromTitle(title: string): Promise<void> {
     try {
       const item = await addWorkItem(title, activeIntentId);
       workItems = [item, ...workItems];
-      input.value = "";
+      ($("#new-work-input") as HTMLInputElement).value = "";
       // The backend may have auto-created a one-line intent for this
       // work when no intent was active; pick it up in the header.
       await refreshIntents();
@@ -4551,6 +4697,27 @@ async function init() {
       }
       showFieldError(errEl, `Could not create the work item: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  $("#new-work-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("#new-work-input") as HTMLInputElement;
+    const title = input.value.trim();
+    if (!title) return;
+    await createWorkItemFromTitle(title);
+  });
+
+  // Capture idea: same input, same path as the form, but the work item
+  // is titled "Idea: <text>" and linked to the active intent. An empty
+  // input only takes focus; nothing is created.
+  $("#capture-idea-btn").addEventListener("click", async () => {
+    const input = $("#new-work-input") as HTMLInputElement;
+    const text = input.value.trim();
+    if (!text) {
+      input.focus();
+      return;
+    }
+    await createWorkItemFromTitle(`Idea: ${text}`);
   });
 
   // Collaboration + attention (attention is real: experiments waiting

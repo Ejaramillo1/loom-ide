@@ -16,6 +16,8 @@ pub const FOLDERS: &[&str] = &[
     "50 Projects/Agent Memory/Experiments",
     "50 Projects/Agent Memory/Decisions",
     "50 Projects/Agent Memory/Artifacts",
+    "50 Projects/Agent Memory/Sessions",
+    "50 Projects/Agent Memory/Agents",
     "60 Daily Notes",
     "70 Sources",
     "80 Attachments",
@@ -52,6 +54,9 @@ pub const KINDS: &[&str] = &[
     "finding",
     "map",
     "literature",
+    "session",
+    "agent",
+    "artifact",
 ];
 pub fn now() -> u64 {
     SystemTime::now()
@@ -479,6 +484,12 @@ impl Vault {
             "50 Projects/Agent Memory/Experiments"
         } else if kind == "decision" {
             "50 Projects/Agent Memory/Decisions"
+        } else if kind == "session" {
+            "50 Projects/Agent Memory/Sessions"
+        } else if kind == "agent" {
+            "50 Projects/Agent Memory/Agents"
+        } else if kind == "artifact" {
+            "50 Projects/Agent Memory/Artifacts"
         } else {
             "10 Fleeting Notes"
         };

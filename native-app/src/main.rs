@@ -1,11 +1,15 @@
 #[allow(dead_code)]
 mod adapter;
 mod knowledge;
+mod loom_adapter;
+mod loom_sync;
 mod mechanics;
 mod scene;
 mod visual;
+use adapter::{AgentAdapter, ContextPack};
 use eframe::egui::*;
 use knowledge::*;
+use loom_adapter::LoomHttpAdapter;
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
@@ -43,6 +47,8 @@ struct Message {
 }
 struct Workbench {
     vault: Option<Vault>,
+    adapter: LoomHttpAdapter,
+    loom_connected: bool,
     startup_error: String,
     view: View,
     dialog: Option<Dialog>,
@@ -134,6 +140,8 @@ impl Workbench {
             .load_texture("Luminous sphere", sphere(), TextureOptions::LINEAR);
         Self {
             vault,
+            adapter: LoomHttpAdapter::new(),
+            loom_connected: false,
             startup_error,
             view,
             dialog: None,
@@ -224,6 +232,32 @@ impl Workbench {
     fn outcome(&mut self, r: Result<(), String>, success: &str) {
         match r {
             Ok(()) => self.notify(success, false),
+            Err(e) => self.notify(e, true),
+        }
+    }
+    /// Sync Loom sessions, agents and artifacts into the vault, on click
+    /// only. New notes appear in the graph without a reload: graph()
+    /// reads vault.notes each frame.
+    fn sync_from_loom(&mut self) {
+        if self.vault.is_none() {
+            self.notify("Vault unavailable", true);
+            return;
+        }
+        let result = {
+            let vault = self.vault.as_mut().unwrap();
+            let adapter = &self.adapter;
+            (|| -> Result<(usize, usize, usize), String> {
+                let sessions = loom_sync::sync_sessions(vault, adapter)?;
+                let agents = loom_sync::sync_agents(vault, adapter)?;
+                let artifacts = loom_sync::sync_artifacts(vault, adapter)?;
+                Ok((sessions, agents, artifacts))
+            })()
+        };
+        match result {
+            Ok((sessions, agents, artifacts)) => self.notify(
+                format!("Synced {sessions} sessions, {agents} agents, {artifacts} artifacts"),
+                false,
+            ),
             Err(e) => self.notify(e, true),
         }
     }
@@ -712,11 +746,31 @@ impl Workbench {
         if send || (response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter))) {
             self.send_message();
         }
+        if pill(
+            ui,
+            rect(r.right() - 150., r.bottom() - 18., 134., 18.),
+            "Test connection",
+            false,
+        )
+        .clicked()
+        {
+            let state = self.adapter.activity().state;
+            self.loom_connected = state != State::Error;
+            if self.loom_connected {
+                self.notify("Connected to Loom", false);
+            } else {
+                self.notify("Loom offline", true);
+            }
+        }
         txt(
             &p,
             r.left() + 21.,
             r.bottom() - 14.,
-            "Local knowledge · No model connected",
+            if self.loom_connected {
+                "Loom connected"
+            } else {
+                "Local knowledge · No model connected"
+            },
             10.,
             self.colors.muted,
         );
@@ -744,6 +798,41 @@ impl Workbench {
             text: q.clone(),
             links: vec![],
         });
+        let connected = self.adapter.activity().state != State::Error;
+        self.loom_connected = connected;
+        if connected {
+            let intent = self
+                .vault
+                .as_ref()
+                .map(|v| v.settings.intent.clone())
+                .unwrap_or_default();
+            let object_ids = if self.selected.is_empty() {
+                Vec::new()
+            } else {
+                vec![self.selected.clone()]
+            };
+            let context = ContextPack {
+                intent,
+                object_ids,
+                excluded_ids: Vec::new(),
+                estimated_tokens: (q.chars().count() + 3) / 4,
+            };
+            match self.adapter.submit(&context, &q) {
+                Ok(text) => self.messages.push(Message {
+                    user: false,
+                    text,
+                    links: vec![],
+                }),
+                Err(e) => self.messages.push(Message {
+                    user: false,
+                    text: format!("Loom could not answer: {e}"),
+                    links: vec![],
+                }),
+            }
+            self.completed_until =
+                self.started.elapsed().as_secs_f64() + mechanics::COMPLETION_SECONDS;
+            return;
+        }
         if lower.contains("challenge") || lower.contains("surely") {
             let body="The observed advantage may depend on task ordering, prompt design or experimental conditions. Does it generalize to other tasks?\n\nThis is an offline reasoning prompt based on the historical fixture, not a new measurement.";
             let result = self
@@ -813,7 +902,13 @@ impl Workbench {
             );
             txt(&p, 26., 107., "Research Vault", 16., self.colors.text);
             icon(&p, "down", pos2(211., 117.), 15., self.colors.muted);
-            if pill(ui, rect(18., 146., 205., 34.), "+  Capture a note", false).clicked() {
+            if pill(ui, rect(18., 138., 205., 30.), "+  Capture a note", false).clicked() {
+                self.dialog = Some(Dialog::New);
+            }
+            if pill(ui, rect(18., 172., 205., 30.), "+  Capture an idea", false).clicked() {
+                self.new_title = "Idea: ".into();
+                self.new_body.clear();
+                self.new_kind = "note".into();
                 self.dialog = Some(Dialog::New);
             }
             let sections = [
@@ -853,17 +948,19 @@ impl Workbench {
             }
             txt(&p, 26., 435., "VAULT LOCATIONS", 10., self.colors.muted);
             let folders = [
-                "00 Inbox",
-                "10 Fleeting Notes",
-                "20 Literature Notes",
-                "30 Permanent Notes",
-                "40 Maps of Content",
-                "50 Projects",
-                "60 Daily Notes",
-                "70 Sources",
-                "80 Attachments",
-                "90 Templates",
-                "99 Archive",
+                ("00 Inbox", "00 Inbox"),
+                ("10 Fleeting Notes", "10 Fleeting Notes"),
+                ("20 Literature Notes", "20 Literature Notes"),
+                ("30 Permanent Notes", "30 Permanent Notes"),
+                ("40 Maps of Content", "40 Maps of Content"),
+                ("50 Projects", "50 Projects"),
+                ("Sessions", "50 Projects/Agent Memory/Sessions"),
+                ("Agents", "50 Projects/Agent Memory/Agents"),
+                ("60 Daily Notes", "60 Daily Notes"),
+                ("70 Sources", "70 Sources"),
+                ("80 Attachments", "80 Attachments"),
+                ("90 Templates", "90 Templates"),
+                ("99 Archive", "99 Archive"),
             ];
             let fr = rect(14., 462., 214., (h - 555.).max(80.));
             let mut pick = None;
@@ -872,24 +969,35 @@ impl Workbench {
                     .id_salt("vault folders")
                     .max_height(fr.height())
                     .show(ui, |ui| {
-                        for name in folders {
+                        for (label, prefix) in folders {
                             let (rr, res) = ui.allocate_exact_size(vec2(210., 30.), Sense::click());
-                            if self.folder.as_deref() == Some(name) {
-                                ui.painter()
-                                    .rect_filled(rr, 7., self.colors.overlay(9));
+                            if self.folder.as_deref() == Some(prefix) {
+                                ui.painter().rect_filled(rr, 7., self.colors.overlay(9));
                             }
-                            icon(ui.painter(), "chevron", rr.min + vec2(10., 15.), 12., self.colors.muted);
-                            icon(ui.painter(), "folder", rr.min + vec2(29., 15.), 14., self.colors.muted);
+                            icon(
+                                ui.painter(),
+                                "chevron",
+                                rr.min + vec2(10., 15.),
+                                12.,
+                                self.colors.muted,
+                            );
+                            icon(
+                                ui.painter(),
+                                "folder",
+                                rr.min + vec2(29., 15.),
+                                14.,
+                                self.colors.muted,
+                            );
                             txt(
                                 ui.painter(),
                                 rr.left() + 45.,
                                 rr.top() + 7.,
-                                name,
+                                label,
                                 12.,
                                 self.colors.second,
                             );
                             if res.clicked() {
-                                pick = Some(name.to_string());
+                                pick = Some(prefix.to_string());
                             }
                         }
                     });
@@ -986,6 +1094,16 @@ impl Workbench {
                         12.,
                         self.colors.muted,
                     );
+                    if pill(
+                        ui,
+                        rect(content.right() - 150., content.top() + 48., 144., 30.),
+                        "Sync from Loom",
+                        false,
+                    )
+                    .clicked()
+                    {
+                        self.sync_from_loom();
+                    }
                     let gh = (content.height() * 0.51).max(260.);
                     self.graph(
                         ui,

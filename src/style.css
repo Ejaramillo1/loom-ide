@@ -668,6 +668,16 @@ select {
   color: var(--muted);
 }
 
+/* Compact button inside the new-work row: it shares the input, so it
+   must not crowd it out. */
+#capture-idea-btn {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
 /* ---------- Conversation, on demand in the left column ---------- */
 /* The chat sits directly below the work list, not in a drawer or a
    tab. It is closed by default, so the work list takes the full
@@ -688,8 +698,8 @@ body.chat-open .left-col .left-chat {
   flex: 1 1 auto;
   min-height: 320px;
   border-top: 1px solid rgba(221, 213, 208, 0.7);
-  margin-top: 12px;
-  padding-top: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
 }
 
 /* ---------- Center ---------- */
@@ -875,6 +885,54 @@ body.chat-open .left-col .left-chat {
 .wd-section .empty {
   color: var(--muted);
   font-size: 13.5px;
+}
+
+/* Sessions list in the Work detail: rows mirror .exp-row (full-width
+   buttons, hover + selected states), stacked name over meta line. */
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.session-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.session-row:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.session-row.selected {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-panel);
+}
+
+.session-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.session-row-meta {
+  font-size: 12.5px;
+  color: var(--muted);
 }
 
 .wd-empty {
@@ -1607,7 +1665,7 @@ body.chat-open .left-col .left-chat {
   flex-shrink: 0;
 }
 
-/* ---------- Chat (lives in the inspector's Conversation tab) ---------- */
+/* ---------- Chat (lives in the left column, on-demand) ---------- */
 
 .chat-panel {
   position: relative;
@@ -2353,7 +2411,9 @@ body.inspector-open .scene[data-mode="code"] .right-col {
 /* ---------- Experiment view ---------- */
 
 .view-experiment {
-  max-width: 960px;
+  max-width: none;
+  width: 100%;
+  margin: 0;
 }
 
 .exp-layout {
