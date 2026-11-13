@@ -14,7 +14,7 @@ export type SphereState =
   | "completed";
 
 const TINTS: Record<SphereState, { glow: string; ring: string }> = {
-  idle: { glow: "255, 250, 240", ring: "255, 255, 255" },
+  idle: { glow: "165, 139, 255", ring: "225, 230, 255" },
   listening: { glow: "235, 242, 255", ring: "210, 226, 250" },
   processing: { glow: "226, 236, 250", ring: "190, 210, 240" },
   executing: { glow: "214, 228, 248", ring: "170, 196, 235" },
@@ -146,8 +146,8 @@ export class Sphere {
 
     // ---- soft contact shadow under the sphere ----
     const shadow = ctx.createRadialGradient(cx, horizon, R * 0.1, cx, horizon, R * 0.85);
-    shadow.addColorStop(0, "rgba(120, 100, 80, 0.14)");
-    shadow.addColorStop(1, "rgba(120, 100, 80, 0)");
+    shadow.addColorStop(0, "rgba(90, 90, 155, 0.14)");
+    shadow.addColorStop(1, "rgba(90, 90, 155, 0)");
     ctx.fillStyle = shadow;
     ctx.beginPath();
     ctx.ellipse(cx, horizon + R * 0.02, R * 0.85, R * 0.06, 0, 0, Math.PI * 2);
@@ -180,11 +180,11 @@ export class Sphere {
       cy,
       R * 1.05,
     );
-    body.addColorStop(0, "#fffefb");
-    body.addColorStop(0.35, "#faf5ec");
-    body.addColorStop(0.68, "#efe6d8");
-    body.addColorStop(0.92, "#e0d3c0");
-    body.addColorStop(1, "#d8c9b4");
+    body.addColorStop(0, "#dce6ff");
+    body.addColorStop(0.35, "#aebee8");
+    body.addColorStop(0.68, "#657aa9");
+    body.addColorStop(0.92, "#595a9d");
+    body.addColorStop(1, "#6d539d");
     ctx.fillStyle = body;
     ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
 
@@ -210,7 +210,7 @@ export class Sphere {
         if (s === 0) ctx.moveTo(x, yy);
         else ctx.lineTo(x, yy);
       }
-      ctx.strokeStyle = `rgba(122, 102, 82, ${alpha.toFixed(3)})`;
+      ctx.strokeStyle = `rgba(180, 165, 255, ${alpha.toFixed(3)})`;
       ctx.lineWidth = Math.max(0.7, R * 0.0022);
       ctx.stroke();
     }
@@ -239,8 +239,8 @@ export class Sphere {
       cy + R * 0.3,
       R * 1.0,
     );
-    inner.addColorStop(0, "rgba(120, 96, 70, 0.16)");
-    inner.addColorStop(1, "rgba(120, 96, 70, 0)");
+    inner.addColorStop(0, "rgba(65, 50, 110, 0.16)");
+    inner.addColorStop(1, "rgba(65, 50, 110, 0)");
     ctx.fillStyle = inner;
     ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
 

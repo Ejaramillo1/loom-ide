@@ -79,13 +79,6 @@ export interface IntentsList {
   intents: Intent[];
 }
 
-export interface CollabStep {
-  id: string;
-  label: string;
-  state: "done" | "active" | "pending";
-  progress: number | null;
-}
-
 export interface AttentionItem {
   id: string;
   kind: "decision" | "finding";
@@ -264,27 +257,6 @@ export interface ToolDefinition {
   providers: string[];
 }
 
-/// A trace span (GET /v1/traces/{trace_id}).
-export interface TraceSpan {
-  id: string;
-  parent_id: string;
-  name: string;
-  start_time_us: number;
-  end_time_us: number;
-  duration_us: number;
-  status: string;
-  attributes: Record<string, string>;
-}
-
-/// An execution trace (GET /v1/traces/{trace_id}).
-export interface Trace {
-  id: string;
-  session_id: string;
-  root_span: TraceSpan | null;
-  spans: TraceSpan[];
-  total_duration_ms: number;
-}
-
 /// An LLM model (GET /v1/models).
 export interface ModelInfo {
   id: string;
@@ -368,8 +340,8 @@ function localWorkItems(): WorkItem[] {
 function saveLocalWorkItems(items: WorkItem[]) {
   try {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(items));
-  } catch {
-    /* ignore */
+  } catch (error) {
+    throw new Error(`Could not save work items in this browser: ${String(error)}`);
   }
 }
 
@@ -398,8 +370,8 @@ function localIntents(): IntentsList {
 function saveLocalIntents(list: IntentsList) {
   try {
     localStorage.setItem(INTENTS_KEY, JSON.stringify(list));
-  } catch {
-    /* ignore */
+  } catch (error) {
+    throw new Error(`Could not save intents in this browser: ${String(error)}`);
   }
 }
 
@@ -462,6 +434,8 @@ export async function addWorkItem(
   intentId?: string | null,
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
+    title = title.trim();
+    if (!title) throw new Error("Work item title cannot be empty");
     // Mirror the backend: no work without an intent. An explicit intent
     // wins, then the active one, then a one-line intent from the title.
     // The work inherits the resolved intent's autonomy.
@@ -470,7 +444,8 @@ export async function addWorkItem(
     let resolvedAutonomy: IntentAutonomy = "collaborative";
     if (resolvedId) {
       const explicit = list.intents.find((i) => i.id === resolvedId);
-      if (explicit) resolvedAutonomy = explicit.autonomy;
+      if (!explicit) throw new Error(`Unknown intent: ${resolvedId}`);
+      resolvedAutonomy = explicit.autonomy;
     } else {
       const active = list.intents.find((i) => i.id === list.active_intent_id);
       if (active) {
@@ -504,8 +479,13 @@ export async function setWorkStatus(
   status: "active" | "paused",
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
-    const items = localWorkItems().map((w) =>
-      w.id === id ? { ...w, status } : w,
+    if (status !== "active" && status !== "paused") {
+      throw new Error(`Unknown status: ${status}`);
+    }
+    const current = localWorkItems();
+    if (!current.some((w) => w.id === id)) throw new Error(`Unknown work item: ${id}`);
+    const items = current.map((w) =>
+      w.id === id ? { ...w, status, updated_at: nowUnix() } : w,
     );
     saveLocalWorkItems(items);
     return items.find((w) => w.id === id)!;
@@ -566,8 +546,12 @@ export async function setWorkSession(
   sessionId: string | null,
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
-    const items = localWorkItems().map((w) =>
-      w.id === id ? { ...w, session_id: sessionId } : w,
+    const current = localWorkItems();
+    if (!current.some((w) => w.id === id)) throw new Error(`Unknown work item: ${id}`);
+    const items = current.map((w) =>
+      w.id === id
+        ? { ...w, session_id: sessionId?.trim() || null, updated_at: nowUnix() }
+        : w,
     );
     saveLocalWorkItems(items);
     return items.find((w) => w.id === id)!;
@@ -745,10 +729,6 @@ export async function deleteIntent(id: string): Promise<boolean> {
 // The Loom server does not expose step-by-step execution yet, so
 // collaboration stays empty. Attention is real: the backend returns the
 // experiment decisions already waiting locally. No seed data.
-export async function getCollaboration(): Promise<CollabStep[]> {
-  if (!IN_TAURI) return [];
-  return invoke<CollabStep[]>("get_collaboration");
-}
 
 export async function getAttention(): Promise<AttentionItem[]> {
   if (!IN_TAURI) return [];
@@ -772,8 +752,31 @@ async function invokeCmd<T>(
 export async function getLoomStatus(): Promise<LoomStatus> {
   if (!IN_TAURI) {
     try {
-      await loomRequest("/health");
-      return { online: true, url: "/api/loom", detail: "Loom HTTP service is healthy." };
+      // Use the same component health endpoint and timeout as Rust.
+      // The unversioned /health route is a static liveness response.
+      const value = await loomRequest("/v1/health", undefined, 30000);
+      const status = value?.status;
+      const components = value?.components;
+      const failures = components && typeof components === "object"
+        ? Object.entries(components)
+          .filter(([, component]) => (component as { status?: string })?.status !== "healthy")
+          .map(([name, component]) => {
+            const health = component as { status?: string; error?: string } | null;
+            return `${name}: ${health?.error || health?.status || "unknown"}`;
+          }).join(", ")
+        : "";
+      const detail = status === "healthy"
+        ? "Loom HTTP service is healthy."
+        : status === "degraded"
+          ? `Loom is degraded (${failures || "see /v1/health"}).`
+          : typeof status === "string"
+            ? `Loom reports ${status}: ${failures || "see /v1/health"}.`
+            : "Server reachable; Loom health status was not reported.";
+      return {
+        online: typeof status !== "string" || status === "healthy" || status === "degraded",
+        url: "/api/loom",
+        detail,
+      };
     } catch (error) {
       return { online: false, url: "/api/loom", detail: String(error) };
     }
@@ -781,12 +784,12 @@ export async function getLoomStatus(): Promise<LoomStatus> {
   return invoke<LoomStatus>("get_loom_status");
 }
 
-async function loomRequest(path: string, body?: object): Promise<any> {
+async function loomRequest(path: string, body?: object, timeoutMs?: number): Promise<any> {
   const response = await fetch(`/api/loom${path}`, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(body ? 180000 : 5000),
+    signal: AbortSignal.timeout(timeoutMs ?? (body ? 180000 : 5000)),
   });
   const value = await response.json();
   if (!response.ok) throw new Error(value.message || value.error || `Loom returned HTTP ${response.status}`);
@@ -803,14 +806,21 @@ export async function askLoom(
   if (IN_TAURI) {
     return invoke<ChatReply>("ask_loom", { message, sessionId, agentId });
   }
+  if (!message.trim()) throw new Error("Enter a message first.");
   const body: Record<string, string> = { query: message };
-  if (sessionId) body.session_id = sessionId;
-  if (agentId) body.agent_id = agentId;
+  if (sessionId?.trim()) body.sessionId = sessionId;
+  if (agentId?.trim()) body.agentId = agentId;
   const value = await loomRequest("/v1/weave", body);
   const text = [value.text, value.response, value.content, value.reply, value.message]
     .find(value => typeof value === "string" && value.trim());
   if (!text) throw new Error("Loom returned an empty response. Check its agent configuration.");
-  return { text, source: "live", card: null };
+  const session = value.session_id ?? value.sessionId;
+  return {
+    text,
+    source: "live",
+    card: null,
+    session_id: typeof session === "string" && session.trim() ? session : null,
+  };
 }
 
 // ---- Sessions + agents (real Loom server; fail honestly when offline) ----
@@ -974,12 +984,6 @@ export async function listTools(): Promise<ToolDefinition[]> {
   return invokeCmd<ToolDefinition[]>("list_tools");
 }
 
-// ---- Traces / observability (real Loom server) ----
-
-export async function getTrace(traceId: string): Promise<Trace> {
-  return invokeCmd<Trace>("get_trace", { traceId });
-}
-
 // ---- Agent details (real Loom server) ----
 
 export async function getAgent(agentId: string): Promise<Agent> {
@@ -996,29 +1000,11 @@ export async function listProviders(): Promise<ProviderEntry[]> {
   return invokeCmd<ProviderEntry[]>("list_providers");
 }
 
-export async function switchModel(
-  sessionId: string,
-  provider?: string | null,
-  model?: string | null,
-): Promise<any> {
-  return invokeCmd<any>("switch_model", { sessionId, provider, model });
-}
 
-// ---- Artifact detail / content / search / stats (real Loom server) ----
+// ---- Artifact detail and statistics (real Loom server) ----
 
 export async function getArtifact(artifactId: string): Promise<Artifact> {
   return invokeCmd<Artifact>("get_artifact", { artifactId });
-}
-
-export async function getArtifactContent(
-  artifactId: string,
-  encoding?: string | null,
-): Promise<string> {
-  return invokeCmd<string>("get_artifact_content", { artifactId, encoding });
-}
-
-export async function searchArtifacts(query: string): Promise<Artifact[]> {
-  return invokeCmd<Artifact[]>("search_artifacts", { query });
 }
 
 export async function getArtifactStats(): Promise<ArtifactStats> {
@@ -1033,4 +1019,10 @@ export async function getServerConfig(): Promise<ServerConfig> {
 
 export async function getStorageStatus(): Promise<StorageStatus> {
   return invokeCmd<StorageStatus>("get_storage_status");
+}
+
+/** Opens the native knowledge surface while preserving its vault and theme. */
+export async function openLivingWorkbench(): Promise<void> {
+  if (!IN_TAURI) throw new Error("Open the desktop Tauri application to launch Living Workbench.");
+  await invoke("open_living_workbench");
 }

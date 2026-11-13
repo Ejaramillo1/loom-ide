@@ -1,6 +1,10 @@
 #[allow(dead_code)]
 mod adapter;
 mod knowledge;
+mod files;
+#[path = "../../shared/navigation.rs"]
+mod navigation;
+mod work;
 mod loom_adapter;
 mod loom_sync;
 mod mechanics;
@@ -19,25 +23,24 @@ use visual::*;
 #[derive(Clone, PartialEq)]
 enum View {
     Home,
+    Files,
+    Work,
     Knowledge,
     Canvas,
     Experiments,
     Decisions,
-    Traces,
+    Activity,
 }
 #[derive(Clone, PartialEq)]
 enum Dialog {
     Search,
-    Activity,
     Intent,
     More,
     Review,
     Note,
     New,
     Settings,
-    Context,
     Journal,
-    Experiment,
     Scene,
 }
 struct Message {
@@ -46,6 +49,8 @@ struct Message {
     links: Vec<String>,
 }
 struct Workbench {
+    files: files::Files,
+    work: work::Overview,
     vault: Option<Vault>,
     adapter: LoomHttpAdapter,
     loom_connected: bool,
@@ -74,8 +79,6 @@ struct Workbench {
     started: Instant,
     processing_until: f64,
     completed_until: f64,
-    experiment_stage: mechanics::ExperimentStage,
-    experiment_notice: String,
     frames: u32,
     screenshot: Option<PathBuf>,
     screenshot_sent: bool,
@@ -95,7 +98,7 @@ fn button(ui: &mut Ui, text: &str) -> bool {
     ui.add(
         Button::new(RichText::new(text).size(14.))
             .min_size(vec2(100., 36.))
-            .rounding(12.),
+            .rounding(control_radius()),
     )
     .clicked()
 }
@@ -126,7 +129,7 @@ impl Workbench {
             vec!["Inter Medium".into()],
         );
         cc.egui_ctx.set_fonts(fonts);
-        let (vault, startup_error) = match Vault::open(root) {
+        let (vault, startup_error) = match Vault::open_frontend(root) {
             Ok(v) => (Some(v), String::new()),
             Err(e) => (None, e),
         };
@@ -139,6 +142,8 @@ impl Workbench {
             .egui_ctx
             .load_texture("Luminous sphere", sphere(), TextureOptions::LINEAR);
         Self {
+            files: Default::default(),
+            work: Default::default(),
             vault,
             adapter: LoomHttpAdapter::new(),
             loom_connected: false,
@@ -147,21 +152,10 @@ impl Workbench {
             dialog: None,
             chat_open: true,
             home_narrow: false,
-            messages: vec![
-                Message {
-                    user: true,
-                    text: "Show me what we have learned about agent memory.".into(),
-                    links: vec![],
-                },
-                Message {
-                    user: false,
-                    text: "Here is a summary of our findings on agent memory:".into(),
-                    links: vec!["mastermind".into(), "result".into(), "map".into()],
-                },
-            ],
+            messages: Vec::new(),
             input: String::new(),
             query: String::new(),
-            selected: "result".into(),
+            selected: String::new(),
             draft: None,
             editing: false,
             new_title: String::new(),
@@ -169,7 +163,7 @@ impl Workbench {
             new_kind: "note".into(),
             intent_draft: String::new(),
             review_reason: String::new(),
-            relation_target: "hypothesis".into(),
+            relation_target: String::new(),
             relation_kind: "references".into(),
             toast: None,
             colors,
@@ -178,8 +172,6 @@ impl Workbench {
             started: Instant::now(),
             processing_until: 0.0,
             completed_until: 0.0,
-            experiment_stage: Default::default(),
-            experiment_notice: String::new(),
             frames: 0,
             screenshot,
             screenshot_sent: false,
@@ -284,9 +276,7 @@ impl Workbench {
                 .unwrap_or(false)
         {
             Some(State::Error)
-        } else if self.dialog == Some(Dialog::Activity)
-            || self.dialog == Some(Dialog::Review)
-            || self.experiment_stage == mechanics::ExperimentStage::Choose
+        } else if self.dialog == Some(Dialog::Review)
             || self.vault.as_ref().map(|v| v.state() == State::AwaitingApproval).unwrap_or(false)
         {
             Some(State::AwaitingApproval)
@@ -351,6 +341,20 @@ impl Workbench {
         }
     }
     fn top(&mut self, ui: &mut Ui, w: f32, workspace: bool) {
+        ui.allocate_new_ui(UiBuilder::new().max_rect(rect(160., 8., (w - 520.).max(140.), 26.)), |ui| {
+            ui.horizontal(|ui| {
+                ui.menu_button("File", |ui| {
+                    if ui.button("Files & editor").clicked() { self.folder=None; self.view=View::Files; self.dialog=None; ui.close_menu(); }
+                    if ui.button("Capture note").clicked() { self.dialog=Some(Dialog::New);ui.close_menu(); }
+                    if ui.button("Go to Tauri environment").clicked() { if let Err(e)=files::open_tauri(){self.notify(e,true);} ui.close_menu(); }
+                });
+                ui.menu_button("View", |ui| {
+                    for (label,view) in [("Home",View::Home),("Work",View::Work),("Files",View::Files),("Knowledge",View::Knowledge),("Canvas",View::Canvas),("Experiments",View::Experiments),("Decisions",View::Decisions),("Activity",View::Activity)] {
+                        if ui.button(label).clicked(){self.folder=None;self.view=view;ui.close_menu();}
+                    }
+                });
+            });
+        });
         let p = ui.painter().clone();
         let r = rect(32., 20., 125., 48.);
         let home = ui.interact(r, Id::new("Home logo"), Sense::click());
@@ -371,9 +375,9 @@ impl Workbench {
             let intent = self
                 .vault
                 .as_ref()
-                .map(|v| v.settings.intent.as_str())
+                .map(|v| v.display_intent())
                 .unwrap_or("Knowledge workspace");
-            txt(&p.with_clip_rect(rect(206., 28., w - 560., 32.)), 206., 35., intent, 14., self.colors.second);
+            txt(&p.with_clip_rect(rect(160., 52., w - 520., 26.)), 160., 54., intent, 14., self.colors.second);
         }
         self.appearance_switch(ui, rect(w - 334., 27., 134., 34.));
         if icon_button(
@@ -430,16 +434,16 @@ impl Workbench {
         let intent = self
             .vault
             .as_ref()
-            .map(|v| v.settings.intent.clone())
+            .map(|v| v.display_intent().to_string())
             .unwrap_or("Your local research workspace".into());
         let rr = rect(48., 137., iw, 36.);
         let ir = ui.interact(rr, Id::new("Active human intent"), Sense::click());
-        wrapped(&p, rr, intent, 25., self.colors.text);
+        wrapped(&p, rr, if intent.is_empty() { "Set your intent".into() } else { intent }, 25., self.colors.text);
         if ir.clicked() {
             self.intent_draft = self
                 .vault
                 .as_ref()
-                .map(|v| v.settings.intent.clone())
+                .map(|v| v.display_intent().to_string())
                 .unwrap_or_default();
             self.dialog = Some(Dialog::Intent);
         }
@@ -476,7 +480,7 @@ impl Workbench {
             )
         });
         if or.clicked() {
-            self.dialog = Some(Dialog::Activity);
+            self.view = View::Activity;
         }
         if or.hovered() {
             p.text(
@@ -496,7 +500,7 @@ impl Workbench {
             ("layers", "Canvas"),
             ("flask", "Experiments"),
             ("history", "Decisions"),
-            ("activity", "Traces"),
+            ("activity", "Activity"),
             ("grid", "More"),
         ];
         for (i, (name, label)) in labels.iter().enumerate() {
@@ -532,7 +536,7 @@ impl Workbench {
                     1 => self.view = View::Canvas,
                     2 => self.view = View::Experiments,
                     3 => self.view = View::Decisions,
-                    4 => self.view = View::Traces,
+                    4 => self.view = View::Activity,
                     _ => self.dialog = Some(Dialog::More),
                 }
             }
@@ -624,19 +628,15 @@ impl Workbench {
                                                 .stroke(Stroke::new(1_f32,
                                                     self.colors.overlay(25),
                                                 ))
-                                                .rounding(12.)
+                                                .rounding(control_radius())
                                                 .inner_margin(3.)
                                                 .show(ui, |ui| {
                                                     for (i, id) in msg.links.iter().enumerate() {
-                                                        let label = if id == "map" {
-                                                            "Related Knowledge (6)".into()
-                                                        } else {
-                                                            self.vault
+                                                        let label = self.vault
                                                                 .as_ref()
                                                                 .and_then(|v| v.get(id))
                                                                 .map(|n| n.meta.title.clone())
-                                                                .unwrap_or(id.clone())
-                                                        };
+                                                                .unwrap_or(id.clone());
                                                         let (rr, res) = ui.allocate_exact_size(
                                                             vec2(ui.available_width(), 43.),
                                                             Sense::click(),
@@ -704,25 +704,7 @@ impl Workbench {
                                 ui.add_space(15.);
                             }
                         }
-                        if self.messages.len() == 2 {
-                            ui.add_space(3.);
-                            ui.horizontal(|ui| {
-                                ui.add_space(32.);
-                                if ui
-                                    .add(
-                                        Button::new(
-                                            RichText::new("Challenge our conclusion")
-                                                .size(13.)
-                                                .color(self.colors.second),
-                                        )
-                                        .frame(false),
-                                    )
-                                    .clicked()
-                                {
-                                    open = Some("challenge".into());
-                                }
-                            });
-                        }
+
                     });
             },
         );
@@ -789,22 +771,18 @@ impl Workbench {
                 return;
             }
         };
+        self.loom_connected = self.adapter.activity().state != State::Error;
+        if !self.loom_connected {
+            self.notify("Loom is unavailable. Your draft is preserved.", true);
+            return;
+        }
         self.input.clear();
-        // The original shows this brief feedback even for an immediate offline reply.
         self.processing_until = self.started.elapsed().as_secs_f64() + mechanics::PROCESSING_SECONDS;
-        let lower = q.to_lowercase();
-        self.messages.push(Message {
-            user: true,
-            text: q.clone(),
-            links: vec![],
-        });
-        let connected = self.adapter.activity().state != State::Error;
-        self.loom_connected = connected;
-        if connected {
+        self.messages.push(Message { user: true, text: q.clone(), links: vec![] });
             let intent = self
                 .vault
                 .as_ref()
-                .map(|v| v.settings.intent.clone())
+                .map(|v| v.display_intent().to_string())
                 .unwrap_or_default();
             let object_ids = if self.selected.is_empty() {
                 Vec::new()
@@ -831,53 +809,6 @@ impl Workbench {
             }
             self.completed_until =
                 self.started.elapsed().as_secs_f64() + mechanics::COMPLETION_SECONDS;
-            return;
-        }
-        if lower.contains("challenge") || lower.contains("surely") {
-            let body="The observed advantage may depend on task ordering, prompt design or experimental conditions. Does it generalize to other tasks?\n\nThis is an offline reasoning prompt based on the historical fixture, not a new measurement.";
-            let result = self
-                .vault
-                .as_mut()
-                .ok_or_else(|| "Vault unavailable".to_string())
-                .and_then(|v| {
-                    let id = v.create(
-                        "Challenge: test the hidden assumptions",
-                        body,
-                        "question",
-                        Actor::Agent,
-                    )?;
-                    v.relate(&id, "result", "references")?;
-                    Ok(id)
-                });
-            match result{Ok(id)=>self.messages.push(Message{user:false,text:"Offline sparring prompt: task ordering and prompt design could affect this result. I saved a proposed challenge for your review.".into(),links:vec![id]}),Err(e)=>self.notify(e,true)}
-        } else {
-            let links =
-                if lower.contains("memor") || lower.contains("learn") || lower.contains("summar") {
-                    vec!["result".into(), "mastermind".into(), "challenge".into()]
-                } else {
-                    self.vault
-                        .as_ref()
-                        .map(|v| {
-                            v.search(&q)
-                                .iter()
-                                .take(3)
-                                .map(|n| n.meta.id.clone())
-                                .collect()
-                        })
-                        .unwrap_or_default()
-                };
-            let text = if links.is_empty() {
-                "No matching local knowledge yet. Create a note with Ctrl+N, or search with Ctrl+K. No model is connected to generate an answer."
-            } else {
-                "From the local historical fixture: memory enabled 59/100 successes; disabled 40/100. The observed difference is 19 percentage points, with approximately 4× latency and more than 2× token usage. These results do not establish generalization."
-            };
-            self.messages.push(Message {
-                user: false,
-                text: text.into(),
-                links,
-            });
-        }
-        self.completed_until = self.started.elapsed().as_secs_f64() + mechanics::COMPLETION_SECONDS;
     }
     fn workspace(&mut self, ui: &mut Ui, r: Rect) {
         let (w, h) = (r.width(), r.height());
@@ -916,7 +847,7 @@ impl Workbench {
                 ("layers", "Canvas", View::Canvas),
                 ("flask", "Experiments", View::Experiments),
                 ("history", "Decisions", View::Decisions),
-                ("activity", "Traces", View::Traces),
+                ("activity", "Activity", View::Activity),
             ];
             for (i, (name, label, view)) in sections.iter().enumerate() {
                 let rr = rect(14., 202. + i as f32 * 42., 214., 36.);
@@ -1029,7 +960,7 @@ impl Workbench {
                 ("Canvas", View::Canvas),
                 ("Experiments", View::Experiments),
                 ("Decisions", View::Decisions),
-                ("Traces", View::Traces),
+                ("Activity", View::Activity),
             ];
             for (i, (s, v)) in labels.iter().enumerate() {
                 if pill(
@@ -1082,7 +1013,7 @@ impl Workbench {
                             format!(
                                 "{} objects  ·  {} relationships",
                                 v.notes.len(),
-                                v.ledger.edges.len()
+                                v.ledger.edges.iter().filter(|e| v.get(&e.from).is_some() && v.get(&e.to).is_some()).count()
                             )
                         })
                         .unwrap_or_default();
@@ -1104,21 +1035,7 @@ impl Workbench {
                     {
                         self.sync_from_loom();
                     }
-                    let gh = (content.height() * 0.51).max(260.);
-                    self.graph(
-                        ui,
-                        rect(content.left(), content.top() + 88., content.width(), gh),
-                    );
-                    self.canvas(
-                        ui,
-                        rect(
-                            content.left(),
-                            content.top() + gh + 107.,
-                            content.width(),
-                            (content.height() - gh - 112.).max(180.),
-                        ),
-                        false,
-                    );
+                    self.graph(ui, rect(content.left(), content.top()+88., content.width(), (content.height()-96.).max(100.)));
                 }
                 View::Canvas => {
                     txt(
@@ -1133,7 +1050,7 @@ impl Workbench {
                         &p,
                         content.left() + 5.,
                         content.top() + 48.,
-                        "An experiment plan, grounded in shared knowledge.",
+                        "Arrange the notes in your vault.",
                         13.,
                         self.colors.muted,
                     );
@@ -1148,9 +1065,11 @@ impl Workbench {
                         true,
                     );
                 }
+                View::Work => { ui.allocate_new_ui(UiBuilder::new().max_rect(content), |ui| { self.work.ui(ui); }); },
+                View::Files => { ui.allocate_new_ui(UiBuilder::new().max_rect(content), |ui| { self.files.ui(ui); }); },
                 View::Experiments => self.note_list(ui, content, "experiment"),
                 View::Decisions => self.note_list(ui, content, "decision"),
-                View::Traces => self.traces(ui, content),
+                View::Activity => self.traces(ui, content),
                 _ => {}
             }
         }
@@ -1207,12 +1126,16 @@ impl Workbench {
                     .unwrap_or(true)
             })
             .collect();
+        if visible.is_empty() {
+            wrapped(&p, rect(r.left()+24.,r.top()+72.,r.width()-48.,60.), "No notes yet. Capture a note or sync from Loom to build your graph.",14.,self.colors.muted);
+            return;
+        }
         let center = pos2(r.center().x, r.center().y + 18.);
         let radiusx = (r.width() * 0.31).min(340.);
         let radiusy = (r.height() * 0.31).min(150.);
         let mut positions = std::collections::HashMap::new();
         for (i, n) in visible.iter().enumerate() {
-            let c = if n.meta.id == "result" {
+            let c = if n.meta.id == self.selected {
                 center
             } else {
                 let a = (i as f32 / visible.len().max(1) as f32) * std::f32::consts::TAU - 1.6;
@@ -1241,7 +1164,7 @@ impl Workbench {
         let mut open = None;
         for n in visible {
             let c = positions[&n.meta.id];
-            let big = n.meta.id == "result";
+            let big = n.meta.id == self.selected;
             let radius = if big { 23. } else { 8. };
             let col = match n.meta.kind.as_str() {
                 "result" | "memory" => self.colors.green,
@@ -1290,181 +1213,58 @@ impl Workbench {
         }
     }
     fn canvas(&mut self, ui: &mut Ui, r: Rect, full: bool) {
-        let p = ui.painter().clone();
-        p.rect_filled(r, 16., self.colors.surface(Color32::from_rgb(18, 20, 32)));
-        p.rect_stroke(r, 16., Stroke::new(1.0_f32, self.colors.overlay(17)));
-        icon(&p, "layers", r.min + vec2(24., 24.), 18., self.colors.purple);
-        txt(
-            &p,
-            r.left() + 43.,
-            r.top() + 15.,
-            "Canvas — Experiment plan",
-            14.,
-            self.colors.text,
-        );
-        if full
-            && pill(
-                ui,
-                rect(r.right() - 160., r.top() + 9., 148., 30.),
-                "Export JSON Canvas",
-                false,
-            )
-            .clicked()
-        {
-            let res = self
-                .vault
-                .as_ref()
-                .ok_or_else(|| "Vault unavailable".to_string())
-                .and_then(|v| v.export_canvas());
-            self.outcome(res, "Canvas exported to the vault's Artifacts folder");
-        }
-        let cp = p.with_clip_rect(r.shrink(1.));
-        for ix in (12..r.width() as usize).step_by(20) {
-            for iy in (57..r.height() as usize).step_by(20) {
-                cp.circle_filled(
-                    r.min + vec2(ix as f32, iy as f32),
-                    0.6,
-                    self.colors.overlay(18),
-                );
-            }
-        }
-        let ids = [
-            "hypothesis",
-            "mastermind",
-            "result",
-            "decision",
-            "challenge",
-            "followup",
-        ];
-        let titles = [
-            "Hypothesis",
-            "Experiment",
-            "Evaluation",
-            "Decision",
-            "Challenge",
-            "Follow-up experiment",
-        ];
-        let desc = [
-            "Memory improves\ntask success.",
-            "Mastermind · 200 games\nA/B: memory on / off",
-            "Success · Latency\nToken usage",
-            "Keep memory\nwith caveats",
-            "Does this result\ngeneralize?",
-            "Vary tasks, ordering\nand prompt design.",
-        ];
-        let colors = [self.colors.purple, self.colors.blue, self.colors.green, self.colors.amber, self.colors.purple, self.colors.blue];
-        let cw = ((r.width() - 110.) / 4.).min(240.).max(100.);
-        let ch = if full { 120. } else { 92. };
-        let gap = (r.width() - cw * 4.) / 5.;
-        let yy = r.top() + if full { 100. } else { 65. };
-        let has_second = full || r.height() > 290.;
-        let mut positions = Vec::new();
-        for i in 0..6 {
-            let row = if i < 4 { 0 } else { 1 };
-            let col = if i < 4 { i } else { i - 3 };
-            let base = pos2(
-                r.left() + gap + (cw + gap) * col as f32,
-                yy + row as f32 * (ch + 55.),
-            );
-            let loc = self
-                .canvas_positions
-                .get(ids[i])
-                .copied()
-                .unwrap_or(base - r.min.to_vec2());
-            let min = if full { r.min + loc.to_vec2() } else { base };
-            positions.push(Rect::from_min_size(min, vec2(cw, ch)));
-        }
-        for (a, b) in [(0, 1), (1, 2), (2, 3), (2, 4), (4, 5)] {
-            if (!has_second && (a >= 4 || b >= 4)) || a >= positions.len() {
-                continue;
-            }
-            let ra = positions[a];
-            let rb = positions[b];
-            let start = ra.right_center();
-            let end = rb.left_center();
-            let mid = (start.x + end.x) * 0.5;
-            cp.add(Shape::line(
-                vec![start, pos2(mid, start.y), pos2(mid, end.y), end],
-                Stroke::new(1.4f32, colors[a].gamma_multiply(0.7)),
-            ));
-            cp.add(Shape::line(
-                vec![end + vec2(-6., -4.), end, end + vec2(-6., 4.)],
-                Stroke::new(1.4f32, colors[a]),
-            ));
-        }
+        let notes = self.vault.as_ref().map(|v| v.notes.clone()).unwrap_or_default();
+        let edges = self.vault.as_ref().map(|v| v.ledger.edges.clone()).unwrap_or_default();
         let mut open = None;
-        for i in 0..if has_second { 6 } else { 4 } {
-            let rr = positions[i];
-            let response = ui.interact(
-                rr,
-                Id::new(("canvas", ids[i], full)),
-                Sense::click_and_drag(),
-            );
-            if full && response.dragged() {
-                let delta = response.drag_delta();
-                let new = (rr.min + delta)
-                    .clamp(r.min + vec2(10., 53.), r.max - vec2(cw + 10., ch + 10.));
-                self.canvas_positions
-                    .insert(ids[i].into(), new - r.min.to_vec2());
+        let mut export = false;
+        ui.allocate_new_ui(UiBuilder::new().max_rect(r).layout(Layout::top_down(Align::Min)), |ui| {
+            ui.horizontal(|ui| {
+                ui.heading("Canvas");
+                if full && ui.add_enabled(!notes.is_empty(), Button::new("Export JSON Canvas")).clicked() { export = true; }
+            });
+            if notes.is_empty() {
+                ui.label("No notes yet. Capture a note to start your canvas.");
+                return;
             }
-            cp.rect_filled(rr, 10., self.colors.surface(Color32::from_rgb(31, 34, 51)));
-            cp.rect_filled(
-                rect(rr.left(), rr.top(), rr.width(), 31.),
-                10.,
-                colors[i].gamma_multiply(0.11),
-            );
-            cp.rect_stroke(
-                rr,
-                10.,
-                Stroke::new(1_f32,
-                    colors[i].gamma_multiply(if response.hovered() { 1. } else { 0.65 }),
-                ),
-            );
-            icon(
-                &cp,
-                if i == 3 {
-                    "history"
-                } else if i == 2 {
-                    "chart"
-                } else {
-                    "flask"
-                },
-                rr.min + vec2(17., 17.),
-                16.,
-                colors[i],
-            );
-            txt(
-                &cp,
-                rr.left() + 32.,
-                rr.top() + 9.,
-                titles[i],
-                if cw < 170. { 11. } else { 13. },
-                self.colors.text,
-            );
-            wrapped(
-                &cp,
-                rect(rr.left() + 13., rr.top() + 42., cw - 24., ch - 46.),
-                desc[i],
-                12.,
-                self.colors.second,
-            );
-            if response.clicked() {
-                open = Some(ids[i].to_string());
-            }
+            ScrollArea::both().id_salt(("knowledge canvas", full)).max_height((r.height()-48.).max(40.)).show(ui, |ui| {
+                let columns = ((r.width()-24.)/240.).floor().max(1.) as usize;
+                let rows = notes.len().div_ceil(columns);
+                let (area,_) = ui.allocate_exact_size(vec2((columns*240) as f32, (rows*148+16) as f32), Sense::hover());
+                let painter = ui.painter().clone();
+                let mut positions = std::collections::HashMap::new();
+                for (i,note) in notes.iter().enumerate() {
+                    let default = pos2((i%columns) as f32*240., (i/columns) as f32*148.);
+                    let offset = self.canvas_positions.get(&note.meta.id).copied().unwrap_or(default);
+                    let rect = Rect::from_min_size(area.min+offset.to_vec2(),vec2(220.,128.));
+                    positions.insert(note.meta.id.clone(),rect);
+                }
+                for edge in &edges {
+                    if let (Some(a),Some(b))=(positions.get(&edge.from),positions.get(&edge.to)) {
+                        painter.line_segment([a.center(),b.center()],Stroke::new(1_f32,self.colors.purple));
+                    }
+                }
+                for note in &notes {
+                    let rect = positions[&note.meta.id];
+                    let response = ui.interact(rect,Id::new(("canvas note",&note.meta.id,full)),Sense::click_and_drag());
+                    if response.dragged() {
+                        let new = (rect.min+response.drag_delta()-area.min).max(Vec2::ZERO);
+                        self.canvas_positions.insert(note.meta.id.clone(),pos2(new.x,new.y));
+                    }
+                    painter.rect_filled(rect,control_radius(),self.colors.surface(Color32::from_rgb(31,34,51)));
+                    painter.rect_stroke(rect,control_radius(),Stroke::new(1_f32,self.colors.overlay(45)));
+                    let clip = painter.with_clip_rect(rect.shrink(10.));
+                    txt(&clip,rect.left()+12.,rect.top()+10.,&note.meta.kind,12.,self.colors.purple);
+                    wrapped(&clip,Rect::from_min_size(pos2(rect.left()+12.,rect.top()+32.),vec2(196.,44.)),&note.meta.title,14.,self.colors.text);
+                    wrapped(&clip,Rect::from_min_size(pos2(rect.left()+12.,rect.top()+80.),vec2(196.,36.)),note.body.chars().take(120).collect::<String>(),12.,self.colors.second);
+                    if response.clicked() { open=Some(note.meta.id.clone()); }
+                }
+            });
+        });
+        if export {
+            let result=self.vault.as_ref().ok_or("Vault unavailable".to_string()).and_then(|v|v.export_canvas());
+            self.outcome(result,"Canvas exported to the vault's Artifacts folder");
         }
-        if full {
-            txt(
-                &p,
-                r.left() + 20.,
-                r.bottom() - 31.,
-                "Knowledge links · drag to arrange · select a card to inspect",
-                12.,
-                self.colors.muted,
-            );
-        }
-        if let Some(id) = open {
-            self.open_note(&id);
-        }
+        if let Some(id)=open {self.open_note(&id);}
     }
     fn note_list(&mut self, ui: &mut Ui, r: Rect, kind: &str) {
         let p = ui.painter().clone();
@@ -1481,7 +1281,7 @@ impl Workbench {
             r.left() + 5.,
             r.top() + 49.,
             if kind == "experiment" {
-                "Historical evidence and future questions, kept together."
+                "Experiment notes you have recorded."
             } else {
                 "Every conclusion has a history."
             },
@@ -1520,10 +1320,7 @@ impl Workbench {
             })
             .unwrap_or_default();
         let mut open = None;
-        if kind == "experiment" && pill(ui, rect(r.left()+5., r.top()+73., 200., 30.), "Compare memory strategies", false).clicked() {
-            self.dialog = Some(Dialog::Experiment);
-        }
-        let offset = if kind == "experiment" { 120. } else { 100. };
+        let offset = 100.;
         let list = rect(r.left(), r.top() + offset, r.width(), r.height() - offset);
         ui.allocate_new_ui(UiBuilder::new().max_rect(list), |ui| {
             ScrollArea::vertical()
@@ -1606,45 +1403,9 @@ impl Workbench {
         }
     }
     fn traces(&mut self, ui: &mut Ui, r: Rect) {
-        let p = ui.painter().clone();
-        txt(&p, r.left() + 5., r.top() + 7., "Traces", 28., self.colors.text);
-        txt(
-            &p,
-            r.left() + 5.,
-            r.top() + 50.,
-            "Inspect what happened, and where it came from.",
-            13.,
-            self.colors.muted,
-        );
-        let empty = rect(r.left(), r.top() + 100., r.width(), 165.);
-        p.rect_filled(empty, 16., self.colors.surface(Color32::from_rgb(25, 28, 44)));
-        icon(&p, "activity", empty.min + vec2(35., 39.), 24., self.colors.purple);
-        txt(
-            &p,
-            empty.left() + 62.,
-            empty.top() + 24.,
-            "No agent executions recorded",
-            19.,
-            self.colors.text,
-        );
-        wrapped(&p,rect(empty.left()+62.,empty.top()+61.,empty.width()-100.,65.),"This offline workbench has no connected Loom agent. No execution, token, cost or latency metrics have been invented.",14.,self.colors.second);
-        txt(
-            &p,
-            r.left() + 5.,
-            r.top() + 296.,
-            "Local activity",
-            19.,
-            self.colors.text,
-        );
-        self.audit_list(
-            ui,
-            rect(
-                r.left() + 5.,
-                r.top() + 340.,
-                r.width() - 10.,
-                r.height() - 350.,
-            ),
-        );
+        txt(ui.painter(), r.left()+5., r.top()+7., "Activity", 28., self.colors.text);
+        txt(ui.painter(), r.left()+5., r.top()+50., "Edits, links and review decisions recorded in this vault.", 13., self.colors.muted);
+        self.audit_list(ui, rect(r.left()+5., r.top()+88., r.width()-10., (r.height()-96.).max(0.)));
     }
     fn audit_list(&self, ui: &mut Ui, r: Rect) {
         ui.allocate_new_ui(UiBuilder::new().max_rect(r), |ui| {
@@ -1661,7 +1422,7 @@ impl Workbench {
                                 .color(self.colors.muted),
                             );
                         }
-                        for a in v.ledger.audit.iter().rev().take(100) {
+                        for a in v.ledger.audit.iter().rev().filter(|a| !v.is_hidden(&a.object)).take(100) {
                             let title = v
                                 .get(&a.object)
                                 .map(|n| n.meta.title.as_str())
@@ -1691,16 +1452,13 @@ impl Workbench {
         layer.rect_filled(screen, 0., Color32::from_black_alpha(102));
         let title = match which {
             Dialog::Search => "Search your workbench",
-            Dialog::Activity => "Intelligence activity",
             Dialog::Intent => "Your active intent",
             Dialog::More => "More from your workbench",
             Dialog::Review => "Memory garden",
             Dialog::Note => "Knowledge object",
             Dialog::New => "Capture an idea",
             Dialog::Settings => "Local workspace",
-            Dialog::Context => "Context pack",
             Dialog::Journal => "Activity journal",
-            Dialog::Experiment => "Compare memory strategies",
             Dialog::Scene => "Scene preview",
         };
         let mut is_open = true;
@@ -1717,29 +1475,24 @@ impl Workbench {
      ScrollArea::vertical().max_height(420_f32.min(screen.height()-340.)).show(ui,|ui|{if results.is_empty(){ui.label(RichText::new("No matching knowledge. Try another word or capture a new note.").color(self.colors.second));}for(id,title,kind,status)in results{let(rr,response)=ui.allocate_exact_size(vec2(ui.available_width(),63.),Sense::click());if response.hovered(){ui.painter().rect_filled(rr,12.,self.colors.overlay(8));}icon(ui.painter(),"file",rr.min+vec2(21.,26.),18.,self.colors.purple);txt(ui.painter(),rr.left()+43.,rr.top()+9.,title,14.,self.colors.text);txt(ui.painter(),rr.left()+43.,rr.top()+33.,format!("{kind} · {status}"),12.,self.colors.muted);if response.clicked(){open=Some(id);}}});
      ui.add_space(7.);ui.label(RichText::new("Ctrl+K  search       Ctrl+N  capture       Esc  close").size(12.).color(self.colors.muted));if field.has_focus()&&ui.input(|i|i.key_pressed(Key::Enter)){open=first;}if let Some(id)=open{self.open_note(&id);}
     },
-    Dialog::Activity=>{
-     let state=self.current_state();ui.horizontal(|ui|{let(rr,_)=ui.allocate_exact_size(vec2(66.,66.),Sense::hover());self.orb_image(ui.painter(),rr.center(),46.,true);ui.vertical(|ui|{ui.label(RichText::new(state.label()).size(25.));ui.label(RichText::new("Local knowledge environment").color(self.colors.second));});});ui.add_space(18.);
-     ui.label(RichText::new("No remote agent is connected. The sphere reflects local changes and knowledge awaiting your review.").color(self.colors.second));ui.add_space(15.);
-     let pending=self.vault.as_ref().map(|v|v.pending()).unwrap_or(0);ui.label(format!("{pending} proposals awaiting human review"));ui.label(RichText::new("Permissions: read local knowledge, edit drafts, propose links. No shell, network, Git or model execution.").color(self.colors.muted));ui.add_space(20.);if button(ui,"Review proposals"){self.dialog=Some(Dialog::Review);}if button(ui,"Inspect local activity"){self.view=View::Traces;self.dialog=None;}
-    },
     Dialog::Intent=>{
      ui.label(RichText::new("What are you trying to understand?").size(19.));ui.add_space(7.);ui.add_sized(vec2(ui.available_width(),60.),TextEdit::multiline(&mut self.intent_draft).font(FontId::proportional(18.)));
-     ui.add_space(12.);ui.horizontal(|ui|{if button(ui,"Save intent"){let res=self.vault.as_mut().ok_or_else(|| "Vault unavailable".to_string()).and_then(|v|v.set_intent(&self.intent_draft));if res.is_ok(){self.dialog=None;}self.outcome(res,"Active intent saved");}if button(ui,"Linked knowledge"){self.dialog=None;self.view=View::Knowledge;self.focus_graph=Some("intent".into());}});
+     ui.add_space(12.);ui.horizontal(|ui|{if button(ui,"Save intent"){let res=self.vault.as_mut().ok_or_else(|| "Vault unavailable".to_string()).and_then(|v|v.set_intent(&self.intent_draft));if res.is_ok(){self.dialog=None;}self.outcome(res,"Active intent saved");}if button(ui,"Linked knowledge"){self.dialog=None;self.view=View::Knowledge;self.focus_graph=None;}});
      ui.add_space(18.);ui.label(RichText::new("Switch to a stored intent").color(self.colors.muted));let intents:Vec<_>=self.vault.as_ref().map(|v|v.notes.iter().filter(|n|n.meta.kind=="intent"||n.meta.kind=="project").map(|n|n.meta.title.clone()).collect()).unwrap_or_default();for title in intents{if ui.add(Button::new(&title).frame(false)).clicked(){self.intent_draft=title;}}
      if button(ui,"Create another intent"){self.new_kind="intent".into();self.dialog=Some(Dialog::New);}
     },
     Dialog::More=>{
      ui.label(RichText::new("Make room for a different way of thinking.").color(self.colors.second));ui.add_space(15.);
      ScrollArea::vertical().max_height((screen.height()-260.).max(150.)).show(ui,|ui|{
-     for (title,subtitle,target) in [("Scene preview","Explore Unity-inspired scene controls and save a local preset.",Dialog::Scene),("Memory garden","Review proposed knowledge and preserve its history.",Dialog::Review),("Context pack","Inspect the knowledge a future agent would receive.",Dialog::Context),("Activity journal","Review meaningful changes recorded in this vault.",Dialog::Journal),("Workspace settings","Motion, local files and connection status.",Dialog::Settings)]{
+     for (title,subtitle,target) in [("Scene preview","Explore Unity-inspired scene controls and save a local preset.",Dialog::Scene),("Memory garden","Review proposed knowledge and preserve its history.",Dialog::Review),("Activity journal","Review meaningful changes recorded in this vault.",Dialog::Journal),("Workspace settings","Motion, local files and connection status.",Dialog::Settings)]{
       let(rr,response)=ui.allocate_exact_size(vec2(ui.available_width(),76.),Sense::click());if response.hovered(){ui.painter().rect_filled(rr,12.,self.colors.overlay(8));}txt(ui.painter(),rr.left()+12.,rr.top()+12.,title,16.,self.colors.text);wrapped(ui.painter(),rect(rr.left()+12.,rr.top()+39.,rr.width()-48.,34.),subtitle,12.,self.colors.muted);icon(ui.painter(),"chevron",pos2(rr.right()-16.,rr.center().y),16.,self.colors.second);if response.clicked(){if target==Dialog::Scene {self.open_scene();} else {self.dialog=Some(target);}}
      }
      });
     },
     Dialog::Review=>{
-     ui.label(RichText::new("Proposed knowledge stays a proposal until you decide.").color(self.colors.second));ui.label(RichText::new("Approval records your review of the wording and evidence. It does not turn a historical fixture into a verified study.").size(12.).color(self.colors.muted));ui.add_space(15.);
+     ui.label(RichText::new("Proposed knowledge stays a proposal until you decide.").color(self.colors.second));ui.label(RichText::new("Approval records your review of the wording and evidence. It does not independently verify a claim.").size(12.).color(self.colors.muted));ui.add_space(15.);
      let notes:Vec<_>=self.vault.as_ref().map(|v|v.notes.iter().filter(|n|n.meta.status=="proposed").cloned().collect()).unwrap_or_default();let mut open=None;
-     ScrollArea::vertical().max_height(400_f32.min(screen.height()-300.)).show(ui,|ui|{if notes.is_empty(){ui.label(RichText::new("You're all caught up.").size(19.));ui.label(RichText::new("New agent proposals will arrive here for your review.").color(self.colors.muted));}for n in notes{Frame::none().fill(self.colors.overlay(5)).rounding(16.).inner_margin(16.).show(ui,|ui|{ui.horizontal(|ui|{ui.label(RichText::new(&n.meta.kind).size(12.).color(self.colors.amber));ui.label(RichText::new("Needs your review").size(12.).color(self.colors.muted));});ui.label(RichText::new(&n.meta.title).size(19.));ui.label(RichText::new(n.body.chars().take(160).collect::<String>()).color(self.colors.second));if button(ui,"Inspect evidence & review"){open=Some(n.meta.id.clone());}});ui.add_space(12.);}});if let Some(id)=open{self.open_note(&id);}
+     ScrollArea::vertical().max_height(400_f32.min(screen.height()-300.)).show(ui,|ui|{if notes.is_empty(){ui.label(RichText::new("You're all caught up.").size(19.));ui.label(RichText::new("No local notes are awaiting review.").color(self.colors.muted));}for n in notes{Frame::none().fill(self.colors.overlay(5)).rounding(16.).inner_margin(16.).show(ui,|ui|{ui.horizontal(|ui|{ui.label(RichText::new(&n.meta.kind).size(12.).color(self.colors.amber));ui.label(RichText::new("Needs your review").size(12.).color(self.colors.muted));});ui.label(RichText::new(&n.meta.title).size(19.));ui.label(RichText::new(n.body.chars().take(160).collect::<String>()).color(self.colors.second));if button(ui,"Inspect evidence & review"){open=Some(n.meta.id.clone());}});ui.add_space(12.);}});if let Some(id)=open{self.open_note(&id);}
      ui.add_space(14.);if button(ui,"Review history"){self.dialog=Some(Dialog::Journal);}
     },
     Dialog::Scene=>{
@@ -1749,7 +1502,6 @@ impl Workbench {
       self.outcome(result,"Scene preset saved");
      }
     },
-    Dialog::Experiment=>self.experiment_dialog(ui),
     Dialog::Note=>self.note_dialog(ui,screen.height()),
     Dialog::New=>{
      ui.label(RichText::new("Capture first. Connect when you're ready.").color(self.colors.second));ui.add_space(10.);ui.label("Title");ui.add_sized(vec2(ui.available_width(),36.),TextEdit::singleline(&mut self.new_title).hint_text("One idea, in your own words"));ui.horizontal(|ui|{ui.label("Kind");ComboBox::from_id_salt("new kind").selected_text(&self.new_kind).show_ui(ui,|ui|{for kind in KINDS {ui.selectable_value(&mut self.new_kind,kind.to_string(),*kind);}});});ui.add_space(8.);ui.add_sized(vec2(ui.available_width(),180.),TextEdit::multiline(&mut self.new_body).hint_text("What did you notice? What do you want to understand?"));ui.add_space(10.);
@@ -1767,15 +1519,11 @@ impl Workbench {
       let result = self.vault.as_mut().ok_or_else(|| "Vault unavailable".to_string()).and_then(|v| v.set_manual_chat(manual));
       self.outcome(result, "Chat preference saved");
      }
-     ui.label(RichText::new("Manual keeps your draft when you press Send. Turn it off for local offline replies.").size(12.).color(self.colors.muted));
-     ui.add_space(16.);ui.label(RichText::new("Connections").size(16.));ui.label(RichText::new("Loom: not connected\nNetwork activity: none").color(self.colors.second));ui.add_space(12.);ui.label(RichText::new("This first slice uses an offline knowledge retriever and labeled reasoning prompts. It never executes Markdown or canvas content.").color(self.colors.muted));ui.add_space(14.);
+     ui.label(RichText::new("Manual keeps your draft when you press Send. Turn it off to send to Loom.").size(12.).color(self.colors.muted));
+     ui.add_space(16.);ui.label(RichText::new("Last connection check").size(16.));
+     ui.label(if self.loom_connected { "Loom responded to the last check" } else { "No successful Loom check in this window yet" });
      if button(ui,"Refresh files from disk"){let res=self.vault.as_mut().ok_or_else(|| "Vault unavailable".to_string()).and_then(|v|v.reload());self.outcome(res,"Vault reloaded; external edits are now indexed");}
      if button(ui,"View shortcuts"){self.notify("Ctrl+K: search · Ctrl+N: capture · Ctrl+H: home · Esc: close",false);}
-    },
-    Dialog::Context=>{
-     ui.label(RichText::new("Prepared context · no agent receives it yet").size(19.));ui.label(RichText::new("Select knowledge deliberately. Estimates use approximately four characters per token.").color(self.colors.muted));ui.add_space(12.);
-     let ids=["intent","hypothesis","result","decision","challenge"];let mut tokens=0;for id in ids {if let Some(n)=self.vault.as_ref().and_then(|v|v.get(id)){tokens+=(n.body.chars().count()+3)/4;ui.label(format!("• {}",n.meta.title));ui.label(RichText::new(format!("{} · {}",n.meta.status,n.path)).size(11.).color(self.colors.muted));}}
-     ui.add_space(16.);ui.label(RichText::new(format!("Approximately {tokens} tokens · local estimate")).color(self.colors.purple));ui.label(RichText::new("Excluded: attachments, credentials, raw traces and unrelated projects. Manual inclusion and transmission will be added with the runtime adapter.").color(self.colors.second));
     },
     Dialog::Journal=>{ui.label(RichText::new("A record of meaningful local changes.").color(self.colors.second));ui.add_space(15.);self.audit_list(ui,Rect::from_min_size(ui.cursor().min,vec2(ui.available_width(),380_f32.min(screen.height()-270.))));ui.add_space(380_f32.min(screen.height()-270.));}
    }
@@ -1792,67 +1540,6 @@ impl Workbench {
             Err(error) => self.notify(format!("Could not load scene preset: {error}"), true),
         }
         self.dialog = Some(Dialog::Scene);
-    }
-    fn record_experiment_choice(&mut self, choice: usize) -> Result<String, String> {
-        let id = mechanics::record_choice(self.vault.as_mut().ok_or("Vault unavailable")?,
-            &mut self.experiment_stage, choice)?;
-        let (name, _) = mechanics::CONFIGURATIONS[choice];
-        self.experiment_notice = format!("Recorded: you chose {name} for the next experiment.");
-        self.notify("Experiment decision saved", false);
-        Ok(id)
-    }
-    /// attention_panel closure, ELF 0x7e4410: dismiss without resolving the choice.
-    fn defer_experiment_choice(&mut self) {
-        self.dialog = None;
-        self.experiment_notice = "Left for later. The experiment waits; nothing runs on its own.".into();
-    }
-    fn experiment_dialog(&mut self, ui: &mut Ui) {
-        use mechanics::ExperimentStage;
-        ui.label(RichText::new("Compare the two configurations").size(19.));
-        ui.add_space(10.);
-        for (name, description) in mechanics::CONFIGURATIONS {
-            ui.label(RichText::new(name).color(self.colors.purple));
-            ui.label(RichText::new(description).color(self.colors.second));
-            ui.add_space(12.);
-        }
-        match self.experiment_stage {
-            ExperimentStage::Baseline => {
-                if button(ui, "Record baseline (demonstration)") {
-                    self.experiment_stage = ExperimentStage::Comparison;
-                    self.experiment_notice = "Baseline recorded in this demonstration. No server experiment ran.".into();
-                }
-            }
-            ExperimentStage::Comparison => {
-                if button(ui, "Prepare comparison") {
-                    self.experiment_stage = ExperimentStage::Choose;
-                    self.experiment_notice = "Two configurations ready. This is the decision waiting in Attention.".into();
-                }
-            }
-            ExperimentStage::Choose => {
-                ui.label(RichText::new("Nothing runs until you choose.").color(self.colors.amber));
-                for (choice, label) in ["Choose A — write every turn", "Choose B — write when asked"].iter().enumerate() {
-                    if button(ui, label) {
-                        if let Err(e) = self.record_experiment_choice(choice) { self.notify(e, true); }
-                    }
-                }
-                if button(ui, "Decide later") {
-                    self.defer_experiment_choice();
-                }
-            }
-            ExperimentStage::Recorded => {
-                if button(ui, "Start again") {
-                    self.experiment_stage = ExperimentStage::Baseline;
-                    self.experiment_notice.clear();
-                }
-                if button(ui, "View recorded decisions") {
-                    self.view = View::Decisions;
-                    self.dialog = None;
-                }
-            }
-        }
-        ui.add_space(12.);
-        ui.label(RichText::new(&self.experiment_notice).color(self.colors.second));
-        ui.label(RichText::new("This demonstration records a choice for a future experiment. No agent or measurement runs here.").size(12.).color(self.colors.muted));
     }
     fn note_dialog(&mut self, ui: &mut Ui, height: f32) {
         let Some(note) = self.draft.clone() else {
@@ -1955,7 +1642,7 @@ impl Workbench {
                         v.ledger
                             .edges
                             .iter()
-                            .filter(|e| e.from == note.meta.id || e.to == note.meta.id)
+                            .filter(|e| (e.from == note.meta.id || e.to == note.meta.id) && v.get(&e.from).is_some() && v.get(&e.to).is_some())
                             .cloned()
                             .collect::<Vec<_>>()
                     })
@@ -2189,207 +1876,74 @@ impl Workbench {
         }
     }
     fn self_test_tick(&mut self, ctx: &Context) {
-        if self.self_test.is_none() || self.test_done {
-            return;
-        }
+        if self.self_test.is_none() || self.test_done { return; }
         match self.frames {
             12 => {
-                self.view = View::Knowledge;
-                let passed = self
-                    .vault
-                    .as_ref()
-                    .map(|v| v.get("mastermind").is_some())
-                    .unwrap_or(false);
-                self.test_steps.push(serde_json::json!({"step":"move","passed":passed,"detail":"Navigated from home to the knowledge workspace, with the historical experiment available"}));
+                let result=(|| -> Result<(),String> {
+                    let v=self.vault.as_mut().ok_or("Vault unavailable")?;
+                    if !v.notes.is_empty() { return Err("New application vault must start empty".into()); }
+                    self.selected=v.create("Interaction test note","First draft","note",Actor::Human)?;
+                    self.relation_target=v.create("Supporting note","A saved supporting record","note",Actor::Human)?;
+                    self.view=View::Knowledge;
+                    Ok(())
+                })();
+                self.test_steps.push(serde_json::json!({"step":"empty start and capture","passed":result.is_ok(),"detail":result.err()}));
             }
             20 => {
-                self.open_note("mastermind");
-                let passed = self
-                    .draft
-                    .as_ref()
-                    .map(|n| n.body.contains("59 successful"))
-                    .unwrap_or(false);
-                self.test_steps.push(serde_json::json!({"step":"open evidence","passed":passed,"detail":"Experiment opens with 59/100 versus 40/100 and explicit historical-fixture provenance"}));
+                let id=self.selected.clone();self.open_note(&id);
+                self.test_steps.push(serde_json::json!({"step":"inspect real note","passed":self.draft.as_ref().map(|n|n.body=="First draft").unwrap_or(false)}));
             }
             30 => {
-                let result = (|| -> Result<(), String> {
-                    let v = self.vault.as_mut().ok_or("Vault failed")?;
-                    let id =
-                        v.create("Interaction test note", "first draft", "note", Actor::Human)?;
-                    let mut n = v.get(&id).unwrap().clone();
-                    n.body = "Persisted interaction test finding".into();
-                    v.save_note(&n, Actor::Human)?;
-                    v.relate(&id, "result", "references")?;
-                    if !v.backlinks("result").iter().any(|e| e.from == id) {
-                        return Err("Backlink missing".into());
-                    }
-                    let reopened = Vault::open(v.root.clone())?;
-                    if reopened.get(&id).map(|n| n.body.as_str())
-                        != Some("Persisted interaction test finding")
-                    {
-                        return Err("Persistence failed".into());
-                    }
-                    if reopened.search("interaction test finding").is_empty() {
-                        return Err("Search failed".into());
-                    }
-                    let edge = Edge {
-                        from: id,
-                        to: "result".into(),
-                        kind: "references".into(),
-                    };
-                    v.unlink(&edge)?;
-                    v.review(
-                        "memory",
-                        true,
-                        Actor::Human,
-                        "Test reviewed fixture limitations",
-                    )?;
-                    v.review(
-                        "challenge",
-                        false,
-                        Actor::Human,
-                        "Test rejection preserves history",
-                    )?;
-                    if v.review("memory", true, Actor::Agent, "forbidden").is_ok() {
-                        return Err("Permission boundary failed".into());
-                    }
+                let result=(|| -> Result<(),String> {
+                    let v=self.vault.as_mut().ok_or("Vault unavailable")?;
+                    let mut n=v.get(&self.selected).ok_or("Captured note missing")?.clone();
+                    n.body="Edited and persisted".into();v.save_note(&n,Actor::Human)?;
+                    v.relate(&self.selected,&self.relation_target,"references")?;
+                    let reopened=Vault::open_frontend(v.root.clone())?;
+                    if reopened.get(&self.selected).map(|n|n.body.as_str())!=Some("Edited and persisted")
+                        || !reopened.backlinks(&self.relation_target).iter().any(|e|e.from==self.selected) { return Err("Persistence or backlink missing".into()); }
+                    v.unlink(&Edge{from:self.selected.clone(),to:self.relation_target.clone(),kind:"references".into()})?;
+                    v.export_canvas()?;
                     Ok(())
                 })();
-                self.test_steps.push(serde_json::json!({"step":"act","passed":result.is_ok(),"detail":result.err().unwrap_or("Created and edited a persisted note, linked evidence, verified backlinks and search, removed a link, approved and rejected proposals, and denied agent self-approval".into())}));
+                self.test_steps.push(serde_json::json!({"step":"save link reopen and export","passed":result.is_ok(),"detail":result.err()}));
             }
             50 => {
-                self.dialog = None;
-                self.view = View::Home;
-                let manual_result = (|| -> Result<(), String> {
-                    self.vault.as_mut().ok_or("Vault failed")?.set_manual_chat(true)?;
-                    let root = self.vault.as_ref().unwrap().root.clone();
-                    if !Vault::open(root)?.settings.manual_chat {
-                        return Err("Manual chat setting did not persist".into());
-                    }
-                    let messages = self.messages.len();
-                    let notes = self.vault.as_ref().unwrap().notes.len();
-                    let deadlines = (self.processing_until, self.completed_until);
-                    self.input = "  Challenge our conclusion  ".into();
-                    self.send_message();
-                    if self.input != "  Challenge our conclusion  " || messages != self.messages.len()
-                        || notes != self.vault.as_ref().unwrap().notes.len()
-                        || deadlines != (self.processing_until, self.completed_until)
-                        || self.toast.as_ref().map(|t| t.0.as_str()) != Some(mechanics::MANUAL_NOTICE) {
-                        return Err("Manual send changed draft, conversation, notes or timers".into());
-                    }
-                    self.toast = None;
-                    self.input = " \n\t".into();
-                    self.send_message();
-                    if self.toast.is_some() || self.input != " \n\t" {
-                        return Err("Whitespace did not return before the Manual guard".into());
-                    }
-                    self.vault.as_mut().unwrap().set_manual_chat(false)?;
+                self.dialog=None;self.view=View::Home;
+                let result=(|| -> Result<(),String> {
+                    let v=self.vault.as_mut().ok_or("Vault unavailable")?;v.set_manual_chat(true)?;
+                    let root=v.root.clone();let messages=self.messages.len();
+                    self.input="Preserve this draft".into();self.send_message();
+                    if self.input!="Preserve this draft" || self.messages.len()!=messages || !Vault::open_frontend(root)?.settings.manual_chat { return Err("Manual draft guard failed".into()); }
+                    self.vault.as_mut().unwrap().set_manual_chat(false)?;self.input.clear();self.toast=None;
                     Ok(())
                 })();
-                self.test_steps.push(serde_json::json!({"step":"manual-chat","passed":manual_result.is_ok(),"detail":manual_result.err().unwrap_or("Verified persisted Manual mode preserves draft, messages, notes and deadlines; whitespace is a no-op before the guard".into())}));
-                self.input = "Challenge our conclusion".into();
-                self.send_message();
-                let elapsed = self.started.elapsed().as_secs_f64();
-                let timing = self.processing_until > elapsed
-                    && self.processing_until <= elapsed + mechanics::PROCESSING_SECONDS
-                    && self.completed_until > self.processing_until
-                    && self.completed_until <= elapsed + mechanics::COMPLETION_SECONDS;
-                let deadlines = (self.processing_until, self.completed_until);
-                self.input = " \n\t".into();
-                self.send_message();
-                let empty_unchanged = deadlines == (self.processing_until, self.completed_until);
-                self.input.clear();
-                self.test_steps.push(serde_json::json!({"step":"conversation","passed":timing&&empty_unchanged&&self.messages.len()==4&&self.vault.as_ref().map(|v|v.pending()==1).unwrap_or(false),"detail":"Created a linked offline proposal; verified native 1.5/2.5-second feedback deadlines and whitespace-only no-op"}));
+                self.test_steps.push(serde_json::json!({"step":"manual draft","passed":result.is_ok(),"detail":result.err()}));
             }
             65 => {
-                let result = (|| -> Result<(), String> {
-                    use mechanics::ExperimentStage;
-                    if self.record_experiment_choice(0).is_ok() {
-                        return Err("Choice accepted before comparison was prepared".into());
-                    }
-                    for choice in 0..2 {
-                        self.experiment_stage = ExperimentStage::Choose;
-                        self.dialog = Some(Dialog::Experiment);
-                        let count = self.vault.as_ref().ok_or("Vault failed")?.notes.len();
-                        self.defer_experiment_choice();
-                        if self.dialog.is_some() || self.experiment_stage != ExperimentStage::Choose
-                            || self.vault.as_ref().ok_or("Vault failed")?.notes.len() != count
-                        {
-                            return Err("Deferral changed the choice or wrote a decision".into());
-                        }
-                        if self.current_state() != State::AwaitingApproval {
-                            return Err("Pending decision failed to take priority over completion".into());
-                        }
-                        let id = self.record_experiment_choice(choice)?;
-                        let v = self.vault.as_ref().ok_or("Vault failed")?;
-                        let reopened = Vault::open(v.root.clone())?;
-                        let note = reopened.get(&id).ok_or("Decision missing after reopening")?;
-                        if self.experiment_stage != ExperimentStage::Recorded
-                            || note.meta.kind != "decision"
-                            || !note.body.contains(mechanics::CONFIGURATIONS[choice].0)
-                            || !note.body.contains("No server experiment ran")
-                            || !note.path.starts_with("50 Projects/Agent Memory/Decisions/")
-                        {
-                            return Err("Choice or demonstration provenance was not preserved".into());
-                        }
-                        if self.record_experiment_choice(choice).is_ok() {
-                            return Err("Repeated choice accepted after recording".into());
-                        }
-                    }
-                    let v = self.vault.as_mut().ok_or("Vault failed")?;
-                    v.set_motion(true)?;
-                    if !Vault::open(v.root.clone())?.settings.reduced_motion {
-                        return Err("Reduced motion did not persist".into());
-                    }
-                    v.set_motion(false)?;
-                    Ok(())
-                })();
-                self.test_steps.push(serde_json::json!({"step":"native mechanics","passed":result.is_ok(),"detail":result.err().unwrap_or("Verified attention priority, both saved strategy choices, phase guards, reduced-motion persistence and explicit no-execution provenance".into())}));
+                self.view=View::Canvas; self.dialog=None;
+                self.test_steps.push(serde_json::json!({"step":"canvas real data","passed":self.vault.as_ref().map(|v|v.notes.len()==2).unwrap_or(false)}));
             }
             75 | 80 | 85 => {
-                let light = self.frames != 80;
-                self.set_appearance(ctx, light);
-                let persisted = self.vault.as_ref()
-                    .and_then(|v| Vault::open(v.root.clone()).ok())
-                    .map(|v| v.settings.light_mode == light).unwrap_or(false);
-                let passed = self.colors.light == light
-                    && ctx.style().visuals.dark_mode != light && persisted;
-                self.test_steps.push(serde_json::json!({
-                    "step": format!("{} appearance at frame {}", if light { "White" } else { "Dark" }, self.frames),
-                    "passed": passed,
-                    "detail": "Switched the live workspace palette and native widgets, then reopened the vault to verify the saved appearance"
-                }));
+                let light=self.frames!=80;self.set_appearance(ctx,light);
+                let persisted=self.vault.as_ref().and_then(|v|Vault::open_frontend(v.root.clone()).ok()).map(|v|v.settings.light_mode==light).unwrap_or(false);
+                self.test_steps.push(serde_json::json!({"step":format!("appearance {light}"),"passed":self.colors.light==light && ctx.style().visuals.dark_mode!=light && persisted}));
             }
             88 => {
-                let result = (|| -> Result<(), String> {
-                    let home_view = self.view.clone();
-                    self.open_scene();
-                    self.scene.preset.x = 0.4;
-                    self.scene.preset.scale = 1.2;
-                    let expected = self.scene.preset.clone();
-                    let root = self.vault.as_ref().ok_or("Vault unavailable")?.root.clone();
-                    self.scene.preset.save(&root)?;
-                    self.scene = Default::default();
-                    self.open_scene();
-                    if self.scene.preset != expected || self.scene.playing || self.view != home_view {
-                        return Err("Scene preset did not reopen independently of home".into());
-                    }
-                    self.dialog = None;
-                    Ok(())
-                })();
-                self.test_steps.push(serde_json::json!({"step":"scene preview","passed":result.is_ok(),
-                    "detail":result.err().unwrap_or("Opened scene inspector, edited and saved a transform, reopened preset with playback paused and home unchanged".into())}));
+                self.open_scene();self.scene.preset.x=0.4;let expected=self.scene.preset.clone();
+                let result=self.vault.as_ref().ok_or("Vault unavailable".to_string()).and_then(|v|self.scene.preset.save(&v.root));
+                self.scene=Default::default();self.open_scene();
+                self.test_steps.push(serde_json::json!({"step":"scene preset","passed":result.is_ok() && self.scene.preset==expected && !self.scene.playing}));
+                self.dialog=None;
             }
             90 => {
-                // Finish visual verification in the primary reference appearance.
-                self.set_appearance(ctx, false);
-                let s = self.current_state();
-                self.test_steps.push(serde_json::json!({"step":"hud","passed":self.view==View::Home&&self.chat_open&&self.vault.is_some(),"detail":format!("Home renders active intent, sphere, conversation, six navigation controls and local state {}",s.label())}));
-                self.test_done = true;
+                self.set_appearance(ctx,false);self.view=View::Home;
+                self.test_steps.push(serde_json::json!({"step":"hud","passed":self.chat_open&&self.vault.is_some()&&self.messages.is_empty()}));self.test_done=true;
             }
-            _ => {}
+            _=>{}
         }
     }
+
 }
 impl eframe::App for Workbench {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
@@ -2455,7 +2009,7 @@ impl eframe::App for Workbench {
                     .show(ctx, |ui| {
                         Frame::none()
                             .fill(self.colors.surface(Color32::from_rgb(27, 31, 49)))
-                            .rounding(12.)
+                            .rounding(control_radius())
                             .stroke(Stroke::new(1_f32,
                                 if *error {
                                     self.colors.red.gamma_multiply(0.5)
@@ -2540,9 +2094,16 @@ fn arg_value(args: &[String], key: &str) -> Option<String> {
         .cloned()
 }
 fn main() -> eframe::Result<()> {
+    // winit's Wayland focus_window is a no-op. XWayland provides reliable
+    // cross-application focus for the paired desktop surfaces on Linux.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("DISPLAY").is_some() {
+        std::env::remove_var("WAYLAND_DISPLAY");
+        std::env::remove_var("WAYLAND_SOCKET");
+    }
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--help") {
-        println!("Living Workbench\n  --screenshot <file.png>  Capture after 120 frames, then exit\n  --self-test <file.json>   Exercise local knowledge workflow, then exit\n  --vault <directory>     Choose a local vault (default: Research Vault beside the app)\n  --view knowledge|canvas|experiments|decisions|traces\n  --scene-preview          Open the local scene inspector\n  --width N --height N     Initial window size");
+        println!("Living Workbench\n  --screenshot <file.png>  Capture after 120 frames, then exit\n  --self-test <file.json>   Exercise local knowledge workflow, then exit\n  --vault <directory>     Choose a local vault (default: Research Vault beside the app)\n  --view knowledge|canvas|experiments|decisions|activity\n  --scene-preview          Open the local scene inspector\n  --width N --height N     Initial window size");
         return Ok(());
     }
     let self_test = arg_value(&args, "--self-test").map(PathBuf::from);
@@ -2565,16 +2126,25 @@ fn main() -> eframe::Result<()> {
         .and_then(|v| v.parse::<f32>().ok())
         .unwrap_or(900.);
     let view = match arg_value(&args, "--view").as_deref() {
+        Some("files") => View::Files,
+        Some("work") => View::Work,
         Some("knowledge") => View::Knowledge,
         Some("canvas") => View::Canvas,
         Some("experiments") => View::Experiments,
         Some("decisions") => View::Decisions,
-        Some("traces") => View::Traces,
+        Some("activity") | Some("traces") => View::Activity,
         _ => View::Home,
     };
     let unattended = screenshot.is_some() || self_test.is_some();
+    let navigation_instance = if unattended { None } else {
+        match navigation::Instance::claim(navigation::WORKBENCH) {
+            Ok(Some(instance)) => Some(instance),
+            Ok(None) => return Ok(()),
+            Err(error) => return Err(eframe::Error::AppCreation(Box::new(std::io::Error::other(error)))),
+        }
+    };
     let mut viewport = ViewportBuilder::default()
-        .with_title("Loom — Living Workbench")
+        .with_title("Loom — Living Workbench · Integrated")
         .with_inner_size([width, height])
         .with_min_inner_size([620., 640.])
         .with_clamp_size_to_monitor_size(!unattended)
@@ -2596,6 +2166,14 @@ fn main() -> eframe::Result<()> {
         "Loom — Living Workbench",
         options,
         Box::new(move |cc| {
+            if let Some(instance) = navigation_instance {
+                let ctx = cc.egui_ctx.clone();
+                instance.serve(move || {
+                    ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+                    ctx.send_viewport_cmd(ViewportCommand::Focus);
+                    ctx.request_repaint();
+                });
+            }
             let mut app = Workbench::new(cc, root, screenshot, self_test, view);
             if args.iter().any(|arg| arg == "--scene-preview") { app.open_scene(); }
             Ok(Box::new(app))

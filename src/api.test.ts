@@ -10,7 +10,7 @@
 // so the two must agree. Where they disagree, the test asserts the
 // backend's rule (see the parity notes below).
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async () => {
@@ -21,10 +21,12 @@ vi.mock("@tauri-apps/api/core", () => ({
 import {
   AUTONOMY_LEVELS,
   addWorkItem,
+  askLoom,
   createIntent,
   deleteIntent,
   evidenceKindLabel,
   getIntents,
+  getLoomStatus,
   getWorkItems,
   setActiveIntent,
   setIntentAcceptance,
@@ -61,6 +63,11 @@ let storage = makeLocalStorage();
 beforeEach(() => {
   storage = makeLocalStorage();
   vi.stubGlobal("localStorage", storage);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("evidenceKindLabel", () => {
@@ -298,8 +305,111 @@ describe("work items (localStorage fallback)", () => {
     expect(reloaded.session_id).toBe("sess-1");
   });
 
+  it("records mutation times without inventing timestamps for old items", async () => {
+    const legacy = {
+      id: "legacy", title: "Existing work", status: "paused", autonomy: "manual",
+      updated_label: "2h",
+    };
+    storage.setItem(WORK_KEY, JSON.stringify([legacy]));
+    expect((await getWorkItems())[0].updated_at).toBeUndefined();
+    vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    expect((await setWorkStatus("legacy", "active")).updated_at).toBe(1_800_000_000);
+    vi.mocked(Date.now).mockReturnValue(1_800_000_060_000);
+    const linked = await setWorkSession("legacy", " session-1 ");
+    expect(linked.updated_at).toBe(1_800_000_060);
+    expect(linked.session_id).toBe("session-1");
+    expect((await setWorkSession("legacy", " ")).session_id).toBeNull();
+  });
+
+  it("rejects missing items and invalid local status without changing storage", async () => {
+    const item = await addWorkItem("Existing work");
+    const before = storage.getItem(WORK_KEY);
+    await expect(setWorkStatus("missing", "active")).rejects.toThrow(/Unknown work item/);
+    await expect(setWorkSession("missing", "session-1")).rejects.toThrow(/Unknown work item/);
+    await expect(setWorkStatus(item.id, "done" as "active")).rejects.toThrow(/Unknown status/);
+    expect(storage.getItem(WORK_KEY)).toBe(before);
+  });
+
+  it("reports failed local saves and preserves the last persisted state", async () => {
+    const intent = await createIntent({ statement: "Original intent" });
+    const item = await addWorkItem("Existing work", intent.id);
+    const beforeWork = storage.getItem(WORK_KEY);
+    const beforeIntents = storage.getItem(INTENTS_KEY);
+    vi.spyOn(storage, "setItem").mockImplementation(() => {
+      throw new Error("Storage quota exceeded");
+    });
+    await expect(setWorkStatus(item.id, "active")).rejects.toThrow(/Could not save work items/);
+    await expect(setWorkAutonomy(item.id, "manual")).rejects.toThrow(/Could not save work items/);
+    await expect(setWorkSession(item.id, "session-1")).rejects.toThrow(/Could not save work items/);
+    await expect(updateIntent({ id: intent.id, statement: "Unsaved intent" }))
+      .rejects.toThrow(/Could not save intents/);
+    expect(storage.getItem(WORK_KEY)).toBe(beforeWork);
+    expect(storage.getItem(INTENTS_KEY)).toBe(beforeIntents);
+    expect((await getWorkItems())[0].status).toBe("paused");
+  });
+
+  it("validates titles and explicit intent references before creating work", async () => {
+    await createIntent({ statement: "Existing intent" });
+    await expect(addWorkItem(" ")).rejects.toThrow(/title cannot be empty/);
+    await expect(addWorkItem("Job", "missing")).rejects.toThrow(/Unknown intent/);
+    expect(await getWorkItems()).toEqual([]);
+    expect((await addWorkItem("  Trimmed job  ")).title).toBe("Trimmed job");
+  });
+
   it("corrupt stored work falls back to empty instead of throwing", async () => {
     storage.setItem(WORK_KEY, "garbage{{{");
     expect(await getWorkItems()).toEqual([]);
+  });
+});
+
+describe("browser Loom response contract", () => {
+  it("uses component health and reports degraded service without claiming health", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      status: "degraded",
+      components: { provider: { status: "unhealthy", error: "Provider unavailable" } },
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const status = await getLoomStatus();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/loom/v1/health",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(status.online).toBe(true);
+    expect(status.detail).toContain("degraded");
+    expect(status.detail).toContain("Provider unavailable");
+  });
+
+  it("does not claim health when the service reports failure or no health state", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: "unhealthy" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 200 }))
+      .mockRejectedValueOnce(new Error("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await getLoomStatus()).online).toBe(false);
+    expect((await getLoomStatus()).detail).toContain("health status was not reported");
+    expect((await getLoomStatus()).online).toBe(false);
+  });
+
+  it("sends the verified gateway keys and retains the reply's session identity", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      text: "A server reply", sessionId: "session-returned",
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const reply = await askLoom("Question", "session-existing", "agent-1");
+    const [url, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/loom/v1/weave");
+    expect(JSON.parse(request.body as string)).toEqual({
+      query: "Question", sessionId: "session-existing", agentId: "agent-1",
+    });
+    expect(reply).toEqual({ text: "A server reply", source: "live", card: null, session_id: "session-returned" });
+    expect(reply.evidenceKind).toBeUndefined();
+  });
+
+  it("rejects empty input and empty replies instead of fabricating a reply", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: " " }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(askLoom(" ")).rejects.toThrow(/Enter a message/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(askLoom("Question")).rejects.toThrow(/empty response/);
   });
 });

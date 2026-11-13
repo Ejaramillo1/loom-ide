@@ -1,5 +1,11 @@
 # Craft Anything build prompt — Loom UI, Obsidian look-and-feel
 
+> **Historical (2026-11-12).** This document records an earlier
+> eframe/egui + Obsidian direction. It is kept for reference only and is
+> not the current build request. The current app is the Rust + Tauri 2
+> prototype documented in `README.md`; do not apply the stack lock or the
+> dark Obsidian styling below to it.
+
 Paste everything below the `=== PASTE BELOW THIS LINE ===` marker into Craft
 Anything as the build request. It is self-contained: all tokens are inline,
 and every referenced file exists in `/home/ed/.loom/app/docs/`.

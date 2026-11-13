@@ -1,0 +1,74 @@
+[
+  {
+    "width": 1299,
+    "height": 699,
+    "dpr": 1,
+    "theme": "dark",
+    "mode": "code",
+    "overflow": false,
+    "bg": "rgb(16, 18, 31)",
+    "collaborationPanels": 0,
+    "sampleBadges": 0,
+    "header": 56
+  },
+  {
+    "width": 1299,
+    "height": 699,
+    "dpr": 1,
+    "theme": "white",
+    "mode": "code",
+    "overflow": false,
+    "bg": "rgb(245, 246, 251)",
+    "collaborationPanels": 0,
+    "sampleBadges": 0,
+    "header": 56
+  },
+  {
+    "width": 1299,
+    "height": 699,
+    "dpr": 1,
+    "theme": "dark",
+    "mode": "work",
+    "overflow": false,
+    "bg": "rgb(16, 18, 31)",
+    "collaborationPanels": 0,
+    "sampleBadges": 0,
+    "header": 56
+  },
+  {
+    "width": 1299,
+    "height": 699,
+    "dpr": 1,
+    "theme": "white",
+    "mode": "experiment",
+    "overflow": false,
+    "bg": "rgb(245, 246, 251)",
+    "collaborationPanels": 0,
+    "sampleBadges": 0,
+    "header": 56
+  },
+  {
+    "width": 1299,
+    "height": 699,
+    "dpr": 1,
+    "theme": "dark",
+    "mode": "agents",
+    "overflow": false,
+    "bg": "rgb(16, 18, 31)",
+    "collaborationPanels": 0,
+    "sampleBadges": 0,
+    "header": 56
+  },
+  {
+    "width": 1299,
+    "height": 699,
+    "dpr": 1,
+    "theme": "dark",
+    "mode": "evidence",
+    "overflow": false,
+    "bg": "rgb(16, 18, 31)",
+    "collaborationPanels": 0,
+    "sampleBadges": 0,
+    "header": 56
+  }
+]

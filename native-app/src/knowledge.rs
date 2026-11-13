@@ -132,7 +132,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            intent: "Understanding agent memory performance".into(),
+            intent: String::new(),
             reduced_motion: false,
             light_mode: false,
             manual_chat: false,
@@ -183,6 +183,8 @@ pub struct Vault {
     pub notes: Vec<Note>,
     pub ledger: Ledger,
     pub settings: Settings,
+    frontend: bool,
+    hidden_ids: HashSet<String>,
 }
 fn io(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -230,7 +232,12 @@ fn atomic(root: &Path, rel: &str, content: &str) -> Result<(), String> {
     result
 }
 impl Vault {
-    pub fn open(root: PathBuf) -> Result<Self, String> {
+    /// Fixture-backed storage used by the existing domain tests only.
+    #[cfg(test)]
+    pub fn open(root: PathBuf) -> Result<Self, String> { Self::open_inner(root, false) }
+    /// Normal application view: no starter data and no historical samples.
+    pub fn open_frontend(root: PathBuf) -> Result<Self, String> { Self::open_inner(root, true) }
+    fn open_inner(root: PathBuf, frontend: bool) -> Result<Self, String> {
         if fs::symlink_metadata(&root)
             .map(|m| m.file_type().is_symlink())
             .unwrap_or(false)
@@ -257,9 +264,20 @@ impl Vault {
             notes: Vec::new(),
             ledger: Ledger::default(),
             settings: Settings::default(),
+            frontend,
+            hidden_ids: HashSet::new(),
         };
         if !vault.root.join(".loom/initialized").exists() {
-            vault.seed()?;
+            if frontend {
+                vault.settings.intent.clear();
+                let mut writes = Vec::new();
+                if !vault.root.join(".loom/ledger.json").exists() { writes.push(Self::ledger_op(&vault.ledger)); }
+                if !vault.root.join(".loom/settings.json").exists() {
+                    writes.push(WriteOp { path: ".loom/settings.json".into(), content: serde_json::to_string_pretty(&vault.settings).unwrap() });
+                }
+                writes.push(WriteOp { path: ".loom/initialized".into(), content: "1".into() });
+                vault.commit(writes)?;
+            } else { #[cfg(test)] vault.seed()?; }
         }
         vault.reload()?;
         Ok(vault)
@@ -330,6 +348,18 @@ impl Vault {
                 .cmp(&b.meta.created)
                 .then_with(|| a.meta.id.cmp(&b.meta.id))
         });
+        self.hidden_ids.clear();
+        if self.frontend {
+            notes.retain(|n| {
+                let sample = n.meta.author == "research fixture"
+                    || n.meta.author == "offline sparring fixture"
+                    || n.meta.source.starts_with("Historical research fixture")
+                    || n.meta.source.starts_with("Historical Mastermind fixture")
+                    || (n.body.starts_with("Recorded: you chose Configuration ") && n.body.contains("No server experiment ran"));
+                if sample { self.hidden_ids.insert(n.meta.id.clone()); }
+                !sample
+            });
+        }
         self.notes = notes;
         self.ledger = ledger;
         self.settings = settings;
@@ -374,6 +404,10 @@ impl Vault {
             actor: "human".into(),
             detail: detail.into(),
         });
+    }
+    pub fn is_hidden(&self, id: &str) -> bool { self.hidden_ids.contains(id) }
+    pub fn display_intent(&self) -> &str {
+        if self.frontend && self.settings.intent == "Understanding agent memory performance" { "" } else { &self.settings.intent }
     }
     pub fn get(&self, id: &str) -> Option<&Note> {
         self.notes.iter().find(|n| n.meta.id == id)
@@ -656,7 +690,7 @@ impl Vault {
     }
     pub fn export_canvas(&self) -> Result<(), String> {
         let nodes:Vec<_>=self.notes.iter().enumerate().map(|(i,n)|serde_json::json!({"id":n.meta.id,"type":"file","file":n.path,"x":(i%4)*300,"y":(i/4)*180,"width":250,"height":130})).collect();
-        let edges:Vec<_>=self.ledger.edges.iter().enumerate().map(|(i,e)|serde_json::json!({"id":format!("e{i}"),"fromNode":e.from,"toNode":e.to,"label":e.kind})).collect();
+        let edges:Vec<_>=self.ledger.edges.iter().filter(|e|self.get(&e.from).is_some() && self.get(&e.to).is_some()).enumerate().map(|(i,e)|serde_json::json!({"id":format!("e{i}"),"fromNode":e.from,"toNode":e.to,"label":e.kind})).collect();
         atomic(
             &self.root,
             "50 Projects/Agent Memory/Artifacts/Knowledge.canvas",
@@ -664,7 +698,9 @@ impl Vault {
                 .unwrap(),
         )
     }
+    #[cfg(test)]
     fn seed(&mut self) -> Result<(), String> {
+        self.settings.intent = "Understanding agent memory performance".into();
         let fixture="Historical research fixture supplied in the product specification. Not a live execution or independently verified study.";
         let data=[
    ("intent","intent","Understanding agent memory performance","What have we learned about the value and cost of agent memory?\n\nKeep measured results separate from claims about other tasks.","50 Projects/Agent Memory/Artifacts","working"),
@@ -740,6 +776,34 @@ mod tests {
     use super::*;
     fn temp() -> PathBuf {
         std::env::temp_dir().join(new_id())
+    }
+    #[test]
+    fn frontend_starts_empty_and_keeps_real_notes_after_reload() {
+        let root=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-data").join(new_id());
+        let mut v=Vault::open_frontend(root.clone()).unwrap();
+        assert!(v.notes.is_empty());assert_eq!(v.display_intent(),"");assert_eq!(v.pending(),0);
+        let id=v.create("My memory research","A personal note, not a product example","note",Actor::Human).unwrap();
+        let reopened=Vault::open_frontend(root.clone()).unwrap();
+        assert_eq!(reopened.notes.len(),1);assert!(reopened.get(&id).is_some());
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn frontend_hides_historical_records_without_deleting_or_overwriting_them() {
+        let root=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-data").join(new_id());
+        let mut fixture=Vault::open(root.clone()).unwrap();
+        let originals=fixture.notes.iter().map(|n|(n.path.clone(),fs::read(root.join(&n.path)).unwrap())).collect::<Vec<_>>();
+        let id=fixture.create("My own note","Keep this visible","note",Actor::Human).unwrap();
+        let settings=fs::read(root.join(".loom/settings.json")).unwrap();
+        let mut live=Vault::open_frontend(root.clone()).unwrap();
+        assert_eq!(live.notes.len(),1);assert!(live.get(&id).is_some());assert!(live.get("mastermind").is_none());assert_eq!(live.pending(),0);
+        live.create("Second note","Still real","note",Actor::Human).unwrap();live.reload().unwrap();
+        assert_eq!(live.notes.len(),2);
+        for (path,bytes) in originals {assert_eq!(fs::read(root.join(path)).unwrap(),bytes);}
+        assert_eq!(fs::read(root.join(".loom/settings.json")).unwrap(),settings);
+        live.export_canvas().unwrap();
+        let canvas=fs::read_to_string(root.join("50 Projects/Agent Memory/Artifacts/Knowledge.canvas")).unwrap();
+        assert!(!canvas.contains("mastermind"));assert!(!canvas.contains("hypothesis"));
+        fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn persistence_and_external_conflict() {

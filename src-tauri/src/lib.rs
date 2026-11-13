@@ -21,6 +21,8 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
 
 mod experiment;
+#[path = "../../shared/navigation.rs"]
+mod navigation;
 use experiment::{Experiment, ExperimentStore};
 mod store;
 mod workspace;
@@ -111,6 +113,40 @@ fn intents_file_path(app: &AppHandle) -> std::path::PathBuf {
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .join("loom-ide")
         .join("intents.json")
+}
+
+/// Open the existing native surface from this repository; no secondary source tree.
+#[tauri::command]
+fn open_living_workbench() -> Result<(), String> {
+    if navigation::activate(navigation::WORKBENCH)? {
+        return Ok(());
+    }
+    static CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
+    let mut child = CHILD.lock().map_err(|e| e.to_string())?;
+    if let Some(running) = child.as_mut() {
+        if running.try_wait().map_err(|e| e.to_string())?.is_none() {
+            return Ok(());
+        }
+    }
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("Repository path unavailable")?;
+    let executable = [
+        repo.join("native-app/target/debug/living-workbench"),
+        repo.join("native-app/target/release/living-workbench"),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
+    .ok_or("Build Living Workbench first: cargo build --manifest-path native-app/Cargo.toml")?;
+    *child = Some(
+        std::process::Command::new(executable)
+            .current_dir(repo)
+            .arg("--vault")
+            .arg(repo.join("native-app/Research Vault"))
+            .spawn()
+            .map_err(|e| format!("Could not open Living Workbench: {e}"))?,
+    );
+    Ok(())
 }
 
 pub struct AppState {
@@ -1835,8 +1871,24 @@ fn write_file(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let instance = match navigation::Instance::claim(navigation::TAURI) {
+        Ok(Some(instance)) => instance,
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
     tauri::Builder::default()
-        .setup(|app| {
+        .setup(move |app| {
+            let handle = app.handle().clone();
+            instance.serve(move || {
+                if let Some(window) = handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            });
             // Refuse to guess where data lives: if the app-data directory
             // cannot be determined, fail startup loudly instead of writing
             // work.json next to wherever the app was launched from.
@@ -1871,6 +1923,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            open_living_workbench,
             get_work_items,
             add_work_item,
             set_work_status,

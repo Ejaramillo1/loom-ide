@@ -31,6 +31,3 @@ impl AgentAdapter for OfflineAdapter {
         Err("No agent is connected. Local knowledge remains available.".into())
     }
 }
-pub trait TraceAdapter {
-    fn trace_link(&self, execution_id: &str) -> Option<String>;
-}

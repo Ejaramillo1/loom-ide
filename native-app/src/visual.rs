@@ -1,13 +1,15 @@
 use eframe::egui::*;
-pub const TEXT: Color32 = Color32::from_rgb(245, 245, 250);
-pub const SECOND: Color32 = Color32::from_rgb(185, 190, 212);
-pub const MUTED: Color32 = Color32::from_rgb(146, 153, 182);
-pub const PURPLE: Color32 = Color32::from_rgb(165, 139, 255);
-pub const BLUE: Color32 = Color32::from_rgb(142, 200, 255);
-pub const GREEN: Color32 = Color32::from_rgb(117, 215, 164);
-pub const AMBER: Color32 = Color32::from_rgb(241, 206, 117);
-pub const RED: Color32 = Color32::from_rgb(237, 143, 154);
 pub const DEEP: Color32 = Color32::from_rgb(16, 18, 31);
+fn shared_theme() -> &'static serde_json::Value {
+    static THEME: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+    THEME.get_or_init(|| serde_json::from_str(include_str!("../../design-tokens.json")).expect("Valid shared design tokens"))
+}
+fn token_color(values: &serde_json::Value, name: &str) -> Color32 {
+    let rgb = &values[name];
+    Color32::from_rgb(rgb[0].as_u64().unwrap() as u8, rgb[1].as_u64().unwrap() as u8, rgb[2].as_u64().unwrap() as u8)
+}
+pub fn control_radius() -> f32 { shared_theme()["radius"]["control"].as_f64().unwrap() as f32 }
+pub fn panel_radius() -> f32 { shared_theme()["radius"]["panel"].as_f64().unwrap() as f32 }
 /// Semantic colors shared by native widgets and the custom painted workspace.
 #[derive(Clone, Copy)]
 pub struct Palette {
@@ -24,17 +26,14 @@ pub struct Palette {
 }
 impl Palette {
     pub fn new(light: bool) -> Self {
-        if light {
-            Self { light, text: Color32::from_rgb(35, 38, 58),
-                second: Color32::from_rgb(74, 79, 104), muted: Color32::from_rgb(98, 104, 129),
-                purple: Color32::from_rgb(106, 71, 190), blue: Color32::from_rgb(39, 104, 175),
-                green: Color32::from_rgb(28, 116, 74), amber: Color32::from_rgb(142, 95, 18),
-                red: Color32::from_rgb(174, 53, 76), deep: Color32::from_rgb(245, 246, 251) }
-        } else {
-            Self { light, text: TEXT, second: SECOND, muted: MUTED, purple: PURPLE,
-                blue: BLUE, green: GREEN, amber: AMBER, red: RED, deep: DEEP }
-        }
+        let theme = shared_theme();
+        let values = &theme[if light { "white" } else { "dark" }];
+        let color = |name: &str| token_color(values, name);
+        Self { light, text: color("text"), second: color("second"), muted: color("muted"),
+            purple: color("purple"), blue: color("blue"), green: color("green"),
+            amber: color("amber"), red: color("red"), deep: color("deep") }
     }
+
     pub fn overlay(self, alpha: u8) -> Color32 {
         if self.light { Color32::from_rgba_unmultiplied(61, 53, 95, alpha) }
         else { Color32::from_white_alpha(alpha) }
@@ -51,25 +50,38 @@ fn palette(ctx: &Context) -> Palette {
 }
 pub fn apply_appearance(ctx: &Context, colors: Palette) {
     ctx.data_mut(|d| d.insert_temp(Id::new("appearance"), colors));
+    let values = &shared_theme()[if colors.light { "white" } else { "dark" }];
     let mut style = Style::default();
     style.visuals = if colors.light { Visuals::light() } else { Visuals::dark() };
     style.visuals.override_text_color = Some(colors.text);
     style.visuals.panel_fill = colors.deep;
+    style.visuals.error_fg_color = colors.red;
+    style.visuals.warn_fg_color = colors.amber;
     style.visuals.window_fill = colors.surface(Color32::from_rgb(25, 29, 48));
-    style.visuals.window_rounding = Rounding::same(20.);
+    style.visuals.window_rounding = Rounding::same(panel_radius());
     style.visuals.window_stroke = Stroke::new(1_f32, colors.overlay(33));
     style.visuals.window_shadow = Shadow { offset: vec2(0., 12.), blur: 40., spread: 0.,
         color: Color32::from_black_alpha(if colors.light { 22 } else { 55 }) };
-    style.visuals.selection.bg_fill = if colors.light { Color32::from_rgb(219, 208, 248) }
-        else { Color32::from_rgb(72, 59, 111) };
+    style.visuals.selection.bg_fill = token_color(values, "selection");
     style.visuals.selection.stroke = Stroke::new(1_f32, colors.text);
-    style.visuals.widgets.inactive.bg_fill = if colors.light { Color32::from_rgb(238, 237, 247) }
-        else { Color32::from_rgb(40, 44, 66) };
+    style.visuals.widgets.inactive.bg_fill = token_color(values, "control");
     style.visuals.widgets.inactive.bg_stroke = Stroke::new(1_f32, colors.overlay(25));
-    style.visuals.widgets.inactive.rounding = Rounding::same(10.);
-    style.visuals.widgets.hovered.bg_fill = if colors.light { Color32::from_rgb(225, 219, 243) }
-        else { Color32::from_rgb(57, 55, 83) };
-    style.visuals.widgets.hovered.rounding = Rounding::same(10.);
+    style.visuals.widgets.inactive.rounding = Rounding::same(control_radius());
+    style.visuals.widgets.hovered.bg_fill = token_color(values, "hover");
+    style.visuals.widgets.hovered.rounding = Rounding::same(control_radius());
+    for widget in [&mut style.visuals.widgets.noninteractive, &mut style.visuals.widgets.inactive,
+        &mut style.visuals.widgets.hovered, &mut style.visuals.widgets.active, &mut style.visuals.widgets.open] {
+        widget.rounding = Rounding::same(control_radius());
+        widget.fg_stroke.color = colors.text;
+    }
+    style.visuals.widgets.inactive.weak_bg_fill = token_color(values, "control");
+    style.visuals.widgets.hovered.weak_bg_fill = token_color(values, "hover");
+    style.visuals.widgets.noninteractive.weak_bg_fill = token_color(values, "surface");
+    style.visuals.widgets.active.weak_bg_fill = token_color(values, "selection");
+    style.visuals.widgets.open.weak_bg_fill = token_color(values, "selection");
+    style.visuals.widgets.active.bg_fill = colors.accent(60);
+    style.visuals.widgets.open.bg_fill = colors.accent(38);
+    style.visuals.extreme_bg_color = colors.surface(Color32::from_rgb(19,21,35));
     style.spacing.item_spacing = vec2(10., 10.);
     style.spacing.button_padding = vec2(14., 8.);
     for (kind, size) in [(TextStyle::Body, 14.), (TextStyle::Button, 14.), (TextStyle::Small, 12.)] {
@@ -134,11 +146,11 @@ pub fn pill(ui: &mut Ui, r: Rect, label: &str, active: bool) -> Response {
     } else {
         Color32::TRANSPARENT
     };
-    ui.painter().rect_filled(r, 12., col);
+    ui.painter().rect_filled(r, control_radius(), col);
     if active {
         ui.painter().rect_stroke(
             r,
-            12.,
+            control_radius(),
             Stroke::new(1.0_f32, colors.accent(60)),
         );
     }
@@ -444,4 +456,21 @@ pub fn sphere() -> ColorImage {
         }
     }
     img
+}
+
+#[cfg(test)]
+mod theme_tests {
+    use super::*;
+    #[test]
+    fn appearances_read_the_shared_palette_and_geometry() {
+        for light in [false,true] {
+            let colors=Palette::new(light);
+            let tokens=&shared_theme()[if light {"white"}else{"dark"}];
+            assert_eq!(colors.text,token_color(tokens,"text"));
+            assert_eq!(colors.deep,token_color(tokens,"deep"));
+            assert_ne!(colors.text,colors.deep);
+        }
+        assert_eq!(control_radius(),12.);
+        assert_eq!(panel_radius(),20.);
+    }
 }

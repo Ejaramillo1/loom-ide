@@ -1,5 +1,7 @@
 //! Rules recovered from the shipped ELF. Addresses and evidence: ../MECHANICS.md.
-use crate::knowledge::{Actor, State, Vault};
+use crate::knowledge::State;
+#[cfg(test)]
+use crate::knowledge::{Actor, Vault};
 
 pub const REPAINT_MS: u64 = 120; // update, 0x7ce9e0
 pub const PROCESSING_SECONDS: f64 = 1.5; // send_chat, 0x7cc560 (including offline replies)
@@ -107,6 +109,7 @@ pub fn wave_points(
         .collect()
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum ExperimentStage {
     #[default]
@@ -116,6 +119,7 @@ pub enum ExperimentStage {
     Recorded,   // 3
 }
 
+#[cfg(test)]
 pub const CONFIGURATIONS: [(&str, &str); 2] = [
     (
         "Configuration A",
@@ -128,6 +132,7 @@ pub const CONFIGURATIONS: [(&str, &str); 2] = [
 ];
 
 /// Adapt the original timestamped WorkItem finding to a durable vault decision.
+#[cfg(test)]
 pub fn record_choice(
     vault: &mut Vault,
     stage: &mut ExperimentStage,
