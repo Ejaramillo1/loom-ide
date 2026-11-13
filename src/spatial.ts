@@ -3,26 +3,29 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 export function installSpatialWorkbench() {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame")!;
   const status = document.querySelector<HTMLElement>("#spatial-status")!;
+  const loadError = document.querySelector<HTMLElement>("#spatial-load-error")!;
   frame.addEventListener("load", () => {
     const doc = frame.contentDocument;
     if (!doc?.querySelector("#unity-canvas")) return;
     const style = doc.createElement("style");
     style.textContent = "html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10121f}#unity-container{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;transform:none!important}#unity-canvas{width:100%!important;height:100%!important}#unity-footer{display:none}";
     doc.head.append(style);
-    status.textContent = "Unity is starting. Once the bench appears, select an object to open its memory. Refresh files from disk in Living Workbench to see new saves.";
   });
   let loaded = false;
   const loadButton = document.querySelector<HTMLButtonElement>("#spatial-load")!;
   async function load() {
     if (loaded) return;
     loaded = true;
+    loadError.hidden = true;
     try {
       const response = await fetch("/spatial/index.html");
       if (!response.ok || !(await response.text()).includes("createUnityInstance")) throw new Error("Build the Unity WebGL player first (see the Unity README).");
       frame.src = "/spatial/index.html";
-      loadButton.hidden = true;
-      status.textContent = "Loading Unity… Saved memories appear in Living Workbench → Knowledge after Refresh files from disk.";
-    } catch (error) { loaded = false; status.textContent = String(error); }
+    } catch (error) {
+      loaded = false;
+      status.textContent = String(error);
+      loadError.hidden = false;
+    }
   }
   loadButton.addEventListener("click", load);
   let saving = false;
@@ -49,7 +52,6 @@ export function installSpatialWorkbench() {
       ok = true;
     } catch (error) { message = `Could not ${action === "read" ? "open" : "save"}: ${String(error)}`; }
     saving = false;
-    status.textContent = message;
     frame.contentWindow?.postMessage({ type: "loom-memory-result", action, ok, body, message }, location.origin);
   });
   void load();

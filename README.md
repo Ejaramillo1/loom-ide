@@ -20,7 +20,8 @@ agent runtime.
 
 ## Latest additions and modifications
 
-- **Living Workbench access:** Spatial includes a direct Living Workbench button. Desktop Tauri activates the existing native window or starts it when closed; browser preview explains that this action requires the desktop app.
+- **Simpler controls:** Spatial uses Unity's own title and loading display. Work creation lives in the Work view, and Experiment has one New experiment button. Conversation opens the shared pane; Context remains a tab and a View menu action. The decorative Experiment sphere is removed; local activity is described in the Loom status tooltip.
+- **Living Workbench access:** **View → Living Workbench** activates the existing native window or starts it when closed. This action requires the desktop Tauri app.
 - **Spatial landing view:** Loom opens directly into Spatial and loads Unity automatically. Code and other tools remain available in the bottom navigation.
 - **Embedded Spatial tab:** builds Unity WebGL into `public/spatial/`, then loads it inside the existing Tauri window. Object memories append notes to the native vault and read the latest saved version. Generated player files stay outside Git.
 
@@ -154,8 +155,8 @@ verification commands.
 The shell has header/main/footer rows and intentional scroll regions. At 1440px
 and above the supporting pane can be inline; below that it becomes a drawer.
 Below 1100px the work catalogue also becomes a drawer. Drawers support Escape,
-keyboard focus management and return focus to their opener. The sphere and water
-atmosphere remain in Experiment, with reduced-motion support.
+keyboard focus management and return focus to their opener. The moving sphere
+remains in Unity; Experiment retains its water atmosphere with reduced-motion support.
 
 ## Run the workbench surfaces
 

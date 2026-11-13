@@ -79,7 +79,7 @@ import {
   evidenceKindLabel,
   type AutonomyChange,
 } from "./api";
-import { Sphere, type SphereState } from "./sphere";
+import type { SphereState } from "./sphere";
 import { installAppMenu, textEditingActions } from "./app-menu";
 
 // ---------------------------------------------------------------------------
@@ -106,11 +106,6 @@ const LAYERS: { id: string; label: string; desc: string }[] = [
     id: "glass",
     label: "Glass panels",
     desc: "Translucent panels with blur. Off: flat solid panels.",
-  },
-  {
-    id: "sphere",
-    label: "Sphere",
-    desc: "The luminous sphere in Experiment mode.",
   },
 ];
 
@@ -190,33 +185,19 @@ const layerOn: Record<string, boolean> = {
   light: true,
   water: true,
   glass: true,
-  sphere: true,
 };
 
 const $ = <T extends HTMLElement>(sel: string): T =>
   document.querySelector(sel) as T;
 
 // ---------------------------------------------------------------------------
-// Sphere
+// Local activity supplements the single Loom connection indicator.
 // ---------------------------------------------------------------------------
-
-const sphere = new Sphere($("#sphere") as HTMLCanvasElement);
 
 function setSphereState(state: SphereState) {
   sphereState = state;
-  sphere.setState(state);
-  $("#sphere-caption").textContent = CAPTIONS[state];
+  renderStatusPill();
 }
-
-function fitSphere() {
-  sphere.resize();
-}
-new ResizeObserver(fitSphere).observe($("#sphere") as HTMLCanvasElement);
-window.addEventListener("resize", fitSphere);
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) sphere.stop();
-  else if (mode === "experiment") sphere.startAnimation();
-});
 
 // ---------------------------------------------------------------------------
 // Time + labels (truthful, never "Now ago")
@@ -396,11 +377,6 @@ function renderWorkList() {
     detail is visible; the initial selection during load does not. */
 function selectWork(id: string, navigate = true) {
   selectedWorkId = id;
-  const item = workItems.find((w) => w.id === id);
-  if (item) {
-    $("#objective-title").textContent = item.title;
-    $("#objective-btn").title = `Open in Work view: ${item.title}`;
-  }
   renderWorkList();
   renderWorkDetail();
   renderInspectorContext();
@@ -1239,13 +1215,7 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
     }
   });
 
-  const conv = document.createElement("button");
-  conv.type = "button";
-  conv.className = "btn ghost";
-  conv.textContent = "Conversation";
-  conv.addEventListener("click", () => focusChat(conv));
-
-  controls.append(stateBtn, conv, error);
+  controls.append(stateBtn, error);
   root.append(controls);
 
   const note = document.createElement("p");
@@ -1268,24 +1238,22 @@ function renderWorkDetail() {
     const wrap = document.querySelector<HTMLElement>("#work-detail");
     if (!wrap) return;
     wrap.innerHTML = "";
+    const item = workItems.find((w) => w.id === selectedWorkId);
+    $("#objective-btn").hidden = !item;
+    $("#objective-title").textContent = item?.title ?? "";
+    $("#objective-btn").title = item ? `Open in Work view: ${item.title}` : "";
 
     if (workItems.length === 0) {
       const empty = document.createElement("div");
       empty.className = "wd-empty";
       const text = document.createElement("p");
       text.textContent =
-        "No work yet. Add the first piece of work in the catalogue so there is something concrete to move.";
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn";
-      btn.textContent = "Create work";
-      btn.addEventListener("click", () => focusNewWork(btn));
-      empty.append(text, btn);
+        "No work yet. Enter a title above to create your first piece of work.";
+      empty.append(text);
       wrap.append(empty);
       return;
     }
 
-    const item = workItems.find((w) => w.id === selectedWorkId);
     if (!item) {
       const empty = document.createElement("div");
       empty.className = "wd-empty";
@@ -1958,13 +1926,6 @@ function emptyP(text: string): HTMLElement {
   return p;
 }
 
-function focusNewWork(from?: HTMLElement) {
-  if (isLeftDrawer()) {
-    openLeftDrawer(from);
-  }
-  ($("#new-work-input") as HTMLInputElement).focus();
-}
-
 // ---------------------------------------------------------------------------
 // Inspector: local attention and connected server details
 // ---------------------------------------------------------------------------
@@ -2212,8 +2173,7 @@ function renderAttention(items: AttentionItem[]) {
         : `${items.length} item${items.length === 1 ? "" : "s"} need attention`;
     contextTab.classList.toggle("has-attention", items.length > 0);
   }
-  const contextToggle = document.getElementById("context-toggle");
-  contextToggle?.classList.toggle("has-attention", items.length > 0);
+  $("#chat-toggle").classList.toggle("has-attention", items.length > 0);
   const dot = $(".att-dot");
   if (dot) dot.classList.toggle("live", items.length > 0);
 
@@ -2534,11 +2494,8 @@ function applyRightPane() {
   contextTab?.setAttribute("aria-selected", String(rightTab === "context"));
   chatTab?.setAttribute("aria-selected", String(rightTab === "conversation"));
 
-  const contextToggle = document.getElementById("context-toggle");
   const chatToggle = document.getElementById("chat-toggle");
-  contextToggle?.classList.toggle("active", rightOpen && rightTab === "context");
   chatToggle?.classList.toggle("active", rightOpen && rightTab === "conversation");
-  contextToggle?.setAttribute("aria-expanded", String(rightOpen));
   chatToggle?.setAttribute("aria-expanded", String(rightOpen));
   updateScrim();
 }
@@ -3963,12 +3920,7 @@ function renderExperimentDetail() {
     const text = document.createElement("p");
     text.textContent =
       "Create an experiment to state a question, define arms, and compare real results.";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn";
-    btn.textContent = "New experiment";
-    btn.addEventListener("click", () => openNewExperimentForm());
-    empty.append(title, text, btn);
+    empty.append(title, text);
     wrap.append(empty);
     return;
   }
@@ -4534,6 +4486,7 @@ function renderStatusPill() {
     pill.title =
       "The Loom server is not reachable at localhost:5006. Start the server to connect.";
   }
+  pill.title += ` ${CAPTIONS[sphereState]}`;
 }
 
 function setMode(next: Mode) {
@@ -4541,7 +4494,6 @@ function setMode(next: Mode) {
     closeMenus();
     return;
   }
-  const wasExperiment = mode === "experiment";
   if (document.body.classList.contains("left-open")) closeLeftDrawer(false);
   mode = next;
   // Keep the footer destination and its accessible state synchronized.
@@ -4560,13 +4512,6 @@ function setMode(next: Mode) {
   }
   // The scene follows the mode: water + full atmosphere only in Experiment.
   document.querySelector(".scene")?.setAttribute("data-mode", next);
-  // Pause the sphere when its view is hidden; resume in Experiment.
-  if (next === "experiment") {
-    fitSphere();
-    sphere.startAnimation();
-  } else if (wasExperiment) {
-    sphere.stop();
-  }
   applyRightPane();
   closeMenus();
 }
@@ -4739,15 +4684,6 @@ async function init() {
   initCodeEditor();
   initWorkspaceExplorer();
   installSpatialWorkbench();
-  $("#open-living-workbench").addEventListener("click", async () => {
-    const status = $("#workbench-navigation-status");
-    try {
-      await openLivingWorkbench();
-      status.textContent = "Living Workbench opened. Return here through File → Go to Tauri environment.";
-    } catch (error) {
-      status.textContent = String(error);
-    }
-  });
   // The footer provides the primary mode navigation.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
@@ -4826,15 +4762,10 @@ async function init() {
   // Header: the objective banner opens the selected work in the Work view.
   $("#objective-btn").addEventListener("click", () => setMode("work"));
 
-  // Header toggles. Work appears at compact widths; Context and
-  // Conversation control the same shared right pane at every width.
+  // Context is available as a tab inside the shared Conversation pane.
   $("#work-toggle").addEventListener("click", (e) => {
     if (document.body.classList.contains("left-open")) closeLeftDrawer();
     else openLeftDrawer(e.currentTarget as HTMLElement);
-  });
-  $("#context-toggle").addEventListener("click", (e) => {
-    if (rightOpen && rightTab === "context") closeRight();
-    else openRight("context", e.currentTarget as HTMLElement);
   });
   $("#chat-toggle").addEventListener("click", (e) => {
     if (rightOpen && rightTab === "conversation") closeRight();
@@ -4891,13 +4822,6 @@ async function init() {
   renderWorkList();
   renderWorkDetail();
   renderChatScope();
-  if (selectedWorkId) {
-    const item = workItems.find((w) => w.id === selectedWorkId);
-    if (item) {
-      $("#objective-title").textContent = item.title;
-      $("#objective-btn").title = `Open in Work view: ${item.title}`;
-    }
-  }
   // Create one work item from a title: the form submit and Capture idea
   // share this path, so both link to the active intent and both get a
   // best-effort Loom session when the server is up.
@@ -5123,8 +5047,6 @@ async function init() {
     await sendChat(text);
   });
 
-  // Sphere sizing (after first layout)
-  requestAnimationFrame(fitSphere);
 }
 
 init().catch((err) => {
