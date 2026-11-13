@@ -1,0 +1,339 @@
+{
+  "version": 1,
+  "values": [
+    {
+      "name": "reference width",
+      "group": "layout",
+      "value": 1600,
+      "unit": "px",
+      "source": "user specification 2.1"
+    },
+    {
+      "name": "reference height",
+      "group": "layout",
+      "value": 900,
+      "unit": "px",
+      "source": "user specification 2.1"
+    },
+    {
+      "name": "sphere diameter",
+      "group": "layout",
+      "value": 370,
+      "unit": "px",
+      "source": "user specification 7.1"
+    },
+    {
+      "name": "sphere center x",
+      "group": "layout",
+      "value": 630,
+      "unit": "px",
+      "source": "user specification 7.1"
+    },
+    {
+      "name": "sphere center y",
+      "group": "layout",
+      "value": 435,
+      "unit": "px",
+      "source": "user specification 7.1"
+    },
+    {
+      "name": "conversation width",
+      "group": "layout",
+      "value": 384,
+      "unit": "px",
+      "source": "user specification 8.1"
+    },
+    {
+      "name": "conversation height",
+      "group": "layout",
+      "value": 520,
+      "unit": "px",
+      "source": "user specification 8.1"
+    },
+    {
+      "name": "navigation width",
+      "group": "layout",
+      "value": 660,
+      "unit": "px",
+      "source": "user specification 9.1"
+    },
+    {
+      "name": "navigation height",
+      "group": "layout",
+      "value": 78,
+      "unit": "px",
+      "source": "user specification 9.1"
+    },
+    {
+      "name": "navigation count",
+      "group": "controls",
+      "value": 6,
+      "source": "user specification 9.3"
+    },
+    {
+      "name": "main font",
+      "group": "typography",
+      "value": "Inter",
+      "source": "user specification 3.2"
+    },
+    {
+      "name": "panel radius",
+      "group": "layout",
+      "value": 20,
+      "unit": "px",
+      "source": "user specification 3.3"
+    },
+    {
+      "name": "search shortcut",
+      "group": "controls",
+      "value": "Ctrl/Cmd+K",
+      "estimated": true
+    },
+    {
+      "name": "capture shortcut",
+      "group": "controls",
+      "value": "Ctrl/Cmd+N",
+      "estimated": true
+    },
+    {
+      "name": "home shortcut",
+      "group": "controls",
+      "value": "Ctrl/Cmd+H",
+      "estimated": true
+    },
+    {
+      "name": "approval authority",
+      "group": "governance",
+      "value": "human only",
+      "source": "user memory garden specification"
+    },
+    {
+      "name": "memory enabled successes",
+      "group": "historical fixture",
+      "value": 59,
+      "unit": "games per 100",
+      "source": "user scenario"
+    },
+    {
+      "name": "memory disabled successes",
+      "group": "historical fixture",
+      "value": 40,
+      "unit": "games per 100",
+      "source": "user scenario"
+    },
+    {
+      "name": "observed improvement",
+      "group": "historical fixture",
+      "value": 19,
+      "unit": "percentage points",
+      "source": "derived 59 minus 40"
+    },
+    {
+      "name": "latency multiplier",
+      "group": "historical fixture",
+      "value": 4,
+      "unit": "approximate multiple",
+      "source": "user scenario"
+    },
+    {
+      "name": "token multiplier",
+      "group": "historical fixture",
+      "value": "more than 2x",
+      "source": "user scenario"
+    },
+    {
+      "name": "screenshot frames",
+      "group": "verification",
+      "value": 120,
+      "source": "user build instruction"
+    },
+    {
+      "name": "diameter breathing amplitude",
+      "value": 0,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "pulse angular frequency",
+      "value": 0.6,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "pulse formula",
+      "value": "sin(0.6*t)*0.5+0.5; reduced motion: 0",
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "halo count",
+      "value": 7,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "halo alpha",
+      "value": "floor(clamp(10+8*pulse,0,255))",
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "halo radii",
+      "value": "r*(1.42-0.06*i), i=0..6",
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "ribbon count",
+      "value": 6,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "ribbon samples",
+      "value": 49,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "phase speed idle",
+      "value": 0.02,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "phase speed processing",
+      "value": 0.07,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "phase speed executing",
+      "value": 0.11,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "ribbon wobble",
+      "value": "sin(0.25*t+k)*r*0.03; reduced motion: 0",
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "ribbon displacement",
+      "value": "sin(2*pi*f+phase+k)*r*0.05",
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "native sphere radius",
+      "value": "max(90,min(0.30*available_height,300)); design override: 185 at reference size",
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089"
+    },
+    {
+      "name": "repaint interval",
+      "value": 120,
+      "group": "timing",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7ce9e0",
+      "evidence_id": "ev_ff6e98b347da631f5d9db53825428f598a5d5f8e7cd7347bbf4f651f1f3a4cc7",
+      "unit": "ms"
+    },
+    {
+      "name": "completion duration",
+      "value": 2.5,
+      "group": "timing",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7cc560",
+      "evidence_id": "ev_59da443342a4d6c4fcec4bd37e17f0cc422fe7eda9f6ffa24c5c2ab829720a55",
+      "unit": "seconds"
+    },
+    {
+      "name": "sphere state priority",
+      "value": "attention > processing > executing > listening > completed > idle",
+      "group": "interaction",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7ca680",
+      "evidence_id": "ev_fb613b281dd3bc1cbb170b366adfa18434a2ae17f8dbc0f114721636da10e276"
+    },
+    {
+      "name": "experiment stages",
+      "value": "baseline(0) -> comparison(1) -> choice(2) -> recorded(3); clicks only",
+      "group": "interaction",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7e49c0",
+      "evidence_id": "ev_cb137b963cfca2d10fb31436cf0efdb67acb0ed9d794cd7ce4e27831ff1496c0"
+    },
+    {
+      "name": "processing duration",
+      "value": 1.5,
+      "group": "timing",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7cc560",
+      "evidence_id": "ev_4117e4506f5bb232122be534cb70bf0f2f82c0b7b30e13dd53153b9780deea99",
+      "unit": "seconds"
+    },
+    {
+      "name": "ribbon minimum points",
+      "value": 3,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f22a7825b476db0d0e90b3014591c84e8dc828b60c85cf7ff1c57a48784087de"
+    },
+    {
+      "name": "ribbon line width",
+      "value": 0.8,
+      "group": "motion",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7c77b0",
+      "evidence_id": "ev_f22a7825b476db0d0e90b3014591c84e8dc828b60c85cf7ff1c57a48784087de",
+      "unit": "px"
+    },
+    {
+      "name": "decision deferral",
+      "value": "close panel; retain choice stage; no decision recorded",
+      "group": "interaction",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7e4410",
+      "evidence_id": "ev_29128d2756d85adb2157da42e1caab71bea7e6ffaaf9821f19c7e22088d0a6e9"
+    },
+    {
+      "name": "Manual chat guard",
+      "value": "trimmed empty input -> no-op; Manual -> preserve draft/messages/deadlines and show notice",
+      "group": "interaction",
+      "source": "Deep-mode native decompilation; app/MECHANICS.md",
+      "function_address": "0x7cc560",
+      "evidence_id": "ev_59da443342a4d6c4fcec4bd37e17f0cc422fe7eda9f6ffa24c5c2ab829720a55"
+    }
+  ]
+}

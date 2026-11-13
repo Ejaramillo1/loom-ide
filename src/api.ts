@@ -79,13 +79,6 @@ export interface IntentsList {
   intents: Intent[];
 }
 
-export interface CollabStep {
-  id: string;
-  label: string;
-  state: "done" | "active" | "pending";
-  progress: number | null;
-}
-
 export interface AttentionItem {
   id: string;
   kind: "decision" | "finding";
@@ -160,6 +153,11 @@ export interface DirEntry {
   name: string;
   path: string;
   is_dir: boolean;
+}
+
+export interface WorkspaceInfo {
+  name: string;
+  path: string;
 }
 
 export interface HistoryMessage {
@@ -259,27 +257,6 @@ export interface ToolDefinition {
   providers: string[];
 }
 
-/// A trace span (GET /v1/traces/{trace_id}).
-export interface TraceSpan {
-  id: string;
-  parent_id: string;
-  name: string;
-  start_time_us: number;
-  end_time_us: number;
-  duration_us: number;
-  status: string;
-  attributes: Record<string, string>;
-}
-
-/// An execution trace (GET /v1/traces/{trace_id}).
-export interface Trace {
-  id: string;
-  session_id: string;
-  root_span: TraceSpan | null;
-  spans: TraceSpan[];
-  total_duration_ms: number;
-}
-
 /// An LLM model (GET /v1/models).
 export interface ModelInfo {
   id: string;
@@ -298,7 +275,7 @@ export interface ModelInfo {
 /// A named LLM provider (GET /v1/providers).
 export interface ProviderEntry {
   name: string;
-  model: string;
+  config: { provider: string; model: string };
   active: boolean;
 }
 
@@ -313,14 +290,32 @@ export interface ArtifactStats {
 
 /// Server configuration (GET /v1/server/config).
 export interface ServerConfig {
-  config: Record<string, string>;
+  name: string;
+  network: {
+    grpc_address: string;
+    http_address: string;
+    http_enabled: boolean;
+    reflection_enabled: boolean;
+  } | null;
+  tls: { enabled: boolean; mode: string } | null;
+  behavior: {
+    max_concurrent_requests: number;
+    request_timeout_seconds: number;
+    graceful_shutdown: boolean;
+    shutdown_timeout_seconds: number;
+    cors_enabled: boolean;
+    cors_allowed_origins: string[];
+  } | null;
+  metadata: Record<string, string>;
+  storage: { backend: string } | null;
 }
 
 /// Storage backend status (GET /v1/server/storage).
 export interface StorageStatus {
   backend: string;
   healthy: boolean;
-  detail: string;
+  error: string;
+  latency_ms: number;
 }
 
 const IN_TAURI =
@@ -345,8 +340,8 @@ function localWorkItems(): WorkItem[] {
 function saveLocalWorkItems(items: WorkItem[]) {
   try {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(items));
-  } catch {
-    /* ignore */
+  } catch (error) {
+    throw new Error(`Could not save work items in this browser: ${String(error)}`);
   }
 }
 
@@ -375,8 +370,8 @@ function localIntents(): IntentsList {
 function saveLocalIntents(list: IntentsList) {
   try {
     localStorage.setItem(INTENTS_KEY, JSON.stringify(list));
-  } catch {
-    /* ignore */
+  } catch (error) {
+    throw new Error(`Could not save intents in this browser: ${String(error)}`);
   }
 }
 
@@ -399,11 +394,18 @@ function createLocalIntent(
   acceptance: AcceptanceCriterion[] = [],
   autonomy?: IntentAutonomy | null,
 ): Intent {
+  // Mirror the backend: the statement is required and the level must be
+  // one of the four.
+  const trimmed = statement.trim();
+  if (trimmed === "") throw new Error("Intent statement cannot be empty");
+  if (autonomy != null && !AUTONOMY_LEVELS.includes(autonomy)) {
+    throw new Error(`Unknown autonomy level: ${autonomy}`);
+  }
   const list = localIntents();
   const now = nowUnix();
   const intent: Intent = {
     id: `intent-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-    statement: statement.trim(),
+    statement: trimmed,
     why: why?.trim() ? why.trim() : null,
     acceptance: normalizeCriteria(acceptance),
     autonomy: autonomy ?? "collaborative",
@@ -432,22 +434,33 @@ export async function addWorkItem(
   intentId?: string | null,
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
+    title = title.trim();
+    if (!title) throw new Error("Work item title cannot be empty");
     // Mirror the backend: no work without an intent. An explicit intent
     // wins, then the active one, then a one-line intent from the title.
+    // The work inherits the resolved intent's autonomy.
+    const list = localIntents();
     let resolvedId = intentId ?? null;
-    if (!resolvedId) {
-      const list = localIntents();
+    let resolvedAutonomy: IntentAutonomy = "collaborative";
+    if (resolvedId) {
+      const explicit = list.intents.find((i) => i.id === resolvedId);
+      if (!explicit) throw new Error(`Unknown intent: ${resolvedId}`);
+      resolvedAutonomy = explicit.autonomy;
+    } else {
       const active = list.intents.find((i) => i.id === list.active_intent_id);
-      resolvedId = active
-        ? active.id
-        : createLocalIntent(title).id;
+      if (active) {
+        resolvedId = active.id;
+        resolvedAutonomy = active.autonomy;
+      } else {
+        resolvedId = createLocalIntent(title).id;
+      }
     }
     const items = localWorkItems();
     const item: WorkItem = {
       id: `work-${Date.now()}`,
       title,
       status: "paused",
-      autonomy: "collaborative",
+      autonomy: resolvedAutonomy,
       updated_label: "Now",
       updated_at: nowUnix(),
       intent_id: resolvedId,
@@ -466,8 +479,13 @@ export async function setWorkStatus(
   status: "active" | "paused",
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
-    const items = localWorkItems().map((w) =>
-      w.id === id ? { ...w, status } : w,
+    if (status !== "active" && status !== "paused") {
+      throw new Error(`Unknown status: ${status}`);
+    }
+    const current = localWorkItems();
+    if (!current.some((w) => w.id === id)) throw new Error(`Unknown work item: ${id}`);
+    const items = current.map((w) =>
+      w.id === id ? { ...w, status, updated_at: nowUnix() } : w,
     );
     saveLocalWorkItems(items);
     return items.find((w) => w.id === id)!;
@@ -481,11 +499,44 @@ export async function setWorkAutonomy(
   justification?: string | null,
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
-    const items = localWorkItems().map((w) =>
-      w.id === id ? { ...w, autonomy } : w,
-    );
-    saveLocalWorkItems(items);
-    return items.find((w) => w.id === id)!;
+    // Mirror the backend command: ceiling first, then justification on
+    // raise, history recorded only when raising.
+    const items = localWorkItems();
+    const item = items.find((w) => w.id === id);
+    if (!item) throw new Error(`Unknown work item: ${id}`);
+    const requested = AUTONOMY_LEVELS.indexOf(autonomy);
+    if (requested < 0) throw new Error(`Unknown autonomy level: ${autonomy}`);
+    const list = localIntents();
+    const intent = item.intent_id
+      ? list.intents.find((i) => i.id === item.intent_id)
+      : undefined;
+    if (intent) {
+      const allowed = AUTONOMY_LEVELS.indexOf(intent.autonomy);
+      if (requested > allowed) {
+        throw new Error(
+          `Cannot raise this work item to "${autonomy}": its intent allows at most "${intent.autonomy}". Loosen the intent's autonomy first, or pick a lower level for this work item.`,
+        );
+      }
+    }
+    const currentRank = AUTONOMY_LEVELS.indexOf(item.autonomy);
+    let updated: WorkItem = { ...item, autonomy, updated_at: nowUnix() };
+    if (requested > currentRank) {
+      const just = justification?.trim();
+      if (!just) {
+        throw new Error(
+          `Raising autonomy from "${item.autonomy}" to "${autonomy}" requires a justification — why is more freedom needed?`,
+        );
+      }
+      updated = {
+        ...updated,
+        autonomy_history: [
+          ...(item.autonomy_history ?? []),
+          { from: item.autonomy, to: autonomy, justification: just, at: nowUnix() },
+        ],
+      };
+    }
+    saveLocalWorkItems(items.map((w) => (w.id === id ? updated : w)));
+    return updated;
   }
   return invoke<WorkItem>("set_work_autonomy", { id, autonomy, justification });
 }
@@ -495,8 +546,12 @@ export async function setWorkSession(
   sessionId: string | null,
 ): Promise<WorkItem> {
   if (!IN_TAURI) {
-    const items = localWorkItems().map((w) =>
-      w.id === id ? { ...w, session_id: sessionId } : w,
+    const current = localWorkItems();
+    if (!current.some((w) => w.id === id)) throw new Error(`Unknown work item: ${id}`);
+    const items = current.map((w) =>
+      w.id === id
+        ? { ...w, session_id: sessionId?.trim() || null, updated_at: nowUnix() }
+        : w,
     );
     saveLocalWorkItems(items);
     return items.find((w) => w.id === id)!;
@@ -674,10 +729,6 @@ export async function deleteIntent(id: string): Promise<boolean> {
 // The Loom server does not expose step-by-step execution yet, so
 // collaboration stays empty. Attention is real: the backend returns the
 // experiment decisions already waiting locally. No seed data.
-export async function getCollaboration(): Promise<CollabStep[]> {
-  if (!IN_TAURI) return [];
-  return invoke<CollabStep[]>("get_collaboration");
-}
 
 export async function getAttention(): Promise<AttentionItem[]> {
   if (!IN_TAURI) return [];
@@ -701,8 +752,31 @@ async function invokeCmd<T>(
 export async function getLoomStatus(): Promise<LoomStatus> {
   if (!IN_TAURI) {
     try {
-      await loomRequest("/health");
-      return { online: true, url: "/api/loom", detail: "Loom HTTP service is healthy." };
+      // Use the same component health endpoint and timeout as Rust.
+      // The unversioned /health route is a static liveness response.
+      const value = await loomRequest("/v1/health", undefined, 30000);
+      const status = value?.status;
+      const components = value?.components;
+      const failures = components && typeof components === "object"
+        ? Object.entries(components)
+          .filter(([, component]) => (component as { status?: string })?.status !== "healthy")
+          .map(([name, component]) => {
+            const health = component as { status?: string; error?: string } | null;
+            return `${name}: ${health?.error || health?.status || "unknown"}`;
+          }).join(", ")
+        : "";
+      const detail = status === "healthy"
+        ? "Loom HTTP service is healthy."
+        : status === "degraded"
+          ? `Loom is degraded (${failures || "see /v1/health"}).`
+          : typeof status === "string"
+            ? `Loom reports ${status}: ${failures || "see /v1/health"}.`
+            : "Server reachable; Loom health status was not reported.";
+      return {
+        online: typeof status !== "string" || status === "healthy" || status === "degraded",
+        url: "/api/loom",
+        detail,
+      };
     } catch (error) {
       return { online: false, url: "/api/loom", detail: String(error) };
     }
@@ -710,12 +784,12 @@ export async function getLoomStatus(): Promise<LoomStatus> {
   return invoke<LoomStatus>("get_loom_status");
 }
 
-async function loomRequest(path: string, body?: object): Promise<any> {
+async function loomRequest(path: string, body?: object, timeoutMs?: number): Promise<any> {
   const response = await fetch(`/api/loom${path}`, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json" },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(body ? 180000 : 5000),
+    signal: AbortSignal.timeout(timeoutMs ?? (body ? 180000 : 5000)),
   });
   const value = await response.json();
   if (!response.ok) throw new Error(value.message || value.error || `Loom returned HTTP ${response.status}`);
@@ -732,14 +806,21 @@ export async function askLoom(
   if (IN_TAURI) {
     return invoke<ChatReply>("ask_loom", { message, sessionId, agentId });
   }
+  if (!message.trim()) throw new Error("Enter a message first.");
   const body: Record<string, string> = { query: message };
-  if (sessionId) body.session_id = sessionId;
-  if (agentId) body.agent_id = agentId;
+  if (sessionId?.trim()) body.sessionId = sessionId;
+  if (agentId?.trim()) body.agentId = agentId;
   const value = await loomRequest("/v1/weave", body);
   const text = [value.text, value.response, value.content, value.reply, value.message]
     .find(value => typeof value === "string" && value.trim());
   if (!text) throw new Error("Loom returned an empty response. Check its agent configuration.");
-  return { text, source: "live", card: null };
+  const session = value.session_id ?? value.sessionId;
+  return {
+    text,
+    source: "live",
+    card: null,
+    session_id: typeof session === "string" && session.trim() ? session : null,
+  };
 }
 
 // ---- Sessions + agents (real Loom server; fail honestly when offline) ----
@@ -765,6 +846,15 @@ export async function getSessionHistory(sessionId: string): Promise<HistoryMessa
 
 // ---- Workspace explorer (local filesystem; works without the server) ----
 
+export async function getWorkspace(): Promise<WorkspaceInfo | null> {
+  if (!IN_TAURI) return null;
+  return invokeCmd<WorkspaceInfo>("get_workspace");
+}
+
+export async function openWorkspace(path: string): Promise<WorkspaceInfo> {
+  return invokeCmd<WorkspaceInfo>("open_workspace", { path });
+}
+
 export async function listWorkspace(): Promise<DirEntry[]> {
   return invokeCmd<DirEntry[]>("list_workspace");
 }
@@ -773,8 +863,20 @@ export async function listDirectory(path: string): Promise<DirEntry[]> {
   return invokeCmd<DirEntry[]>("list_directory", { path });
 }
 
+export async function createWorkspaceFile(parent: string, name: string): Promise<DirEntry> {
+  return invokeCmd<DirEntry>("create_workspace_file", { parent, name });
+}
+
+export async function createWorkspaceDirectory(parent: string, name: string): Promise<DirEntry> {
+  return invokeCmd<DirEntry>("create_workspace_directory", { parent, name });
+}
+
 export async function readFile(path: string): Promise<string> {
   return invokeCmd<string>("read_file", { path });
+}
+
+export async function writeFile(path: string, content: string, original: string): Promise<void> {
+  return invokeCmd<void>("write_file", { path, content, original });
 }
 
 // ---- Experiments (local definitions; arms run through real Loom calls) ----
@@ -882,12 +984,6 @@ export async function listTools(): Promise<ToolDefinition[]> {
   return invokeCmd<ToolDefinition[]>("list_tools");
 }
 
-// ---- Traces / observability (real Loom server) ----
-
-export async function getTrace(traceId: string): Promise<Trace> {
-  return invokeCmd<Trace>("get_trace", { traceId });
-}
-
 // ---- Agent details (real Loom server) ----
 
 export async function getAgent(agentId: string): Promise<Agent> {
@@ -904,29 +1000,11 @@ export async function listProviders(): Promise<ProviderEntry[]> {
   return invokeCmd<ProviderEntry[]>("list_providers");
 }
 
-export async function switchModel(
-  sessionId: string,
-  provider?: string | null,
-  model?: string | null,
-): Promise<any> {
-  return invokeCmd<any>("switch_model", { sessionId, provider, model });
-}
 
-// ---- Artifact detail / content / search / stats (real Loom server) ----
+// ---- Artifact detail and statistics (real Loom server) ----
 
 export async function getArtifact(artifactId: string): Promise<Artifact> {
   return invokeCmd<Artifact>("get_artifact", { artifactId });
-}
-
-export async function getArtifactContent(
-  artifactId: string,
-  encoding?: string | null,
-): Promise<string> {
-  return invokeCmd<string>("get_artifact_content", { artifactId, encoding });
-}
-
-export async function searchArtifacts(query: string): Promise<Artifact[]> {
-  return invokeCmd<Artifact[]>("search_artifacts", { query });
 }
 
 export async function getArtifactStats(): Promise<ArtifactStats> {
@@ -941,4 +1019,10 @@ export async function getServerConfig(): Promise<ServerConfig> {
 
 export async function getStorageStatus(): Promise<StorageStatus> {
   return invokeCmd<StorageStatus>("get_storage_status");
+}
+
+/** Opens the native knowledge surface while preserving its vault and theme. */
+export async function openLivingWorkbench(): Promise<void> {
+  if (!IN_TAURI) throw new Error("Open the desktop Tauri application to launch Living Workbench.");
+  await invoke("open_living_workbench");
 }

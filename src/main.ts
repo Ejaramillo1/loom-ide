@@ -1,3 +1,5 @@
+import "./theme";
+import { openLivingWorkbench } from "./api";
 import "./style.css";
 import {
   addExperiment,
@@ -8,12 +10,13 @@ import {
   clearExperimentDecision,
   createIntent,
   createSession,
+  createWorkspaceDirectory,
+  createWorkspaceFile,
   deleteIntent,
   executeWorkflow,
   getAgent,
   getArtifactStats,
   getAttention,
-  getCollaboration,
   getExperiments,
   getIntents,
   getLoomStatus,
@@ -23,6 +26,10 @@ import {
   getStorageStatus,
   getWorkflowExecution,
   getWorkItems,
+  getWorkspace,
+  openWorkspace,
+  writeFile,
+  isTauri,
   listAgents,
   listArtifacts,
   listDirectory,
@@ -50,7 +57,6 @@ import {
   type ArtifactStats,
   type AttentionItem,
   type ChatReply,
-  type CollabStep,
   type DirEntry,
   type Experiment,
   type ExperimentArm,
@@ -67,19 +73,22 @@ import {
   type WorkflowExecution,
   type WorkflowResult,
   type WorkItem,
+  type WorkspaceInfo,
   type EvidenceKind,
   evidenceKindLabel,
   type AutonomyChange,
 } from "./api";
 import { Sphere, type SphereState } from "./sphere";
+import { installAppMenu, textEditingActions } from "./app-menu";
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "layers" | "artifacts";
+type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "artifacts";
 
 type NoteKind = "design" | "scratch";
+type RightTab = "context" | "conversation";
 
 const LAYERS: { id: string; label: string; desc: string }[] = [
   {
@@ -113,11 +122,10 @@ const CAPTIONS: Record<SphereState, string> = {
   completed: "Done — back at rest.",
 };
 
-/** The two real local documents. They are the user's own notes, not
-    seeded content: both start empty and persist in localStorage. */
+/** Compatibility access to earlier user notes, shown only when saved text exists. */
 const NOTE_DOCS: { id: string; title: string; detail: string; kind: NoteKind }[] = [
-  { id: "doc-design", title: "Design philosophy", detail: "Your design notes", kind: "design" },
-  { id: "doc-scratch", title: "Scratch notes", detail: "Your scratch pad", kind: "scratch" },
+  { id: "doc-design", title: "Previous design note", detail: "Saved locally", kind: "design" },
+  { id: "doc-scratch", title: "Previous scratch note", detail: "Saved locally", kind: "scratch" },
 ];
 
 let workItems: WorkItem[] = [];
@@ -127,16 +135,15 @@ let intents: Intent[] = [];
 let activeIntentId: string | null = null;
 /** The intent editor open in the pinned header; null when closed. */
 let intentEditor: { mode: "create" } | { mode: "edit"; id: string } | null = null;
-let mode: Mode = "experiment";
+let mode: Mode = "code";
 let sphereState: SphereState = "idle";
-let currentNote: NoteKind = "design";
+let currentNote: NoteKind | null = null;
 let artifactTab: "artifacts" | "documents" = "artifacts";
 let loomReachable = false;
 let loomVerified = false;
 /** False until the first status probe resolves; the UI shows a neutral
     "Checking Loom…" state instead of flashing "offline" meanwhile. */
 let loomStatusKnown = false;
-let collabSteps: CollabStep[] = [];
 let attentionItems: AttentionItem[] = [];
 let sessions: Session[] = [];
 let selectedSessionId: string | null = null;
@@ -159,6 +166,16 @@ let artifacts: Artifact[] = [];
     the work's session when it has one, otherwise the global list. */
 let workArtifacts: Artifact[] = [];
 let runningWorkflow: string | null = null;
+/** Mutation errors shown next to the section they belong to, never only
+    in a conversation that may be closed. */
+let workArtifactsError: string | null = null;
+let workflowError: string | null = null;
+/** Work that started a workflow run or experiment arm in this app session.
+    The Loom server does not attribute executions or experiments to work,
+    so this is the only honest scoping available. It is intentionally
+    in-memory: nothing is implied to survive a restart. */
+const executionWorkIds = new Map<string, string>();
+const experimentWorkIds = new Map<string, string>();
 /** When true, stop polling the current workflow run and clear the
     running state. The server-side execution continues (there is no cancel
     endpoint), but the UI stops tracking it — honest about the limit
@@ -183,7 +200,6 @@ const $ = <T extends HTMLElement>(sel: string): T =>
 // ---------------------------------------------------------------------------
 
 const sphere = new Sphere($("#sphere") as HTMLCanvasElement);
-sphere.startAnimation();
 
 function setSphereState(state: SphereState) {
   sphereState = state;
@@ -346,9 +362,11 @@ function renderWorkList() {
 
       const dot = document.createElement("span");
       dot.className = `work-dot ${item.status}`;
+      dot.title = item.status === "active" ? "Active" : "Paused";
       const title = document.createElement("span");
       title.className = "work-title";
       title.textContent = item.title;
+      title.title = item.title;
       const time = document.createElement("span");
       time.className = "work-time";
       time.textContent = timeLabel(item);
@@ -358,21 +376,38 @@ function renderWorkList() {
       li.append(btn);
       list.append(li);
     }
+
+    const active = workItems.filter((w) => w.status === "active").length;
+    const paused = workItems.filter((w) => w.status === "paused").length;
+    const counts = $("#work-counts");
+    if (counts) {
+      counts.textContent =
+        workItems.length === 0
+          ? "No work yet"
+          : `${active} active · ${paused} paused`;
+    }
+
     applySearchFilter(($("#search-input") as HTMLInputElement).value);
   });
 }
 
-function selectWork(id: string) {
+/** Select a work item. A click from the catalogue navigates to Work so the
+    detail is visible; the initial selection during load does not. */
+function selectWork(id: string, navigate = true) {
   selectedWorkId = id;
   const item = workItems.find((w) => w.id === id);
   if (item) {
     $("#objective-title").textContent = item.title;
+    $("#objective-btn").title = `Open in Work view: ${item.title}`;
   }
   renderWorkList();
   renderWorkDetail();
   renderInspectorContext();
+  renderChatScope();
   syncSessionToWork();
   void loadWorkArtifacts(id);
+  if (navigate && mode !== "work") setMode("work");
+  if (isLeftDrawer()) closeLeftDrawer(false);
 }
 
 // ---------------------------------------------------------------------------
@@ -582,43 +617,20 @@ function buildIntentSummary(intent: Intent): HTMLElement {
   badges.append(version, autonomy, status);
   root.append(badges);
 
-  // Acceptance checklist: ticking toggles a criterion (no version bump).
+  // Acceptance criteria are managed in the editor; the catalogue header
+  // shows only their progress so the work list keeps the room.
   const criteria = intent.acceptance ?? [];
-  if (criteria.length === 0) {
-    const none = document.createElement("p");
-    none.className = "intent-why";
-    none.textContent = "No acceptance criteria yet. Edit the intent to add what done means.";
-    root.append(none);
+  if (criteria.length > 0) {
+    const done = criteria.filter((c) => c.done).length;
+    const progress = document.createElement("p");
+    progress.className = "intent-progress";
+    progress.textContent = `${done} of ${criteria.length} acceptance criteria met`;
+    root.append(progress);
   } else {
-    const ul = document.createElement("ul");
-    ul.className = "intent-checklist";
-    criteria.forEach((c, i) => {
-      const li = document.createElement("li");
-      if (c.done) li.className = "done";
-      const box = document.createElement("input");
-      box.type = "checkbox";
-      box.checked = c.done;
-      box.setAttribute("aria-label", `Mark done: ${c.text}`);
-      box.addEventListener("change", async () => {
-        const next = criteria.map((item, idx) =>
-          idx === i ? { ...item, done: box.checked } : item,
-        );
-        try {
-          await setIntentAcceptance({ id: intent.id, criteria: next });
-          await refreshIntents();
-        } catch (err) {
-          box.checked = !box.checked;
-          addChatError(
-            `Could not save the acceptance: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      });
-      const text = document.createElement("span");
-      text.textContent = c.text;
-      li.append(box, text);
-      ul.append(li);
-    });
-    root.append(ul);
+    const none = document.createElement("p");
+    none.className = "intent-progress";
+    none.textContent = "No acceptance criteria yet.";
+    root.append(none);
   }
 
   const actions = document.createElement("div");
@@ -793,6 +805,7 @@ function openAutonomyDialog(d: {
   current: IntentAutonomy;
   target: IntentAutonomy;
   onApply: (justification: string | null) => void;
+  onCancel?: () => void;
 }): void {
   const overlay = document.createElement("div");
   overlay.id = "autonomy-dialog-overlay";
@@ -819,6 +832,7 @@ function openAutonomyDialog(d: {
   ta.focus();
   overlay.querySelector("#autonomy-dialog-cancel")!.addEventListener("click", () => {
     closeAutonomyDialog();
+    d.onCancel?.();
   });
   overlay.querySelector("#autonomy-dialog-apply")!.addEventListener("click", () => {
     d.onApply(ta.value.trim() || null);
@@ -826,7 +840,17 @@ function openAutonomyDialog(d: {
   });
   // Close on overlay click (but not on inner dialog clicks).
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) closeAutonomyDialog();
+    if (e.target === overlay) {
+      closeAutonomyDialog();
+      d.onCancel?.();
+    }
+  });
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeAutonomyDialog();
+      d.onCancel?.();
+    }
   });
 }
 
@@ -1093,102 +1117,109 @@ function clearFieldError(slot: HTMLElement | null) {
   slot.hidden = true;
 }
 
-/** Build the summary block for one work item. */
+/** Build the summary block for one work item. The title owns its row, the
+    metadata owns the next, and every control sits below the text so a
+    narrow pane never squeezes the selected title. */
 function buildWorkSummary(item: WorkItem): HTMLElement {
-  const root = document.createElement("div");
+  const root = document.createElement("section");
   root.className = "work-summary";
+  root.setAttribute("aria-label", "Selected work");
 
-  // Row 1: dot + title + metadata.
   const top = document.createElement("div");
   top.className = "ws-top";
   const dot = document.createElement("span");
   dot.className = `work-dot ${item.status}`;
-  const body = document.createElement("div");
-  body.className = "ws-body";
-  const title = document.createElement("div");
+  dot.title = item.status === "active" ? "Active" : "Paused";
+  const title = document.createElement("h3");
   title.className = "ws-title";
   title.textContent = item.title;
-  const meta = document.createElement("div");
+  top.append(dot, title);
+  root.append(top);
+
+  const meta = document.createElement("p");
   meta.className = "ws-meta";
   meta.textContent = metaLabel(item);
-  body.append(title, meta);
+  root.append(meta);
 
-  // The intent this work belongs to: clicking it makes that intent the
-  // active one. Work created before intents existed has none and shows
-  // no line.
-  const intent = item.intent_id
-    ? intents.find((i) => i.id === item.intent_id)
-    : undefined;
-  if (intent) {
-    const intentRow = document.createElement("div");
-    intentRow.className = "ws-intent";
-    const intentLabel = document.createElement("span");
-    intentLabel.className = "ws-intent-label";
-    intentLabel.textContent = "Intent:";
-    const intentBtn = document.createElement("button");
-    intentBtn.type = "button";
-    intentBtn.className = "ws-intent-link";
-    intentBtn.textContent = intent.statement;
-    intentBtn.title = "Make this intent the active one";
-    intentBtn.addEventListener("click", async () => {
-      try {
-        await setActiveIntent(intent.id);
-        intentEditor = null;
-        await refreshIntents();
-        renderWorkDetail();
-      } catch (err) {
-        addChatError(
-          `Could not switch intent: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    });
-    intentRow.append(intentLabel, intentBtn);
-    body.append(intentRow);
-  }
-
-  top.append(dot, body);
-
-  // Row 2: planning preference + supported local action.
   const controls = document.createElement("div");
   controls.className = "ws-controls";
-  const label = document.createElement("label");
-  label.className = "ctl-label";
-  label.textContent = "Planning mode:";
-  label.append(
-    buildAutonomyDial(
-      item.autonomy as IntentAutonomy,
-      async (next, justification) => {
-        clearFieldError(error);
-        try {
-          const updated = await setWorkAutonomy(
-            item.id,
-            next as WorkItem["autonomy"],
-            justification,
-          );
-          workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
-          renderWorkList();
-          renderWorkDetail();
-        } catch (err) {
-          showFieldError(
-            error,
-            `Could not save the planning mode: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      },
-      item.autonomy_history ?? [],
-    ),
-  );
+
+  const planning = document.createElement("label");
+  planning.className = "ws-planning";
+  const planningLabel = document.createElement("span");
+  planningLabel.className = "ctl-label";
+  planningLabel.textContent = "Planning mode:";
+  const select = document.createElement("select");
+  select.className = "autonomy-select";
+  select.setAttribute("aria-label", "Planning mode");
+  select.title =
+    "A local planning preference. It does not start, pause, or change how an agent behaves.";
+  for (const level of Object.keys(AUTONOMY_LEVELS) as IntentAutonomy[]) {
+    const entry = AUTONOMY_LEVELS[level];
+    const opt = document.createElement("option");
+    opt.value = level;
+    opt.textContent = `${entry.label} (L${entry.level})`;
+    if (item.autonomy === level) opt.selected = true;
+    select.append(opt);
+  }
+  planning.append(planningLabel, select);
+  controls.append(planning);
 
   const stateBtn = document.createElement("button");
   stateBtn.type = "button";
   stateBtn.className = "btn";
   stateBtn.textContent = item.status === "active" ? "Mark paused" : "Mark active";
   stateBtn.title =
-    "Local planning — this saves a state on this device. It does not pause a running agent.";
+    "Local planning state, saved on this device. It does not pause a running agent.";
 
   const error = document.createElement("span");
   error.className = "field-error";
   error.hidden = true;
+
+  const applyAutonomy = async (
+    next: IntentAutonomy,
+    justification: string | null,
+  ) => {
+    clearFieldError(error);
+    try {
+      const updated = await setWorkAutonomy(
+        item.id,
+        next as WorkItem["autonomy"],
+        justification,
+      );
+      workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
+      renderWorkList();
+      renderWorkDetail();
+    } catch (err) {
+      showFieldError(
+        error,
+        `Could not save the planning mode: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      select.value = item.autonomy;
+    }
+  };
+
+  select.addEventListener("change", () => {
+    const next = select.value as IntentAutonomy;
+    const currentRank = AUTONOMY_LEVELS[item.autonomy].level;
+    const nextRank = AUTONOMY_LEVELS[next].level;
+    if (nextRank > currentRank) {
+      openAutonomyDialog({
+        kind: "work",
+        id: item.id,
+        current: item.autonomy,
+        target: next,
+        onApply: (justification) => {
+          void applyAutonomy(next, justification);
+        },
+        onCancel: () => {
+          select.value = item.autonomy;
+        },
+      });
+    } else {
+      void applyAutonomy(next, null);
+    }
+  });
 
   stateBtn.addEventListener("click", async () => {
     clearFieldError(error);
@@ -1213,19 +1244,22 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
   conv.textContent = "Conversation";
   conv.addEventListener("click", () => focusChat(conv));
 
-  controls.append(label, stateBtn, conv, error);
+  controls.append(stateBtn, conv, error);
+  root.append(controls);
 
   const note = document.createElement("p");
   note.className = "ws-note";
   note.textContent =
-    "Local planning — this saves a preference on this device. It does not pause a running agent or change how agents behave.";
+    "Local planning only. These settings are saved on this device; they do not pause a running agent or change how agents behave.";
+  root.append(note);
 
-  root.append(top, controls, note);
   return root;
 }
 
 // ---------------------------------------------------------------------------
-// Work detail view (the selected work; the catalogue stays on the left)
+// Work detail view — the selected work, in reading order: title and state,
+// planning preference and its supported local action, goal and success
+// criteria, artifacts, evidence. The catalogue lives only on the left.
 // ---------------------------------------------------------------------------
 
 function renderWorkDetail() {
@@ -1239,7 +1273,7 @@ function renderWorkDetail() {
       empty.className = "wd-empty";
       const text = document.createElement("p");
       text.textContent =
-        "No work yet. Create a work item to give this workspace something to focus on.";
+        "No work yet. Add the first piece of work in the catalogue so there is something concrete to move.";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btn";
@@ -1254,48 +1288,93 @@ function renderWorkDetail() {
     if (!item) {
       const empty = document.createElement("div");
       empty.className = "wd-empty";
+      const title = document.createElement("strong");
+      title.textContent = "No work selected";
       const text = document.createElement("p");
-      text.textContent = "Select a work item from the list.";
-      empty.append(text);
+      text.textContent = isLeftDrawer()
+        ? "Open Work to choose an item from the catalogue."
+        : "Choose an item from the work catalogue on the left.";
+      empty.append(title, text);
       wrap.append(empty);
       return;
     }
 
     wrap.append(buildWorkSummary(item));
+    wrap.append(buildSuccessCriteria(item));
+    wrap.append(buildArtifactsSection(item));
+    wrap.append(buildEvidenceSection(item.id));
 
-    const scroll = document.createElement("div");
-    scroll.className = "wd-scroll";
+    // Real Loom workflows stay available, but in a collapsed supporting
+    // section so they never crowd the selected work.
+    const supporting = document.createElement("details");
+    supporting.className = "supporting";
+    const summary = document.createElement("summary");
+    summary.textContent = "Workflows and recent runs";
+    supporting.append(summary);
+    supporting.append(buildWorkflowsSection());
+    wrap.append(supporting);
 
-    // Success criteria — editable by the human.
-    scroll.append(buildSuccessCriteria(item));
-
-    // Workflows — run real Loom workflows under this work item.
-    scroll.append(buildWorkflowsSection());
-
-    // Artifacts — attach real Loom artifacts.
-    scroll.append(buildArtifactsSection(item));
-
-    // Evidence — experiment decisions + Loom findings (honest).
-    scroll.append(buildEvidenceSection());
-
-    wrap.append(scroll);
+    const sub = document.getElementById("work-mode-sub");
+    if (sub) {
+      sub.textContent =
+        "The selected work: what done means, what it produced, and the evidence behind it.";
+    }
   });
 }
 
-// ---- Success criteria (editable, local) ----
+// ---- Success criteria and goal (editable, local) ----
 
 function buildSuccessCriteria(item: WorkItem): HTMLElement {
   const section = document.createElement("section");
   section.className = "wd-section";
+  section.setAttribute("aria-label", "Goal and success criteria");
   const h = document.createElement("h4");
-  h.textContent = "Success criteria";
+  h.textContent = "Goal and success criteria";
   section.append(h);
+
+  // The goal is the work's intent. Clicking it makes that intent active;
+  // the catalogue header updates to the same state.
+  const intent = item.intent_id
+    ? intents.find((i) => i.id === item.intent_id)
+    : undefined;
+  if (intent) {
+    const goalRow = document.createElement("div");
+    goalRow.className = "ws-intent";
+    const intentLabel = document.createElement("span");
+    intentLabel.className = "ws-intent-label";
+    intentLabel.textContent = "Goal:";
+    const intentBtn = document.createElement("button");
+    intentBtn.type = "button";
+    intentBtn.className = "ws-intent-link";
+    intentBtn.textContent = intent.statement;
+    intentBtn.title = "Make this intent the active one";
+    intentBtn.addEventListener("click", async () => {
+      try {
+        await setActiveIntent(intent.id);
+        intentEditor = null;
+        await refreshIntents();
+        renderWorkDetail();
+      } catch (err) {
+        addChatError(
+          `Could not switch intent: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    });
+    goalRow.append(intentLabel, intentBtn);
+    section.append(goalRow);
+  } else {
+    section.append(emptyP("No intent is linked to this work, so it has no stated goal."));
+  }
+
+  const error = document.createElement("span");
+  error.className = "field-error";
+  error.hidden = true;
 
   const criteria = item.success_criteria ?? [];
   if (criteria.length === 0) {
     const p = document.createElement("p");
     p.className = "empty";
-    p.textContent = "No criteria yet. Add one to define what done means.";
+    p.textContent = "No success criteria yet. Add one to define what done means for this work.";
     section.append(p);
   } else {
     const ul = document.createElement("ul");
@@ -1315,6 +1394,7 @@ function buildSuccessCriteria(item: WorkItem): HTMLElement {
         void saveCriteria(
           item.id,
           criteria.filter((_, idx) => idx !== i),
+          error,
         );
       });
       li.append(text, remove);
@@ -1327,7 +1407,7 @@ function buildSuccessCriteria(item: WorkItem): HTMLElement {
   form.className = "add-criterion";
   const input = document.createElement("input");
   input.type = "text";
-  input.placeholder = "Add a criterion…";
+  input.placeholder = "Add a success criterion…";
   input.setAttribute("aria-label", "New success criterion");
   const add = document.createElement("button");
   add.type = "submit";
@@ -1338,11 +1418,12 @@ function buildSuccessCriteria(item: WorkItem): HTMLElement {
     e.preventDefault();
     const v = input.value.trim();
     if (!v) return;
+    clearFieldError(error);
     // Disable while saving so two rapid submits cannot race on the same
     // stale snapshot; the input clears only after a successful save.
     input.disabled = true;
     add.disabled = true;
-    const ok = await saveCriteria(item.id, [...criteria, v]);
+    const ok = await saveCriteria(item.id, [...criteria, v], error);
     if (ok) {
       input.value = "";
     } else {
@@ -1350,7 +1431,7 @@ function buildSuccessCriteria(item: WorkItem): HTMLElement {
       add.disabled = false;
     }
   });
-  section.append(form);
+  section.append(form, error);
   return section;
 }
 
@@ -1358,7 +1439,11 @@ function buildSuccessCriteria(item: WorkItem): HTMLElement {
     running would read the same stale snapshot and drop a criterion. */
 const criteriaSaving = new Set<string>();
 
-async function saveCriteria(workId: string, criteria: string[]): Promise<boolean> {
+async function saveCriteria(
+  workId: string,
+  criteria: string[],
+  errorSlot?: HTMLElement | null,
+): Promise<boolean> {
   if (criteriaSaving.has(workId)) return false;
   criteriaSaving.add(workId);
   try {
@@ -1367,14 +1452,15 @@ async function saveCriteria(workId: string, criteria: string[]): Promise<boolean
     renderWorkDetail();
     return true;
   } catch (err) {
-    addChatError(
-      `Could not save the criteria: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    const message = `Could not save the success criteria: ${err instanceof Error ? err.message : String(err)}`;
+    if (errorSlot?.isConnected) showFieldError(errorSlot, message);
+    else addChatError(message);
     return false;
   } finally {
     criteriaSaving.delete(workId);
   }
 }
+
 
 // ---- Workflows (real Loom server) ----
 
@@ -1394,6 +1480,13 @@ function buildWorkflowsSection(): HTMLElement {
   refresh.addEventListener("click", () => refreshWorkflows());
   head.append(h, refresh);
   section.append(head);
+
+  if (workflowError) {
+    const error = document.createElement("p");
+    error.className = "field-error inline-error";
+    error.textContent = workflowError;
+    section.append(error);
+  }
 
   if (!loomStatusKnown) {
     section.append(emptyP("Checking the Loom server…"));
@@ -1541,6 +1634,8 @@ async function runWorkflow(name: string) {
   if (runningWorkflow) return;
   runningWorkflow = name;
   cancelWorkflow = false;
+  workflowError = null;
+  const startedFromWork = selectedWorkId;
   renderWorkDetail();
   setSphereState("executing");
   try {
@@ -1557,6 +1652,7 @@ async function runWorkflow(name: string) {
     setLoomReachable(true);
     if (res.execution_id) {
       executionWorkflowNames.set(res.execution_id, name);
+      if (startedFromWork) executionWorkIds.set(res.execution_id, startedFromWork);
       await refreshExecutionsList();
       await pollWorkflowExecution(res.execution_id);
     } else {
@@ -1565,6 +1661,7 @@ async function runWorkflow(name: string) {
     runningWorkflow = null;
     cancelWorkflow = false;
     renderWorkDetail();
+    renderEvidence();
     setSphereState("completed");
     window.setTimeout(() => {
       if (sphereState === "completed") setSphereState("idle");
@@ -1573,12 +1670,10 @@ async function runWorkflow(name: string) {
     await refreshExecutionsList();
     runningWorkflow = null;
     cancelWorkflow = false;
+    workflowError = `Workflow “${name}” failed: ${err instanceof Error ? err.message : String(err)}`;
     renderWorkDetail();
     setSphereState("idle");
     if (isLoomConnectionError(err)) setLoomReachable(false);
-    addChatError(
-      `Workflow "${name}" failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
   }
 }
 
@@ -1591,6 +1686,14 @@ function buildArtifactsSection(item: WorkItem): HTMLElement {
   head.className = "wd-section-head";
   const h = document.createElement("h4");
   h.textContent = "Artifacts";
+  const actions = document.createElement("div");
+  actions.className = "section-actions";
+  const browse = document.createElement("button");
+  browse.type = "button";
+  browse.className = "quiet-btn";
+  browse.textContent = "Browse workspace";
+  browse.title = "Open the workspace artifact list";
+  browse.addEventListener("click", () => setMode("artifacts"));
   const refresh = document.createElement("button");
   refresh.type = "button";
   refresh.className = "icon-btn small";
@@ -1598,26 +1701,48 @@ function buildArtifactsSection(item: WorkItem): HTMLElement {
   refresh.setAttribute("aria-label", "Refresh artifacts");
   refresh.textContent = "↻";
   refresh.addEventListener("click", () => refreshArtifacts());
-  head.append(h, refresh);
+  actions.append(browse, refresh);
+  head.append(h, actions);
   section.append(head);
+
+  if (workArtifactsError) {
+    const error = document.createElement("p");
+    error.className = "field-error inline-error";
+    error.textContent = workArtifactsError;
+    section.append(error);
+  }
 
   if (!loomStatusKnown) {
     section.append(emptyP("Checking the Loom server…"));
     return section;
   }
   if (!loomReachable) {
-    section.append(emptyP("The Loom server is offline — artifacts are not available."));
-    return section;
-  }
-  if (workArtifacts.length === 0) {
-    section.append(emptyP("No artifacts for this work yet."));
+    section.append(emptyP("The Loom server is offline, so artifacts are not available."));
     return section;
   }
 
   const attached = new Set(item.artifact_ids ?? []);
+  // Show the work's session artifacts plus anything explicitly attached
+  // from the workspace list, without duplicating rows.
+  const visible = [...workArtifacts];
+  for (const id of attached) {
+    const artifact = artifacts.find((a) => a.id === id);
+    if (artifact && !visible.some((a) => a.id === artifact.id)) visible.push(artifact);
+  }
+  if (visible.length === 0) {
+    section.append(
+      emptyP(
+        item.session_id
+          ? "No artifacts for this work yet."
+          : "No artifacts linked. This work has no Loom session yet; artifacts from a session appear here when one is linked.",
+      ),
+    );
+    return section;
+  }
+
   const ul = document.createElement("ul");
   ul.className = "artifact-list";
-  for (const a of workArtifacts) {
+  for (const a of visible) {
     const li = document.createElement("li");
     const info = document.createElement("div");
     info.className = "artifact-info";
@@ -1646,13 +1771,15 @@ function buildArtifactsSection(item: WorkItem): HTMLElement {
   return section;
 }
 
-/** Load the selected work's artifacts ("what this work produced"): scoped
-    to the work's session when it has one, otherwise the global list. */
+/** Load the selected work's artifacts ("what this work produced"): only
+    artifacts from its Loom session. With no session the section says so
+    rather than presenting the workspace list as if this work produced it. */
 async function loadWorkArtifacts(workId: string) {
   const item = workItems.find((w) => w.id === workId);
   if (!item) return;
+  workArtifactsError = null;
   if (!item.session_id) {
-    workArtifacts = [...artifacts];
+    workArtifacts = [];
     renderWorkDetail();
     return;
   }
@@ -1666,17 +1793,20 @@ async function loadWorkArtifacts(workId: string) {
     if (selectedWorkId !== workId) return;
     if (isLoomConnectionError(err)) setLoomReachable(false);
     workArtifacts = [];
+    workArtifactsError = `Could not load this work's artifacts: ${err instanceof Error ? err.message : String(err)}`;
     renderWorkDetail();
   }
 }
 
 async function refreshArtifacts() {
+  workArtifactsError = null;
   try {
     artifacts = await listArtifacts();
     setLoomReachable(true);
   } catch (err) {
     if (isLoomConnectionError(err)) setLoomReachable(false);
     artifacts = [];
+    workArtifactsError = `Could not refresh workspace artifacts: ${err instanceof Error ? err.message : String(err)}`;
   }
   if (selectedWorkId) await loadWorkArtifacts(selectedWorkId);
   renderWorkDetail();
@@ -1691,6 +1821,7 @@ const artifactSaving = new Set<string>();
 async function toggleArtifact(item: WorkItem, artifactId: string, currentlyAttached: boolean) {
   if (artifactSaving.has(artifactId)) return;
   artifactSaving.add(artifactId);
+  workArtifactsError = null;
   const ids = new Set(item.artifact_ids ?? []);
   if (currentlyAttached) ids.delete(artifactId);
   else ids.add(artifactId);
@@ -1700,11 +1831,8 @@ async function toggleArtifact(item: WorkItem, artifactId: string, currentlyAttac
     renderWorkDetail();
     renderArtifacts();
   } catch (err) {
-    // Re-render to restore the toggle's previous state.
+    workArtifactsError = `Could not update artifacts: ${err instanceof Error ? err.message : String(err)}`;
     renderWorkDetail();
-    addChatError(
-      `Could not update artifacts: ${err instanceof Error ? err.message : String(err)}`,
-    );
   } finally {
     artifactSaving.delete(artifactId);
   }
@@ -1740,9 +1868,10 @@ interface EvidenceItem {
     for ground truth (P3 Human Understanding):
     - experiment decisions are "recorded" (a human stored this choice)
     - workflow results are "observed" (the server produced this output) */
-function evidenceItems(): EvidenceItem[] {
+function evidenceItems(workId?: string): EvidenceItem[] {
   const items: EvidenceItem[] = [];
   for (const e of experiments.filter((x) => x.decision)) {
+    if (workId && experimentWorkIds.get(e.id) !== workId) continue;
     const arm = e.arms.find((a) => a.id === e.decision);
     items.push({
       id: `decision-${e.id}`,
@@ -1753,6 +1882,7 @@ function evidenceItems(): EvidenceItem[] {
     });
   }
   for (const ex of executions) {
+    if (workId && executionWorkIds.get(ex.id) !== workId) continue;
     const text = workflowResultText(ex.result);
     if (!text) continue;
     const name =
@@ -1769,17 +1899,30 @@ function evidenceItems(): EvidenceItem[] {
   return items;
 }
 
-function buildEvidenceSection(): HTMLElement {
+function buildEvidenceSection(workId?: string): HTMLElement {
   const section = document.createElement("section");
   section.className = "wd-section";
+  const head = document.createElement("div");
+  head.className = "wd-section-head";
   const h = document.createElement("h4");
   h.textContent = "Evidence";
-  section.append(h);
+  const browse = document.createElement("button");
+  browse.type = "button";
+  browse.className = "quiet-btn";
+  browse.textContent = "Open Evidence";
+  browse.title = "Open workspace evidence";
+  browse.addEventListener("click", () => setMode("evidence"));
+  head.append(h, browse);
+  section.append(head);
 
-  const items = evidenceItems();
+  const items = evidenceItems(workId);
   if (items.length === 0) {
     section.append(
-      emptyP("No findings yet. Experiment decisions and workflow results appear here as evidence once made."),
+      emptyP(
+        workId
+          ? "No evidence is linked to this work yet. Decisions and workflow results started from this work appear here; workspace-wide evidence lives in Evidence."
+          : "No findings yet. Experiment decisions and workflow results appear here as evidence once made.",
+      ),
     );
     return section;
   }
@@ -1787,20 +1930,20 @@ function buildEvidenceSection(): HTMLElement {
   ul.className = "evidence-list";
   for (const item of items) {
     const li = document.createElement("li");
-    const head = document.createElement("div");
-    head.className = "ev-head";
+    const headRow = document.createElement("div");
+    headRow.className = "ev-head";
     const title = document.createElement("strong");
     title.textContent = item.title;
-    head.append(title);
+    headRow.append(title);
     const kind = document.createElement("span");
     kind.className = "ev-kind";
     kind.textContent = item.kindLabel;
     kind.title = `${item.kindLabel} evidence — what this claim rests on.`;
-    head.append(kind);
+    headRow.append(kind);
     const detail = document.createElement("p");
     detail.className = "ev-detail";
     detail.textContent = item.detail;
-    li.append(head, detail);
+    li.append(headRow, detail);
     ul.append(li);
   }
   section.append(ul);
@@ -1815,19 +1958,17 @@ function emptyP(text: string): HTMLElement {
 }
 
 function focusNewWork(from?: HTMLElement) {
-  if (window.matchMedia("(max-width: 1099px)").matches) {
+  if (isLeftDrawer()) {
     openLeftDrawer(from);
   }
   ($("#new-work-input") as HTMLInputElement).focus();
 }
 
 // ---------------------------------------------------------------------------
-// Inspector: Context (collaboration + attention, from the backend)
+// Inspector: local attention and connected server details
 // ---------------------------------------------------------------------------
 
 function renderInspectorContext() {
-  if (!document.querySelector("#collab-steps")) return;
-  renderSteps(collabSteps);
   renderAttention(attentionItems);
   renderInspectorSessionDetail();
   renderInspectorAgentDetail();
@@ -1944,7 +2085,7 @@ function renderInspectorProviders() {
     const name = document.createElement("strong");
     name.textContent = p.name;
     const model = document.createElement("span");
-    model.textContent = p.model;
+    model.textContent = [p.config.provider, p.config.model].filter(Boolean).join(" · ");
     const active = document.createElement("span");
     active.className = p.active ? "provider-active" : "provider-inactive";
     active.textContent = p.active ? "active" : "inactive";
@@ -1987,7 +2128,7 @@ function renderInspectorServerConfig() {
   const section = document.getElementById("inspector-server-config");
   const content = document.getElementById("inspector-server-config-content");
   if (!section || !content) return;
-  if (!serverConfig || Object.keys(serverConfig.config).length === 0) {
+  if (!serverConfig) {
     section.hidden = true;
     return;
   }
@@ -1995,7 +2136,37 @@ function renderInspectorServerConfig() {
   content.innerHTML = "";
   const dl = document.createElement("dl");
   dl.className = "config-list";
-  for (const [k, v] of Object.entries(serverConfig.config) as [string, string][]) {
+  const rows: [string, string][] = [];
+  const enabled = (value: boolean) => value ? "Enabled" : "Disabled";
+  if (serverConfig.name) rows.push(["Name", serverConfig.name]);
+  if (serverConfig.network) {
+    const network = serverConfig.network;
+    if (network.grpc_address) rows.push(["gRPC address", network.grpc_address]);
+    if (network.http_address) rows.push(["HTTP address", network.http_address]);
+    rows.push(["HTTP gateway", enabled(network.http_enabled)]);
+    rows.push(["gRPC reflection", enabled(network.reflection_enabled)]);
+  }
+  if (serverConfig.tls) {
+    rows.push(["TLS", enabled(serverConfig.tls.enabled)]);
+    if (serverConfig.tls.mode) rows.push(["TLS mode", serverConfig.tls.mode]);
+  }
+  if (serverConfig.behavior) {
+    const behavior = serverConfig.behavior;
+    rows.push(["Max concurrent requests", String(behavior.max_concurrent_requests)]);
+    rows.push(["Request timeout (s)", String(behavior.request_timeout_seconds)]);
+    rows.push(["Graceful shutdown", enabled(behavior.graceful_shutdown)]);
+    rows.push(["Shutdown timeout (s)", String(behavior.shutdown_timeout_seconds)]);
+    rows.push(["CORS", enabled(behavior.cors_enabled)]);
+    if (behavior.cors_allowed_origins.length) {
+      rows.push(["CORS allowed origins", behavior.cors_allowed_origins.join(", ")]);
+    }
+  }
+  if (serverConfig.storage?.backend) rows.push(["Storage backend", serverConfig.storage.backend]);
+  for (const [key, value] of Object.entries(serverConfig.metadata)) {
+    rows.push([`Metadata: ${key}`, value]);
+  }
+  section.hidden = rows.length === 0;
+  for (const [k, v] of rows) {
     const dt = document.createElement("dt");
     dt.textContent = k;
     const dd = document.createElement("dd");
@@ -2021,106 +2192,43 @@ function renderInspectorStorageStatus() {
   const backend = document.createElement("p");
   backend.textContent = `Backend: ${storageStatus.backend}`;
   const detail = document.createElement("p");
-  detail.textContent = storageStatus.detail || "—";
-  content.append(status, backend, detail);
-}
-
-function renderSteps(steps: CollabStep[]) {
-  const list = $("#collab-steps");
-  list.innerHTML = "";
-  if (steps.length === 0) {
-    // No step-level execution data: show the registered agents honestly.
-    if (agents.length === 0) {
-      const li = document.createElement("li");
-      li.className = "step";
-      const label = document.createElement("span");
-      label.className = "step-label";
-      label.textContent = !loomStatusKnown
-        ? "Checking Loom…"
-        : loomReachable
-          ? "No agents registered"
-          : "Loom offline";
-      li.append(label);
-      list.append(li);
-      $("#agent-status").textContent = !loomStatusKnown
-        ? "Checking Loom…"
-        : loomReachable
-          ? "No agents running"
-          : "Loom offline";
-      const prog = $("#agent-progress");
-      if (prog) prog.textContent = "";
-      return;
-    }
-    const running = agents.filter((a) => a.status === "running").length;
-    $("#agent-status").textContent =
-      running > 0
-        ? `${running} of ${agents.length} agents running`
-        : `${agents.length} agent${agents.length === 1 ? "" : "s"} · none running`;
-    const prog = $("#agent-progress");
-    if (prog) prog.textContent = "";
-    for (const a of agents) {
-      const li = document.createElement("li");
-      li.className = `step ${a.status === "running" ? "active" : ""}`;
-      const mark = document.createElement("span");
-      mark.className = "mark";
-      const label = document.createElement("span");
-      label.className = "step-label";
-      label.textContent = a.name;
-      const status = document.createElement("span");
-      status.className = "step-pct";
-      status.textContent = a.status;
-      li.append(mark, label, status);
-      list.append(li);
-    }
-    return;
-  }
-  // "Step 3 of 5" is not the same as "2 of 5 completed": the active
-  // step counts toward neither the done total nor the current step
-  // twice.
-  const done = steps.filter((s) => s.state === "done").length;
-  const activeIdx = steps.findIndex((s) => s.state === "active");
-  $("#agent-status").textContent =
-    activeIdx >= 0
-      ? `Step ${activeIdx + 1} of ${steps.length}`
-      : `${done} of ${steps.length} completed`;
-  const prog = $("#agent-progress");
-  if (prog) prog.textContent = `${done} of ${steps.length} completed`;
-  for (const step of steps) {
-    const li = document.createElement("li");
-    li.className = `step ${step.state}`;
-    const mark = document.createElement("span");
-    mark.className = "mark";
-    mark.textContent = step.state === "done" ? "✓" : "";
-    const label = document.createElement("span");
-    label.className = "step-label";
-    label.textContent = step.label;
-    li.append(mark, label);
-    if (step.progress !== null && step.progress !== undefined) {
-      const pct = document.createElement("span");
-      pct.className = "step-pct";
-      pct.textContent = `${step.progress}%`;
-      li.append(pct);
-    }
-    list.append(li);
-  }
+  detail.textContent = storageStatus.error;
+  detail.hidden = !storageStatus.error;
+  const latency = document.createElement("p");
+  latency.textContent = `Health check latency: ${storageStatus.latency_ms} ms`;
+  content.append(status, backend, latency, detail);
 }
 
 function renderAttention(items: AttentionItem[]) {
   const list = $("#attention-list");
   list.innerHTML = "";
   $("#att-count").textContent = String(items.length);
+  const contextTab = document.getElementById("tab-context");
+  if (contextTab) {
+    contextTab.title =
+      items.length === 0
+        ? "Collaboration and attention"
+        : `${items.length} item${items.length === 1 ? "" : "s"} need attention`;
+    contextTab.classList.toggle("has-attention", items.length > 0);
+  }
+  const contextToggle = document.getElementById("context-toggle");
+  contextToggle?.classList.toggle("has-attention", items.length > 0);
+  const dot = $(".att-dot");
+  if (dot) dot.classList.toggle("live", items.length > 0);
+
   if (items.length === 0) {
     const li = document.createElement("li");
     const span = document.createElement("span");
-    span.className = "step-label";
-    span.textContent = "No attention items";
+    span.className = "step-label attention-empty";
+    span.textContent = "Nothing needs a decision.";
     li.append(span);
     list.append(li);
     return;
   }
   for (const item of items) {
     const li = document.createElement("li");
-    const row = document.createElement("div");
+    const row = document.createElement("button");
+    row.type = "button";
     row.className = "att-item";
     const ico = document.createElement("span");
     ico.className = "att-ico" + (item.kind === "finding" ? " finding" : "");
@@ -2132,10 +2240,244 @@ function renderAttention(items: AttentionItem[]) {
     const detail = document.createElement("span");
     detail.textContent = item.detail;
     text.append(title, detail);
-    row.append(ico, text);
+    const chev = document.createElement("span");
+    chev.className = "chev";
+    chev.textContent = "›";
+    row.append(ico, text, chev);
+    row.addEventListener("click", () => openAttentionDialog(item, row));
     li.append(row);
     list.append(li);
   }
+}
+
+let attentionDialog: HTMLElement | null = null;
+let attentionDialogReturn: HTMLElement | null = null;
+
+/** Inspect a decision (or finding) without leaving the work surface. Real
+    decisions expose the experiment's question, hypothesis, and arm results
+    and can be recorded here. */
+function openAttentionDialog(item: AttentionItem, opener?: HTMLElement) {
+  closeAttentionDialog(false);
+  attentionDialogReturn = opener ?? (document.activeElement as HTMLElement | null);
+  const expId = item.id.startsWith("decision-")
+    ? item.id.slice("decision-".length)
+    : null;
+  const exp = expId ? experiments.find((e) => e.id === expId) : undefined;
+
+  const overlay = document.createElement("div");
+  overlay.className = "decision-overlay";
+  overlay.id = "decision-dialog-overlay";
+  const dialog = document.createElement("div");
+  dialog.className = "decision-dialog";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "decision-dialog-title");
+
+  const head = document.createElement("div");
+  head.className = "decision-head";
+  const title = document.createElement("h3");
+  title.id = "decision-dialog-title";
+  title.textContent = exp ? exp.title : item.title;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "icon-btn small";
+  close.setAttribute("aria-label", "Close decision detail");
+  close.textContent = "✕";
+  close.addEventListener("click", () => closeAttentionDialog());
+  head.append(title, close);
+  dialog.append(head);
+
+  const provenance = document.createElement("p");
+  provenance.className = "decision-provenance";
+  provenance.textContent = exp
+    ? "Decision recorded by you from real experiment results."
+    : "This item comes from the Loom server.";
+  dialog.append(provenance);
+
+  if (exp) {
+    const question = document.createElement("p");
+    question.className = "decision-field";
+    question.innerHTML = `<span>Question</span>${escapeHtml(exp.question || "Not stated yet.")}`;
+    const hypothesis = document.createElement("p");
+    hypothesis.className = "decision-field";
+    hypothesis.innerHTML = `<span>Hypothesis</span>${escapeHtml(exp.hypothesis || "Not stated yet.")}`;
+    dialog.append(question, hypothesis);
+
+    const armsLabel = document.createElement("h4");
+    armsLabel.textContent = "Arm results";
+    dialog.append(armsLabel);
+    const arms = document.createElement("ul");
+    arms.className = "decision-arms";
+    for (const arm of exp.arms) {
+      const li = document.createElement("li");
+      const armName = document.createElement("strong");
+      armName.textContent = arm.label;
+      const status = document.createElement("span");
+      status.className = `exp-status ${arm.status}`;
+      status.textContent = arm.status;
+      const config = document.createElement("p");
+      config.className = "decision-arm-config";
+      config.textContent = arm.config || "No configuration recorded.";
+      li.append(armName, status, config);
+      if (arm.result.trim()) {
+        const result = document.createElement("pre");
+        result.className = "decision-arm-result";
+        result.textContent =
+          arm.result.length > 600 ? `${arm.result.slice(0, 600)}…` : arm.result;
+        li.append(result);
+      }
+      arms.append(li);
+    }
+    dialog.append(arms);
+
+    if (exp.decision) {
+      const chosen = exp.arms.find((a) => a.id === exp.decision);
+      const decided = document.createElement("p");
+      decided.className = "decision-recorded";
+      decided.textContent = `Chosen: ${chosen?.label ?? exp.decision}`;
+      dialog.append(decided);
+    } else {
+      const doneArms = exp.arms.filter((a) => a.status === "done");
+      if (doneArms.length >= 2) {
+        const chooseLabel = document.createElement("p");
+        chooseLabel.className = "decision-choose-label";
+        chooseLabel.textContent = "Choose the configuration to carry forward:";
+        const options = document.createElement("div");
+        options.className = "exp-decision-options";
+        for (const arm of doneArms) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn";
+          btn.textContent = `Choose ${arm.label}`;
+          btn.addEventListener("click", async () => {
+            clearFieldError(error);
+            btn.disabled = true;
+            try {
+              const updated = await chooseExperimentArm(exp.id, arm.id);
+              replaceExperiment(updated);
+              renderExperiments();
+              await refreshAttention();
+              closeAttentionDialog();
+            } catch (err) {
+              btn.disabled = false;
+              showFieldError(
+                error,
+                `Could not record the decision: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          });
+          options.append(btn);
+        }
+        dialog.append(chooseLabel, options);
+      } else {
+        const waiting = document.createElement("p");
+        waiting.className = "empty";
+        waiting.textContent =
+          "This decision opens when at least two arms have finished.";
+        dialog.append(waiting);
+      }
+    }
+
+    const error = document.createElement("p");
+    error.className = "field-error decision-error";
+    error.hidden = true;
+    dialog.append(error);
+
+    const actions = document.createElement("div");
+    actions.className = "decision-actions";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "btn ghost";
+    open.textContent = "Open in Experiment";
+    open.addEventListener("click", () => {
+      closeAttentionDialog(false);
+      selectExperiment(exp.id);
+      setMode("experiment");
+    });
+    actions.append(open);
+    if (exp.decision) {
+      const change = document.createElement("button");
+      change.type = "button";
+      change.className = "btn ghost";
+      change.textContent = "Change decision";
+      change.addEventListener("click", async () => {
+        clearFieldError(error);
+        change.disabled = true;
+        try {
+          const updated = await clearExperimentDecision(exp.id);
+          replaceExperiment(updated);
+          renderExperiments();
+          await refreshAttention();
+          closeAttentionDialog();
+        } catch (err) {
+          change.disabled = false;
+          showFieldError(
+            error,
+            `Could not change the decision: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      });
+      actions.append(change);
+    }
+    dialog.append(actions);
+  } else {
+    const detail = document.createElement("p");
+    detail.className = "decision-detail";
+    detail.textContent = item.detail;
+    dialog.append(detail);
+  }
+
+  overlay.append(dialog);
+  document.body.append(overlay);
+  attentionDialog = overlay;
+  close.focus();
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeAttentionDialog();
+  });
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      // Close only the dialog. Without stopping propagation, the document
+      // handler would then also close the context drawer behind it.
+      e.preventDefault();
+      e.stopPropagation();
+      closeAttentionDialog();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const focusables = [
+      ...dialog.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      ),
+    ].filter((el) => el.offsetParent !== null);
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+}
+
+function closeAttentionDialog(returnFocus = true) {
+  attentionDialog?.remove();
+  attentionDialog = null;
+  if (returnFocus && attentionDialogReturn?.isConnected) {
+    attentionDialogReturn.focus();
+  }
+  attentionDialogReturn = null;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 /** Reload the attention list from the backend (experiments waiting for a
@@ -2150,128 +2492,134 @@ async function refreshAttention() {
 }
 
 // ---------------------------------------------------------------------------
-// Drawers + inspector tabs
+// One contextual surface: Context + Conversation tabs in the right pane.
+// At wide widths it is a collapsible column; below that it is the same pane
+// as a drawer. Opening Conversation never leaves a second chat crowding the
+// work surface.
 // ---------------------------------------------------------------------------
 
-function isInspectorDrawer(): boolean {
-  return window.matchMedia("(max-width: 1439px)").matches;
+let rightTab: RightTab = "context";
+let rightOpen = window.matchMedia("(min-width: 1440px)").matches;
+let rightWasDrawer = !window.matchMedia("(min-width: 1440px)").matches;
+
+function isRightDrawer(): boolean {
+  return !window.matchMedia("(min-width: 1440px)").matches;
 }
 
 function isLeftDrawer(): boolean {
-  return window.matchMedia("(max-width: 1099px)").matches;
+  return !window.matchMedia("(min-width: 1100px)").matches;
 }
 
+
 function updateScrim() {
-  // The inspector (Context) is a non-modal drawer: it never raises the
-  // scrim and never closes on an outside click. Only the left (work)
-  // drawer is modal and raises the scrim.
-  const open = document.body.classList.contains("left-open");
+  const open =
+    document.body.classList.contains("left-open") ||
+    (isRightDrawer() && document.body.classList.contains("right-open"));
   $("#scrim").hidden = !open;
 }
 
-// The inspector holds Context only now. The chat lives in the left
-// column and opens on demand, so there is no tab to switch and no
-// inspector state for the conversation.
-function openInspector(opener?: HTMLElement) {
-  if (opener) lastFocus = opener;
-  if (isInspectorDrawer()) {
-    document.body.classList.add("inspector-open");
-    $("#context-toggle").setAttribute("aria-expanded", "true");
-    updateScrim();
-  } else {
-    $("#context-toggle").setAttribute("aria-expanded", "true");
-  }
-}
+function applyRightPane() {
+  document.body.classList.toggle("right-open", rightOpen && isRightDrawer());
+  document.body.classList.toggle("right-hidden", !rightOpen);
+  const contextPane = document.getElementById("inspector-context");
+  const chatPane = document.getElementById("chat-panel");
+  if (contextPane) contextPane.hidden = rightTab !== "context";
+  if (chatPane) chatPane.hidden = rightTab !== "conversation";
 
-function closeInspector() {
-  document.body.classList.remove("inspector-open");
-  $("#context-toggle").setAttribute("aria-expanded", "false");
+  const contextTab = document.getElementById("tab-context");
+  const chatTab = document.getElementById("tab-conversation");
+  contextTab?.classList.toggle("active", rightTab === "context");
+  chatTab?.classList.toggle("active", rightTab === "conversation");
+  contextTab?.setAttribute("aria-selected", String(rightTab === "context"));
+  chatTab?.setAttribute("aria-selected", String(rightTab === "conversation"));
+
+  const contextToggle = document.getElementById("context-toggle");
+  const chatToggle = document.getElementById("chat-toggle");
+  contextToggle?.classList.toggle("active", rightOpen && rightTab === "context");
+  chatToggle?.classList.toggle("active", rightOpen && rightTab === "conversation");
+  contextToggle?.setAttribute("aria-expanded", String(rightOpen));
+  chatToggle?.setAttribute("aria-expanded", String(rightOpen));
   updateScrim();
-  if (lastFocus) {
+}
+
+/** Open the right pane on a tab. At drawer widths this is the only pane
+    that opens, and focus moves into it; the chat log and draft stay put
+    when it closes. */
+function openRight(tab: RightTab, opener?: HTMLElement) {
+  // One contextual surface at a time: opening the right drawer closes the
+  // work catalogue drawer rather than stacking two modal panes.
+  if (document.body.classList.contains("left-open")) closeLeftDrawer(false);
+  if (opener && isRightDrawer()) lastFocus = opener;
+  rightTab = tab;
+  rightOpen = true;
+  applyRightPane();
+  if (tab === "conversation" && rightOpen) {
+    loadChatForWork(selectedWorkId, selectedSessionId);
+  }
+  if (isRightDrawer()) {
+    const target =
+      tab === "conversation"
+        ? ($("#chat-text") as HTMLInputElement)
+        : (($("#tab-context") as HTMLButtonElement) ?? null);
+    target?.focus();
+  }
+}
+
+function closeRight(returnFocus = true) {
+  rightOpen = false;
+  applyRightPane();
+  if (returnFocus && isRightDrawer() && lastFocus) {
     lastFocus.focus();
-    lastFocus = null;
+  }
+  lastFocus = null;
+}
+
+function selectRightTab(tab: RightTab) {
+  rightTab = tab;
+  rightOpen = true;
+  applyRightPane();
+  if (tab === "conversation") {
+    loadChatForWork(selectedWorkId, selectedSessionId);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Conversation panel — on demand, closed by default
-// ---------------------------------------------------------------------------
-
-const CHAT_OPEN_KEY = "loom-ide-tauri:chat-open";
-
-/** Whether the Conversation panel is open. Closed by default: the work
-    objects are the record, and the chat is a way to create and discuss
-    them, not the place they live. */
-let chatOpen = false;
-
-function loadChatOpen() {
-  try {
-    const raw = localStorage.getItem(CHAT_OPEN_KEY);
-    if (!raw) return;
-    const value = JSON.parse(raw) as unknown;
-    if (typeof value === "boolean") chatOpen = value;
-  } catch {
-    /* ignore */
-  }
-}
-
-function saveChatOpen() {
-  try {
-    localStorage.setItem(CHAT_OPEN_KEY, JSON.stringify(chatOpen));
-  } catch {
-    /* ignore */
-  }
-}
-
-function applyChatOpen() {
-  document.body.classList.toggle("chat-open", chatOpen);
-  $("#chat-toggle").setAttribute("aria-expanded", String(chatOpen));
-}
-
-/** Show or hide the Conversation panel in place. Opening it on narrow
-    screens also opens the left drawer, so the panel is reachable there.
-    Hiding it changes nothing about the conversation: the session
-    binding, the per-work cache, and the draft are all untouched. */
-function setChatOpen(open: boolean, opener?: HTMLElement) {
-  chatOpen = open;
-  saveChatOpen();
-  applyChatOpen();
-  if (open && isLeftDrawer()) {
-    openLeftDrawer(opener);
-  }
-}
-
-/** The chat lives in the left column and opens on demand; this opens
-    it (and the left drawer on narrow screens) and focuses the message
-    box. */
+/** The Conversation control: opens the shared pane on its conversation tab
+    and puts the cursor in the message box. Nothing about the conversation
+    is created, cleared, or reset by opening or closing it. */
 function focusChat(from?: HTMLElement) {
-  setChatOpen(true, from);
+  openRight("conversation", from);
   ($("#chat-text") as HTMLInputElement).focus();
 }
 
 function openLeftDrawer(opener?: HTMLElement) {
+  if (!isLeftDrawer()) return;
+  // Symmetric with openRight: the two drawers never stack.
+  if (isRightDrawer() && rightOpen) closeRight(false);
   if (opener) lastFocus = opener;
-  if (isLeftDrawer()) {
-    document.body.classList.add("left-open");
-    $("#work-toggle").setAttribute("aria-expanded", "true");
-    updateScrim();
-    ($("#left-close") as HTMLButtonElement).focus();
-  }
+  document.body.classList.add("left-open");
+  $("#work-toggle").setAttribute("aria-expanded", "true");
+  updateScrim();
+  ($("#left-close") as HTMLButtonElement).focus();
 }
 
-function closeLeftDrawer() {
+function closeLeftDrawer(returnFocus = true) {
   document.body.classList.remove("left-open");
   $("#work-toggle").setAttribute("aria-expanded", "false");
   updateScrim();
-  if (lastFocus) {
+  if (returnFocus && lastFocus) {
     lastFocus.focus();
-    lastFocus = null;
   }
+  lastFocus = null;
 }
 
 function closeDrawers() {
-  closeInspector();
-  closeLeftDrawer();
+  // Only one drawer can be open. Close that one so its opener receives
+  // focus, rather than routing the return through the other drawer.
+  if (document.body.classList.contains("left-open")) {
+    closeLeftDrawer();
+    return;
+  }
+  if (isRightDrawer() && rightOpen) closeRight();
 }
 
 // ---------------------------------------------------------------------------
@@ -2486,7 +2834,7 @@ function renderEvidence() {
 }
 
 // ---------------------------------------------------------------------------
-// Layers view
+// Appearance preferences (View menu)
 // ---------------------------------------------------------------------------
 
 const LAYERS_KEY = "loom-ide-tauri:layers";
@@ -2517,38 +2865,6 @@ function applyLayerClasses() {
   if (!scene) return;
   for (const [id, on] of Object.entries(layerOn)) {
     scene.classList.toggle(`no-${id}`, !on);
-  }
-}
-
-function renderLayers() {
-  const list = $("#layers-list");
-  list.innerHTML = "";
-  for (const layer of LAYERS) {
-    const row = document.createElement("div");
-    row.className = "flat-row layer-row";
-    const text = document.createElement("div");
-    text.className = "layer-text";
-    const label = document.createElement("strong");
-    label.textContent = layer.label;
-    const desc = document.createElement("span");
-    desc.textContent = layer.desc;
-    text.append(label, desc);
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "switch";
-    toggle.setAttribute("role", "switch");
-    toggle.setAttribute("aria-checked", String(layerOn[layer.id]));
-    toggle.setAttribute("aria-label", `Toggle ${layer.label}`);
-    toggle.addEventListener("click", () => {
-      layerOn[layer.id] = !layerOn[layer.id];
-      document
-        .querySelector(".scene")
-        ?.classList.toggle(`no-${layer.id}`, !layerOn[layer.id]);
-      toggle.setAttribute("aria-checked", String(layerOn[layer.id]));
-      saveLayers();
-    });
-    row.append(text, toggle);
-    list.append(row);
   }
 }
 
@@ -2586,7 +2902,7 @@ function renderArtifacts() {
   if (artifactTab === "documents") {
     // The two real local documents. They start empty; clicking one
     // opens it in Code mode.
-    for (const doc of NOTE_DOCS) {
+    for (const doc of NOTE_DOCS.filter((doc) => hasPreviousNote(doc.kind))) {
       const wrap = document.createElement("div");
       wrap.className = "flat-row";
       const card = document.createElement("button");
@@ -2737,6 +3053,18 @@ function showChatHint() {
 
 function hideChatHint() {
   document.querySelector("#chat-log .chat-hint")?.remove();
+}
+
+/** The conversation is scoped to the selected work; say so in the toolbar
+    instead of showing the same thread as if it were global. */
+function renderChatScope() {
+  const scope = document.getElementById("chat-scope");
+  if (!scope) return;
+  const item = workItems.find((w) => w.id === selectedWorkId);
+  scope.textContent = item ? item.title : "No work selected";
+  scope.title = item
+    ? `Conversation for: ${item.title}`
+    : "Conversation not linked to a work item";
 }
 
 function addChatMessage(
@@ -2913,12 +3241,7 @@ function renderSessionBar() {
   sel.innerHTML = "";
   const none = document.createElement("option");
   none.value = "";
-  none.textContent =
-    sessions.length === 0
-      ? loomReachable
-        ? "No sessions yet"
-        : "Loom offline"
-      : "No session";
+  none.textContent = sessions.length === 0 ? "No sessions" : "No session";
   sel.append(none);
   for (const s of sessions) {
     const opt = document.createElement("option");
@@ -2931,6 +3254,19 @@ function renderSessionBar() {
   // refresh brings it — the selection itself survives.
   sel.value = sessions.some((s) => s.id === previous) ? previous : "";
   sel.disabled = sessions.length === 0;
+  sel.title =
+    sessions.length === 0
+      ? loomReachable
+        ? "No sessions yet"
+        : "The Loom server is offline — sessions are unavailable"
+      : "Conversation session";
+  const newSession = document.getElementById("session-new") as HTMLButtonElement | null;
+  if (newSession) {
+    newSession.disabled = !loomReachable;
+    newSession.title = loomReachable
+      ? "New session"
+      : "A new session needs the Loom server";
+  }
 }
 
 function renderAgentBar() {
@@ -2939,12 +3275,7 @@ function renderAgentBar() {
   sel.innerHTML = "";
   const def = document.createElement("option");
   def.value = "";
-  def.textContent =
-    agents.length === 0
-      ? loomReachable
-        ? "Default agent"
-        : "Loom offline"
-      : "Default agent";
+  def.textContent = "Default agent";
   sel.append(def);
   for (const a of agents) {
     const opt = document.createElement("option");
@@ -2956,6 +3287,12 @@ function renderAgentBar() {
   // Render only: the selection is owned by the caller, never by this render.
   sel.value = agents.some((a) => (a.name || a.id) === previous) ? previous : "";
   sel.disabled = agents.length === 0;
+  sel.title =
+    agents.length === 0
+      ? loomReachable
+        ? "No agents registered"
+        : "The Loom server is offline — agents are unavailable"
+      : "Agent";
 }
 
 async function refreshSessions() {
@@ -3235,14 +3572,104 @@ function syncSessionToWork() {
 }
 
 // ---------------------------------------------------------------------------
-// Workspace explorer — a read-only tree over the Loom workspace (~/.loom).
-// Lists all its directories and files; clicking a text file opens it in the
-// editor read-only. Independent of the Loom server.
+// User workspace files, separate from Loom server and application storage.
 // ---------------------------------------------------------------------------
 
 const dirCache = new Map<string, DirEntry[]>();
 const expandedDirs = new Set<string>();
 let openFilePath: string | null = null;
+let openFileOriginal: string | null = null;
+let workspaceInfo: WorkspaceInfo | null = null;
+let documentRequest = 0;
+let saveInFlight: Promise<boolean> | null = null;
+let folderOpening = false;
+
+function workspaceLabel(path: string) {
+  const value = path.replaceAll("\\", "/");
+  const root = workspaceInfo?.path.replaceAll("\\", "/").replace(/\/$/, "");
+  return root && value.startsWith(`${root}/`) ? value.slice(root.length + 1) : value.split("/").at(-1) ?? value;
+}
+let fileCreation: { kind: "file" | "folder"; parent: string } | null = null;
+let fileCreationPending = false;
+
+function beginFileCreation(kind: "file" | "folder", parent = "") {
+  if (fileCreationPending || !workspaceInfo) return;
+  fileCreation = { kind, parent };
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) menu.open = false;
+  $("#file-create-form").hidden = false;
+  $("#file-create-label").textContent = kind === "file" ? "File name" : "Folder name";
+  $("#file-create-submit").textContent = kind === "file" ? "Create file" : "Create folder";
+  $("#file-create-destination").textContent = `In: ${parent ? workspaceLabel(parent) : workspaceInfo.name}`;
+  $("#file-create-error").hidden = true;
+  $("#file-tree-status").hidden = true;
+  const input = $("#file-create-name") as HTMLInputElement;
+  input.value = "";
+  input.placeholder = kind === "file" ? "Filename, including extension" : "Folder name";
+  input.focus();
+}
+
+function cancelFileCreation() {
+  if (fileCreationPending) return;
+  const kind = fileCreation?.kind;
+  fileCreation = null;
+  $("#file-create-form").hidden = true;
+  $(kind === "folder" ? "#file-new-folder" : "#file-new-file").focus();
+}
+
+async function submitFileCreation(event: SubmitEvent) {
+  event.preventDefault();
+  if (!fileCreation || fileCreationPending) return;
+  const { kind, parent } = fileCreation;
+  const previousDocumentRequest = documentRequest;
+  const input = $("#file-create-name") as HTMLInputElement;
+  const name = input.value.trim();
+  const error = $("#file-create-error");
+  if (!name) {
+    error.textContent = "Enter a name.";
+    error.hidden = false;
+    input.focus();
+    return;
+  }
+  fileCreationPending = true;
+  const controls = document.querySelectorAll<HTMLInputElement | HTMLButtonElement>("#file-create-form input, #file-create-form button");
+  controls.forEach((control) => control.disabled = true);
+  $("#file-create-submit").textContent = "Creating…";
+  error.hidden = true;
+  let created: DirEntry;
+  try {
+    created = kind === "file"
+      ? await createWorkspaceFile(parent, name)
+      : await createWorkspaceDirectory(parent, name);
+  } catch (err) {
+    error.textContent = err instanceof Error ? err.message : String(err);
+    error.hidden = false;
+    return;
+  } finally {
+    fileCreationPending = false;
+    controls.forEach((control) => control.disabled = false);
+    $("#file-create-submit").textContent = kind === "file" ? "Create file" : "Create folder";
+    if (!error.hidden) input.focus();
+  }
+  // Creation succeeded. A failed refresh must not invite a duplicate retry.
+  fileCreation = null;
+  $("#file-create-form").hidden = true;
+  const status = $("#file-tree-status");
+  status.hidden = false;
+  status.textContent = `Created ${kind}: ${created.name}`;
+  try {
+    dirCache.set(parent, parent ? await listDirectory(parent) : await listWorkspace());
+    if (parent) expandedDirs.add(parent);
+    if (created.is_dir) {
+      expandedDirs.add(created.path);
+      dirCache.set(created.path, []);
+    }
+    renderFileTree();
+  } catch (err) {
+    status.textContent = `Created ${kind}: ${created.name}. Could not refresh the folder: ${err instanceof Error ? err.message : String(err)}. Use Refresh to reload it.`;
+  }
+  if (!created.is_dir && documentRequest === previousDocumentRequest) await openFile(created.path);
+  else $("#file-new-folder").focus();
+}
 
 function renderFileTree() {
   const tree = $("#file-tree");
@@ -3251,7 +3678,7 @@ function renderFileTree() {
   if (root.length === 0) {
     const empty = document.createElement("p");
     empty.className = "tree-empty";
-    empty.textContent = "No files found in the workspace.";
+    empty.textContent = workspaceInfo ? "No files yet." : "";
     tree.append(empty);
     return;
   }
@@ -3280,6 +3707,43 @@ function appendTreeNodes(parent: HTMLElement, entries: DirEntry[], depth: number
       btn.addEventListener("click", () => openFile(entry.path));
     }
     row.append(btn);
+    if (entry.is_dir) {
+      const actions = document.createElement("details");
+      actions.className = "tree-actions";
+      const toggle = document.createElement("summary");
+      toggle.textContent = "⋯";
+      toggle.title = `Create in ${entry.name}`;
+      toggle.setAttribute("aria-label", `Actions for folder ${entry.name}`);
+      const menu = document.createElement("div");
+      menu.className = "tree-action-menu";
+      for (const kind of ["file", "folder"] as const) {
+        const create = document.createElement("button");
+        create.type = "button";
+        create.textContent = kind === "file" ? "New file" : "New folder";
+        create.addEventListener("click", () => beginFileCreation(kind, entry.path));
+        menu.append(create);
+      }
+      actions.append(toggle, menu);
+      actions.addEventListener("toggle", () => {
+        if (actions.open) {
+          for (const other of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) {
+            if (other !== actions) other.open = false;
+          }
+        }
+      });
+      row.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        actions.open = true;
+        menu.querySelector("button")?.focus();
+      });
+      actions.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          actions.open = false;
+          toggle.focus();
+        }
+      });
+      row.append(actions);
+    }
     parent.append(row);
     if (entry.is_dir && expandedDirs.has(entry.path)) {
       appendTreeNodes(parent, dirCache.get(entry.path) ?? [], depth + 1);
@@ -3308,42 +3772,115 @@ async function toggleDir(path: string) {
 }
 
 async function openFile(path: string) {
-  const editor = $("#code-editor") as HTMLTextAreaElement;
-  const pathEl = $("#code-path");
+  const request = ++documentRequest;
+  if (!await saveNote() || request !== documentRequest) return;
   try {
     const text = await readFile(path);
-    editor.value = text;
-    editor.readOnly = true;
+    if (request !== documentRequest) return;
     openFilePath = path;
-    pathEl.textContent = path;
-    pathEl.classList.remove("error");
-    pathEl.hidden = false;
-    ($("#code-save") as HTMLButtonElement).disabled = true;
-    for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
-      tab.classList.remove("active");
-    }
+    openFileOriginal = text;
+    currentNote = null;
+    ($("#code-editor") as HTMLTextAreaElement).value = text;
+    $("#code-error").hidden = true;
+    renderEditor();
     renderFileTree();
-  } catch (err) {
-    pathEl.textContent = `Could not open: ${err instanceof Error ? err.message : String(err)}`;
-    pathEl.classList.add("error");
-    pathEl.hidden = false;
+  } catch (error) {
+    if (request !== documentRequest) return;
+    showEditorError(error);
   }
 }
 
 async function loadWorkspaceTree() {
   const tree = $("#file-tree");
   try {
-    dirCache.set("", await listWorkspace());
-  } catch (err) {
-    dirCache.set("", []);
-    tree.innerHTML = "";
-    const empty = document.createElement("p");
-    empty.className = "tree-empty";
-    empty.textContent = `Could not read the workspace: ${err instanceof Error ? err.message : String(err)}`;
-    tree.append(empty);
-    return;
+    workspaceInfo = await getWorkspace();
+    $("#workspace-name").textContent = workspaceInfo?.name ?? "Files";
+    for (const id of ["file-new-file", "file-new-folder", "canvas-new-file"]) {
+      ($("#" + id) as HTMLButtonElement).disabled = !workspaceInfo;
+    }
+    dirCache.set("", workspaceInfo ? await listWorkspace() : []);
+    renderFileTree();
+  } catch {
+    tree.replaceChildren();
+    const error = document.createElement("p");
+    error.className = "tree-empty";
+    error.textContent = "Could not open this folder. Use File → Open folder to choose it again.";
+    tree.append(error);
   }
-  renderFileTree();
+}
+
+function showFolderDialog() {
+  const dialog = $("#open-folder-dialog") as HTMLDialogElement;
+  ($("#open-folder-path") as HTMLInputElement).value = workspaceInfo?.path ?? "";
+  $("#open-folder-error").hidden = true;
+  dialog.showModal();
+  ($("#open-folder-path") as HTMLInputElement).select();
+}
+
+async function submitFolder(event: SubmitEvent) {
+  event.preventDefault();
+  if (folderOpening || fileCreationPending) return;
+  folderOpening = true;
+  const button = $("#open-folder-submit") as HTMLButtonElement;
+  button.disabled = true;
+  try {
+    if (!await saveNote()) throw new Error("Save or reload your current file before opening another folder.");
+    const info = await openWorkspace(($("#open-folder-path") as HTMLInputElement).value);
+    ++documentRequest;
+    workspaceInfo = info;
+    dirCache.clear();
+    expandedDirs.clear();
+    clearEditor();
+    fileCreation = null;
+    $("#file-create-form").hidden = true;
+    $("#file-tree-status").hidden = true;
+    ($("#open-folder-dialog") as HTMLDialogElement).close();
+    setMode("code");
+    await loadWorkspaceTree();
+  } catch (error) {
+    const message = $("#open-folder-error");
+    message.textContent = error instanceof Error ? error.message : String(error);
+    message.hidden = false;
+  } finally {
+    button.disabled = false;
+    folderOpening = false;
+  }
+}
+
+function initWorkspaceExplorer() {
+  // The user chooses the content folder; app/server files never become the default tree.
+  $("#canvas-new-file").addEventListener("click", () => beginFileCreation("file"));
+  $("#canvas-open-folder").addEventListener("click", showFolderDialog);
+  ($("#canvas-open-folder") as HTMLButtonElement).disabled = !isTauri;
+  $("#open-folder-form").addEventListener("submit", (event) => { void submitFolder(event as SubmitEvent); });
+  $("#open-folder-dialog").addEventListener("cancel", (event) => {
+    if (folderOpening) event.preventDefault();
+  });
+  $("#open-folder-cancel").addEventListener("click", () => {
+    if (!folderOpening) ($("#open-folder-dialog") as HTMLDialogElement).close();
+  });
+  $("#file-new-file").addEventListener("click", () => beginFileCreation("file"));
+  $("#file-new-folder").addEventListener("click", () => beginFileCreation("folder"));
+  $("#file-create-form").addEventListener("submit", (event) => {
+    void submitFileCreation(event as SubmitEvent);
+  });
+  $("#file-create-cancel").addEventListener("click", cancelFileCreation);
+  $("#file-create-name").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelFileCreation();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element) || event.target.closest(".tree-actions")) return;
+    for (const menu of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) menu.open = false;
+  });
+  $("#file-tree-refresh").addEventListener("click", () => {
+    dirCache.clear();
+    expandedDirs.clear();
+    void loadWorkspaceTree();
+  });
+  void loadWorkspaceTree();
 }
 
 // ---------------------------------------------------------------------------
@@ -3786,6 +4323,7 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
 
   addChatMessage("user", `Run experiment arm: ${arm.label}`);
   cacheChatMessage(cacheKey, "user", `Run experiment arm: ${arm.label}`);
+  if (workId) experimentWorkIds.set(exp.id, workId);
   setSphereState("executing");
   const log = $("#chat-log");
   const typing = document.createElement("div");
@@ -3860,7 +4398,7 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
 }
 
 // ---------------------------------------------------------------------------
-// Modes (the footer mode switcher is the single navigation control)
+// Application menus and workspace modes
 // ---------------------------------------------------------------------------
 
 const ALL_VIEWS: Mode[] = [
@@ -3869,11 +4407,99 @@ const ALL_VIEWS: Mode[] = [
   "code",
   "agents",
   "evidence",
-  "layers",
   "artifacts",
 ];
 
+let appMenu: ReturnType<typeof installAppMenu> | null = null;
+
+function initAppMenu() {
+  const guide = $("#app-help-dialog") as HTMLDialogElement;
+  $("#app-help-close").addEventListener("click", () => guide.close());
+  appMenu = installAppMenu($("#app-menu"), [
+    {
+      label: "File",
+      items: [
+        { label: "New file…", disabled: () => fileCreationPending || folderOpening || !workspaceInfo,
+          run: () => { setMode("code"); beginFileCreation("file"); } },
+        { label: "New folder…", disabled: () => fileCreationPending || folderOpening || !workspaceInfo,
+          run: () => { setMode("code"); beginFileCreation("folder"); } },
+        "separator",
+        { label: "Open folder…", disabled: () => !isTauri || folderOpening || fileCreationPending, run: showFolderDialog },
+        { label: "Save", disabled: () => mode !== "code" || (!openFilePath && !currentNote),
+          run: async () => { await saveNote(); } },
+        { label: "Reload file", disabled: () => !openFilePath || Boolean(saveInFlight), run: reloadFile },
+        { label: "Close file", disabled: () => !openFilePath && !currentNote, run: closeFile },
+        ...NOTE_DOCS.filter((note) => hasPreviousNote(note.kind)).map((note) => ({ label: note.title, run: () => openNote(note.kind) })),
+      ],
+    },
+    {
+      label: "Edit",
+      items: [
+        ...textEditingActions(),
+        "separator",
+        { label: "Find work…", run: () => { setMode("work"); if (isLeftDrawer()) openLeftDrawer(); setSearchOpen(true); } },
+      ],
+    },
+    {
+      label: "View",
+      items: [
+        { label: "Living Workbench — knowledge, canvas & sphere", disabled: () => !isTauri, run: openLivingWorkbench },
+        "separator",
+        ...(["code", "experiment", "work", "agents", "evidence"] as const).map((view) => ({
+          label: view[0].toUpperCase() + view.slice(1),
+          radio: true,
+          checked: () => mode === view,
+          run: () => setMode(view),
+        })),
+        "separator",
+        { label: "Work panel", disabled: () => !isLeftDrawer() && mode !== "work" && mode !== "experiment",
+          checked: () => !isLeftDrawer() ? (mode === "work" || mode === "experiment") : document.body.classList.contains("left-open"),
+          run: () => {
+            if (isLeftDrawer()) {
+              if (document.body.classList.contains("left-open")) closeLeftDrawer();
+              else openLeftDrawer();
+            } else if (mode !== "work" && mode !== "experiment") {
+              setMode("work");
+            }
+          } },
+        { label: "Context panel", checked: () => rightOpen && rightTab === "context",
+          run: () => {
+            if (rightOpen && rightTab === "context") closeRight();
+            else openRight("context");
+          } },
+        { label: "Conversation", checked: () => rightOpen && rightTab === "conversation",
+          run: () => {
+            if (rightOpen && rightTab === "conversation") closeRight();
+            else focusChat();
+          } },
+        "separator",
+        ...LAYERS.map((layer) => ({
+          label: layer.label,
+          description: layer.desc,
+          checked: () => layerOn[layer.id],
+          run: () => {
+            layerOn[layer.id] = !layerOn[layer.id];
+            applyLayerClasses();
+            saveLayers();
+          },
+        })),
+      ],
+    },
+    {
+      label: "Help",
+      items: [
+        { label: "Using Loom", run: () => guide.showModal() },
+        { label: "About Loom", run: () => {
+          guide.showModal();
+          $("#app-help-about").scrollIntoView({ block: "nearest" });
+        } },
+      ],
+    },
+  ]);
+}
+
 function closeMenus() {
+  appMenu?.close();
   setChatMenu(false);
 }
 
@@ -3914,15 +4540,23 @@ function setMode(next: Mode) {
     return;
   }
   const wasExperiment = mode === "experiment";
+  if (document.body.classList.contains("left-open")) closeLeftDrawer(false);
   mode = next;
+  // Keep the footer destination and its accessible state synchronized.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
-    btn.classList.toggle("active", btn.dataset.mode === next);
+    const active = btn.dataset.mode === next;
+    btn.classList.toggle("active", active);
+    if (active) btn.setAttribute("aria-current", "page");
+    else btn.removeAttribute("aria-current");
   }
   for (const id of ALL_VIEWS) {
     const el = document.getElementById(`view-${id}`);
     if (el) el.hidden = id !== next;
   }
-  // The scene follows the mode: water + full gradient only in Experiment.
+  for (const cls of ["code", "experiment", "work", "agents", "evidence", "artifacts"]) {
+    document.body.classList.toggle(`mode-${cls}`, cls === next);
+  }
+  // The scene follows the mode: water + full atmosphere only in Experiment.
   document.querySelector(".scene")?.setAttribute("data-mode", next);
   // Pause the sphere when its view is hidden; resume in Experiment.
   if (next === "experiment") {
@@ -3931,11 +4565,12 @@ function setMode(next: Mode) {
   } else if (wasExperiment) {
     sphere.stop();
   }
+  applyRightPane();
   closeMenus();
 }
 
 // ---------------------------------------------------------------------------
-// Code editor (prototype: notes persist in localStorage, start empty)
+// File canvas. Legacy local notes are available only when they contain saved text.
 // ---------------------------------------------------------------------------
 
 const NOTE_KEY_DESIGN = "loom-ide-tauri:design-note";
@@ -3945,56 +4580,143 @@ function noteKey(kind: NoteKind): string {
   return kind === "design" ? NOTE_KEY_DESIGN : NOTE_KEY_SCRATCH;
 }
 
-function loadNote() {
-  const editor = $("#code-editor") as HTMLTextAreaElement;
-  editor.value = localStorage.getItem(noteKey(currentNote)) ?? "";
-  editor.readOnly = false;
-  openFilePath = null;
-  const pathEl = $("#code-path");
-  pathEl.hidden = true;
-  pathEl.classList.remove("error");
-  ($("#code-save") as HTMLButtonElement).disabled = false;
+function hasPreviousNote(kind: NoteKind) {
+  try { return Boolean(localStorage.getItem(noteKey(kind))?.trim()); }
+  catch { return false; }
 }
 
-function saveNote() {
-  // A workspace file is open in the editor, not a note: saving here would
-  // overwrite the current note with the file's text.
-  if (openFilePath) return;
-  const editor = $("#code-editor") as HTMLTextAreaElement;
-  localStorage.setItem(noteKey(currentNote), editor.value);
+function showEditorError(error: unknown) {
+  const element = $("#code-error");
+  element.textContent = error instanceof Error ? error.message : String(error);
+  element.hidden = false;
 }
 
-/** Open Code mode showing one of the two notes. */
-function openNote(kind: NoteKind) {
-  saveNote();
-  currentNote = kind;
-  loadNote();
-  for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
-    tab.classList.toggle("active", tab.dataset.note === kind);
+function renderEditor() {
+  const opened = openFilePath !== null || currentNote !== null;
+  $("#canvas-empty").hidden = opened;
+  $("#code-editor").hidden = !opened;
+  $("#code-foot").hidden = !opened;
+  const tabs = $("#code-tabs");
+  tabs.hidden = !opened;
+  tabs.replaceChildren();
+  if (opened) {
+    const title = document.createElement("span");
+    title.id = "open-file-title";
+    title.className = "code-tab active";
+    title.textContent = openFilePath ? workspaceLabel(openFilePath) : NOTE_DOCS.find((note) => note.kind === currentNote)!.title;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "icon-btn small";
+    close.textContent = "×";
+    close.setAttribute("aria-label", "Close file");
+    close.addEventListener("click", () => { void closeFile(); });
+    tabs.append(title, close);
   }
+  $("#code-path").hidden = true;
+}
+
+function markEditorDirty() {
+  const title = document.getElementById("open-file-title");
+  if (title) {
+    const name = openFilePath ? workspaceLabel(openFilePath) : NOTE_DOCS.find((note) => note.kind === currentNote)?.title;
+    const dirty = openFilePath !== null && ($("#code-editor") as HTMLTextAreaElement).value !== openFileOriginal;
+    title.textContent = `${name ?? ""}${dirty ? " •" : ""}`;
+  }
+}
+
+function clearEditor() {
+  openFilePath = null;
+  openFileOriginal = null;
+  currentNote = null;
+  ($("#code-editor") as HTMLTextAreaElement).value = "";
+  $("#code-error").hidden = true;
+  $("#code-saved").hidden = true;
+  renderEditor();
+  renderFileTree();
+}
+
+async function closeFile() {
+  if (await saveNote()) { ++documentRequest; clearEditor(); }
+}
+
+function saveNote(): Promise<boolean> {
+  if (saveInFlight) return saveInFlight;
+  const editor = $("#code-editor") as HTMLTextAreaElement;
+  if (!openFilePath && !currentNote) return Promise.resolve(true);
+  if (openFilePath && editor.value === openFileOriginal) return Promise.resolve(true);
+  const path = openFilePath;
+  const content = editor.value;
+  const original = openFileOriginal;
+  const kind = currentNote;
+  const button = $("#code-save") as HTMLButtonElement;
+  editor.readOnly = true;
+  button.disabled = true;
+  button.textContent = "Saving…";
+  saveInFlight = (async () => {
+    try {
+      if (path && original !== null) {
+        await writeFile(path, content, original);
+        openFileOriginal = content;
+        markEditorDirty();
+      } else if (kind) localStorage.setItem(noteKey(kind), content);
+      $("#code-error").hidden = true;
+      $("#code-saved").hidden = false;
+      return true;
+    } catch (error) {
+      showEditorError(error);
+      return false;
+    } finally {
+      editor.readOnly = false;
+      button.disabled = false;
+      button.textContent = "Save";
+    }
+  })();
+  return saveInFlight.finally(() => { saveInFlight = null; });
+}
+
+async function openNote(kind: NoteKind) {
+  if (!await saveNote()) return;
+  ++documentRequest;
+  currentNote = kind;
+  openFilePath = null;
+  openFileOriginal = null;
+  ($("#code-editor") as HTMLTextAreaElement).value = localStorage.getItem(noteKey(kind)) ?? "";
+  renderEditor();
   setMode("code");
 }
 
-function initCodeEditor() {
+async function reloadFile() {
+  if (!openFilePath || saveInFlight) return;
+  const path = openFilePath;
   const editor = $("#code-editor") as HTMLTextAreaElement;
-  loadNote();
-  for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
-    tab.addEventListener("click", () => {
-      saveNote();
-      currentNote = tab.dataset.note as NoteKind;
-      loadNote();
-      for (const t of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
-        t.classList.toggle("active", t === tab);
-      }
-    });
-  }
-  $("#code-save").addEventListener("click", () => {
-    saveNote();
-    const note = $("#code-saved");
-    note.hidden = false;
-    window.setTimeout(() => (note.hidden = true), 2000);
+  if (editor.value !== openFileOriginal && !window.confirm("Discard your unsaved changes and reload this file?")) return;
+  const request = ++documentRequest;
+  try {
+    const content = await readFile(path);
+    if (request !== documentRequest || openFilePath !== path) return;
+    editor.value = content;
+    openFileOriginal = content;
+    markEditorDirty();
+    $("#code-error").hidden = true;
+    $("#code-saved").hidden = true;
+  } catch (error) { showEditorError(error); }
+}
+
+function initCodeEditor() {
+  clearEditor();
+  $("#code-editor").addEventListener("input", () => {
+    $("#code-saved").hidden = true;
+    markEditorDirty();
   });
+  window.addEventListener("beforeunload", (event) => {
+    if (openFilePath && ($("#code-editor") as HTMLTextAreaElement).value !== openFileOriginal) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+  $("#code-save").addEventListener("click", () => { void saveNote(); });
   $("#code-ask").addEventListener("click", async () => {
+    const editor = $("#code-editor") as HTMLTextAreaElement;
     focusChat();
     await sendChat(`About this text: ${editor.value.slice(0, 280)}`);
   });
@@ -4005,10 +4727,35 @@ function initCodeEditor() {
 // ---------------------------------------------------------------------------
 
 async function init() {
-  // Modes
+  loadLayers();
+  applyLayerClasses();
+  rightOpen = window.matchMedia("(min-width: 1440px)").matches;
+  rightWasDrawer = isRightDrawer();
+  applyRightPane();
+  initAppMenu();
+  // The initial Code view is usable before any Loom requests finish.
+  initCodeEditor();
+  initWorkspaceExplorer();
+  // The footer provides the primary mode navigation.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
   }
+  // Right pane tabs.
+  $("#tab-context").addEventListener("click", () => {
+    selectRightTab("context");
+  });
+  $("#tab-conversation").addEventListener("click", () => selectRightTab("conversation"));
+  $("#right-col")?.addEventListener("keydown", (e) => {
+    const event = e as KeyboardEvent;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const target = event.target as HTMLElement;
+    if (!target.closest(".inspector-tabs")) return;
+    event.preventDefault();
+    selectRightTab(rightTab === "context" ? "conversation" : "context");
+    document
+      .getElementById(rightTab === "context" ? "tab-context" : "tab-conversation")
+      ?.focus();
+  });
   // Artifact tabs.
   for (const tab of document.querySelectorAll<HTMLButtonElement>("#artifact-tabs .tab")) {
     tab.addEventListener("click", () => {
@@ -4025,9 +4772,10 @@ async function init() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (document.getElementById("decision-dialog-overlay")) return; // handled by its trap
       if (
-        document.body.classList.contains("inspector-open") ||
-        document.body.classList.contains("left-open")
+        document.body.classList.contains("left-open") ||
+        (isRightDrawer() && document.body.classList.contains("right-open"))
       ) {
         closeDrawers();
       } else if (!($("#search-input") as HTMLInputElement).hidden) {
@@ -4038,11 +4786,16 @@ async function init() {
       }
       return;
     }
-    // Focus trap for the modal left drawer: Tab cycles within it instead
-    // of moving into the page behind the scrim.
-    if (e.key === "Tab" && document.body.classList.contains("left-open")) {
-      const drawer = $("#left-col");
-      const focusables = [...drawer.querySelectorAll<HTMLElement>(
+    // Focus trap for the modal drawers: Tab cycles within the open pane
+    // instead of moving into the page behind the scrim.
+    if (e.key === "Tab") {
+      const openDrawer = document.body.classList.contains("left-open")
+        ? $("#left-col")
+        : isRightDrawer() && document.body.classList.contains("right-open")
+          ? $("#right-col")
+          : null;
+      if (!openDrawer) return;
+      const focusables = [...openDrawer.querySelectorAll<HTMLElement>(
         "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
       )].filter((el) => el.offsetParent !== null);
       if (focusables.length === 0) return;
@@ -4061,38 +4814,37 @@ async function init() {
   // Header: the objective banner opens the selected work in the Work view.
   $("#objective-btn").addEventListener("click", () => setMode("work"));
 
-  // Header toggles.
+  // Header toggles. Work appears at compact widths; Context and
+  // Conversation control the same shared right pane at every width.
   $("#work-toggle").addEventListener("click", (e) => {
     if (document.body.classList.contains("left-open")) closeLeftDrawer();
     else openLeftDrawer(e.currentTarget as HTMLElement);
   });
   $("#context-toggle").addEventListener("click", (e) => {
-    // A real toggle at drawer widths; at desktop widths the inspector is
-    // always visible, so the button is a no-op there.
-    if (isInspectorDrawer()) {
-      if (document.body.classList.contains("inspector-open")) {
-        closeInspector();
-      } else {
-        openInspector(e.currentTarget as HTMLElement);
-      }
-    }
+    if (rightOpen && rightTab === "context") closeRight();
+    else openRight("context", e.currentTarget as HTMLElement);
   });
   $("#chat-toggle").addEventListener("click", (e) => {
-    // A real toggle at every width: the Conversation panel is closed by
-    // default, so this is the way to open it on wide screens too.
-    setChatOpen(!chatOpen, e.currentTarget as HTMLElement);
+    if (rightOpen && rightTab === "conversation") closeRight();
+    else openRight("conversation", e.currentTarget as HTMLElement);
   });
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
-  $("#right-close").addEventListener("click", () => closeInspector());
-  $("#scrim").addEventListener("click", () => closeLeftDrawer());
+  $("#right-close").addEventListener("click", () => closeRight());
+  $("#scrim").addEventListener("click", () => closeDrawers());
   window.addEventListener("resize", () => {
-    if (!isInspectorDrawer()) {
-      document.body.classList.remove("inspector-open");
+    if (!isLeftDrawer()) document.body.classList.remove("left-open");
+    const nowDrawer = isRightDrawer();
+    if (nowDrawer !== rightWasDrawer) {
+      // Crossing into drawer widths must not turn the persistent column into
+      // an unrequested modal. Crossing back restores the desktop column, whose
+      // default state is open.
+      rightOpen = !nowDrawer;
+      rightWasDrawer = nowDrawer;
+      if (!rightOpen && document.querySelector("#right-col")?.contains(document.activeElement)) {
+        (document.activeElement as HTMLElement).blur();
+      }
     }
-    if (!isLeftDrawer()) {
-      document.body.classList.remove("left-open");
-    }
-    updateScrim();
+    applyRightPane();
   });
 
   // Search: filters the work catalogue by title.
@@ -4119,34 +4871,29 @@ async function init() {
     closeMenus();
   });
 
-  // Intent header: pinned above the work detail in Work mode. It lives
-  // inside #view-work, so it only shows in Work mode. Created here (not
-  // in index.html) so the header renders from state, like the work
-  // detail below it.
-  const intentHeader = document.createElement("header");
-  intentHeader.id = "intent-header";
-  intentHeader.className = "intent-header";
-  $("#view-work").prepend(intentHeader);
-
-  // Work
+  // Work: the intent header is already in the left catalogue, above the
+  // work list (index.html). It renders from the same state as the detail.
   await refreshIntents();
   workItems = await getWorkItems();
   selectedWorkId = workItems[0]?.id ?? null;
   renderWorkList();
   renderWorkDetail();
+  renderChatScope();
   if (selectedWorkId) {
     const item = workItems.find((w) => w.id === selectedWorkId);
-    if (item) $("#objective-title").textContent = item.title;
+    if (item) {
+      $("#objective-title").textContent = item.title;
+      $("#objective-btn").title = `Open in Work view: ${item.title}`;
+    }
   }
-  $("#new-work-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const input = $("#new-work-input") as HTMLInputElement;
-    const title = input.value.trim();
-    if (!title) return;
+  // Create one work item from a title: the form submit and Capture idea
+  // share this path, so both link to the active intent and both get a
+  // best-effort Loom session when the server is up.
+  async function createWorkItemFromTitle(title: string): Promise<void> {
     try {
       const item = await addWorkItem(title, activeIntentId);
       workItems = [item, ...workItems];
-      input.value = "";
+      ($("#new-work-input") as HTMLInputElement).value = "";
       // The backend may have auto-created a one-line intent for this
       // work when no intent was active; pick it up in the header.
       await refreshIntents();
@@ -4173,9 +4920,30 @@ async function init() {
       }
       showFieldError(errEl, `Could not create the work item: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  $("#new-work-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("#new-work-input") as HTMLInputElement;
+    const title = input.value.trim();
+    if (!title) return;
+    await createWorkItemFromTitle(title);
   });
 
-  // Collaboration + attention (attention is real: experiments waiting
+  // Capture idea: same input, same path as the form, but the work item
+  // is titled "Idea: <text>" and linked to the active intent. An empty
+  // input only takes focus; nothing is created.
+  $("#capture-idea-btn").addEventListener("click", async () => {
+    const input = $("#new-work-input") as HTMLInputElement;
+    const text = input.value.trim();
+    if (!text) {
+      input.focus();
+      return;
+    }
+    await createWorkItemFromTitle(`Idea: ${text}`);
+  });
+
+  // Attention (local experiments waiting
   // for a decision). The status probe runs first so the first paint does
   // not flash "offline" while the server is actually up.
   try {
@@ -4184,7 +4952,6 @@ async function init() {
   } catch {
     setLoomReachable(false);
   }
-  collabSteps = await getCollaboration();
   attentionItems = await getAttention();
   renderInspectorContext();
 
@@ -4203,13 +4970,8 @@ async function init() {
   }
 
   // Workspace views.
-  loadChatOpen();
-  applyChatOpen();
-  loadLayers();
-  applyLayerClasses();
   renderAgents();
   renderEvidence();
-  renderLayers();
   renderArtifacts();
 
   // Experiments (local definitions; arms run through real Loom calls).
@@ -4335,15 +5097,6 @@ async function init() {
     }
   });
 
-  // Workspace explorer (local filesystem; independent of the server).
-  $("#file-tree-refresh").addEventListener("click", () => {
-    dirCache.delete("");
-    expandedDirs.clear();
-    openFilePath = null;
-    loadWorkspaceTree();
-  });
-  loadWorkspaceTree();
-
   // Chat starts empty, with a short hint. A draft typed earlier is
   // restored, so closing the panel never loses an unsent message.
   showChatHint();
@@ -4357,9 +5110,6 @@ async function init() {
     localStorage.removeItem(CHAT_DRAFT_KEY);
     await sendChat(text);
   });
-
-  // Code editor
-  initCodeEditor();
 
   // Sphere sizing (after first layout)
   requestAnimationFrame(fitSphere);

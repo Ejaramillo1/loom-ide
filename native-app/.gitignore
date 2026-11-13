@@ -1,0 +1,14 @@
+# Build output and generated verification artifacts
+/target/
+/shots/
+/test-data/
+/github-changes.bundle
+
+# Local knowledge and per-vault settings are created at runtime
+/Research Vault/
+/.loom/
+
+# Editor and operating-system files
+.DS_Store
+*.swp
+*.swo

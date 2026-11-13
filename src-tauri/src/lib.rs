@@ -3,7 +3,7 @@
 //! Two data sources, kept strictly separate:
 //!
 //! 1. Local, structured work items (`<app-data>/loom-ide/work.json`) and a
-//!    read-only explorer over the Loom workspace directory (`~/.loom`).
+//!    user files in a separate workspace folder (Documents/Loom by default).
 //! 2. The Loom server on localhost:5006: sessions and agents, and chat via
 //!    `POST /v1/weave` with the selected session/agent.
 //!
@@ -12,6 +12,7 @@
 //! The workspace explorer is local and works regardless of the server.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -20,12 +21,21 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
 
 mod experiment;
+#[path = "../../shared/navigation.rs"]
+mod navigation;
 use experiment::{Experiment, ExperimentStore};
 mod store;
+mod workspace;
 use store::{
-    autonomy_rank, AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem,
-    WorkStore,
+    AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem, WorkStore,
+    autonomy_rank,
 };
+use workspace::{WorkspaceInfo, WorkspaceStore};
+
+#[cfg(test)]
+mod gateway_tests;
+#[cfg(test)]
+mod workspace_tests;
 
 /// Deserialize an `i64` that may arrive either as a JSON number or as a
 /// JSON string. The Loom gateway (grpc-gateway / protojson) encodes every
@@ -71,6 +81,13 @@ fn percent_encode(s: &str) -> String {
     out
 }
 
+fn workspace_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("loom-ide/workspace.json"))
+        .map_err(|e| format!("Could not locate workspace settings: {e}"))
+}
+
 /// Where work items live on disk: <app-data>/loom-ide/work.json
 fn work_file_path(app: &AppHandle) -> std::path::PathBuf {
     app.path()
@@ -98,10 +115,45 @@ fn intents_file_path(app: &AppHandle) -> std::path::PathBuf {
         .join("intents.json")
 }
 
+/// Open the existing native surface from this repository; no secondary source tree.
+#[tauri::command]
+fn open_living_workbench() -> Result<(), String> {
+    if navigation::activate(navigation::WORKBENCH)? {
+        return Ok(());
+    }
+    static CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
+    let mut child = CHILD.lock().map_err(|e| e.to_string())?;
+    if let Some(running) = child.as_mut() {
+        if running.try_wait().map_err(|e| e.to_string())?.is_none() {
+            return Ok(());
+        }
+    }
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("Repository path unavailable")?;
+    let executable = [
+        repo.join("native-app/target/debug/living-workbench"),
+        repo.join("native-app/target/release/living-workbench"),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
+    .ok_or("Build Living Workbench first: cargo build --manifest-path native-app/Cargo.toml")?;
+    *child = Some(
+        std::process::Command::new(executable)
+            .current_dir(repo)
+            .arg("--vault")
+            .arg(repo.join("native-app/Research Vault"))
+            .spawn()
+            .map_err(|e| format!("Could not open Living Workbench: {e}"))?,
+    );
+    Ok(())
+}
+
 pub struct AppState {
     work: Mutex<WorkStore>,
     experiments: Mutex<ExperimentStore>,
     intents: Mutex<IntentStore>,
+    workspace: Mutex<WorkspaceStore>,
 }
 
 // ---------------------------------------------------------------------------
@@ -174,8 +226,8 @@ fn set_work_autonomy(
     justification: Option<String>,
     state: State<AppState>,
 ) -> Result<WorkItem, String> {
-    let requested = autonomy_rank(&autonomy)
-        .ok_or_else(|| format!("Unknown autonomy level: {autonomy}"))?;
+    let requested =
+        autonomy_rank(&autonomy).ok_or_else(|| format!("Unknown autonomy level: {autonomy}"))?;
     // Lock order is ALWAYS intents first, then work (never the reverse).
     let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
     let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
@@ -202,17 +254,18 @@ fn set_work_autonomy(
     // Moving down (tightening) is always instant; moving up requires
     // justification — the system never grants itself more freedom.
     if requested > current_rank {
-        let just = justification
-            .as_deref()
-            .unwrap_or("")
-            .trim();
+        let just = justification.as_deref().unwrap_or("").trim();
         if just.is_empty() {
             return Err(format!(
                 "Raising autonomy from \"{}\" to \"{}\" requires a justification — why is more freedom needed?",
                 item.autonomy, autonomy
             ));
         }
-        let _ = work.autonomy_history_push(&id, &autonomy, justification.as_deref().map(|s| s.trim().to_string()));
+        let _ = work.autonomy_history_push(
+            &id,
+            &autonomy,
+            justification.as_deref().map(|s| s.trim().to_string()),
+        );
     }
     work.set_autonomy(&id, &autonomy)
 }
@@ -636,6 +689,21 @@ struct ModelListResponse {
 struct ProviderListResponse {
     #[serde(default)]
     providers: Vec<ProviderEntry>,
+    #[serde(default, alias = "activeProvider")]
+    active_provider: String,
+}
+
+impl ProviderListResponse {
+    fn into_entries(self) -> Vec<ProviderEntry> {
+        self.providers
+            .into_iter()
+            .map(|mut entry| {
+                entry.active =
+                    !self.active_provider.is_empty() && entry.name == self.active_provider;
+                entry
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -648,6 +716,101 @@ struct GetArtifactResponse {
 struct GetArtifactContentResponse {
     #[serde(default)]
     content: serde_json::Value,
+    #[serde(default)]
+    encoding: String,
+}
+
+impl GetArtifactContentResponse {
+    fn decode(self) -> Result<String, String> {
+        // protojson always base64-encodes bytes. The handler adds an inner
+        // base64 layer for binary content, so that encoding needs two decodes.
+        let encoded = match self.content {
+            serde_json::Value::String(content) => content,
+            // protojson omits an empty bytes field.
+            serde_json::Value::Null => String::new(),
+            _ => return Err("Artifact content had an unexpected format.".into()),
+        };
+        let mut bytes = decode_base64(&encoded)?;
+        if self.encoding == "base64" {
+            let inner = std::str::from_utf8(&bytes)
+                .map_err(|e| format!("Invalid inner base64 content: {e}"))?;
+            bytes = decode_base64(inner)?;
+        }
+        match String::from_utf8(bytes) {
+            Ok(text) => Ok(text),
+            Err(error) => Ok(encode_base64(error.as_bytes())),
+        }
+    }
+}
+
+// RFC 4648 standard alphabet, as emitted by Go's protojson and artifact handler.
+const BASE64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn decode_base64(encoded: &str) -> Result<Vec<u8>, String> {
+    let invalid = || "Artifact content contains invalid base64.".to_string();
+    if encoded.len() % 4 != 0 {
+        return Err(invalid());
+    }
+    let mut bytes = Vec::with_capacity(encoded.len() / 4 * 3);
+    for (index, chunk) in encoded.as_bytes().chunks_exact(4).enumerate() {
+        let padding = if chunk[2] == b'=' {
+            2
+        } else if chunk[3] == b'=' {
+            1
+        } else {
+            0
+        };
+        if padding > 0 && (chunk[3] != b'=' || (index + 1) * 4 != encoded.len()) {
+            return Err(invalid());
+        }
+        let mut value = 0u32;
+        for (position, byte) in chunk.iter().enumerate() {
+            let digit = if position >= 4 - padding {
+                0
+            } else {
+                BASE64_ALPHABET
+                    .iter()
+                    .position(|candidate| candidate == byte)
+                    .ok_or_else(invalid)? as u32
+            };
+            value = (value << 6) | digit;
+        }
+        // Padding must not hide nonzero trailing bits.
+        if (padding == 2 && value & 0xffff != 0) || (padding == 1 && value & 0xff != 0) {
+            return Err(invalid());
+        }
+        bytes.push((value >> 16) as u8);
+        if padding < 2 {
+            bytes.push((value >> 8) as u8);
+        }
+        if padding == 0 {
+            bytes.push(value as u8);
+        }
+    }
+    Ok(bytes)
+}
+
+fn encode_base64(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let value = ((chunk[0] as u32) << 16)
+            | ((chunk.get(1).copied().unwrap_or(0) as u32) << 8)
+            | chunk.get(2).copied().unwrap_or(0) as u32;
+        encoded.push(BASE64_ALPHABET[(value >> 18) as usize] as char);
+        encoded.push(BASE64_ALPHABET[((value >> 12) & 63) as usize] as char);
+        encoded.push(if chunk.len() > 1 {
+            BASE64_ALPHABET[((value >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            BASE64_ALPHABET[(value & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    encoded
 }
 
 #[derive(Debug, Deserialize)]
@@ -665,29 +828,29 @@ pub struct SessionDetail {
     pub name: String,
     #[serde(default)]
     pub backend: String,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "createdAt", deserialize_with = "de_i64")]
     pub created_at: i64,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "updatedAt", deserialize_with = "de_i64")]
     pub updated_at: i64,
     #[serde(default)]
     pub state: String,
-    #[serde(default, deserialize_with = "de_i64")]
-    pub total_cost_usd: i64,
-    #[serde(default)]
+    #[serde(default, alias = "totalCostUsd")]
+    pub total_cost_usd: f64,
+    #[serde(default, alias = "conversationCount")]
     pub conversation_count: i32,
     #[serde(default)]
-    pub metadata: std::collections::HashMap<String, String>,
+    pub metadata: HashMap<String, String>,
     #[serde(default, alias = "agentId")]
     pub agent_id: String,
     #[serde(default, alias = "agentName")]
     pub agent_name: String,
-    #[serde(default)]
+    #[serde(default, alias = "startedAt")]
     pub started_at: String,
-    #[serde(default)]
+    #[serde(default, alias = "endedAt")]
     pub ended_at: String,
-    #[serde(default)]
+    #[serde(default, alias = "metadataStatus")]
     pub metadata_status: String,
-    #[serde(default)]
+    #[serde(default, alias = "artifactCount")]
     pub artifact_count: i32,
 }
 
@@ -698,9 +861,9 @@ pub struct ToolDefinition {
     pub name: String,
     #[serde(default)]
     pub description: String,
-    #[serde(default)]
+    #[serde(default, alias = "inputSchemaJson")]
     pub input_schema_json: String,
-    #[serde(default)]
+    #[serde(default, alias = "outputSchemaJson")]
     pub output_schema_json: String,
     #[serde(default)]
     pub backends: Vec<String>,
@@ -721,11 +884,11 @@ pub struct Trace {
     pub id: String,
     #[serde(default, alias = "sessionId")]
     pub session_id: String,
-    #[serde(default)]
+    #[serde(default, alias = "rootSpan")]
     pub root_span: Option<TraceSpan>,
     #[serde(default)]
     pub spans: Vec<TraceSpan>,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "totalDurationMs", deserialize_with = "de_i64")]
     pub total_duration_ms: i64,
 }
 
@@ -734,20 +897,20 @@ pub struct Trace {
 pub struct TraceSpan {
     #[serde(default)]
     pub id: String,
-    #[serde(default)]
+    #[serde(default, alias = "parentId")]
     pub parent_id: String,
     #[serde(default)]
     pub name: String,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "startTimeUs", deserialize_with = "de_i64")]
     pub start_time_us: i64,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "endTimeUs", deserialize_with = "de_i64")]
     pub end_time_us: i64,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "durationUs", deserialize_with = "de_i64")]
     pub duration_us: i64,
     #[serde(default)]
     pub status: String,
     #[serde(default)]
-    pub attributes: std::collections::HashMap<String, String>,
+    pub attributes: HashMap<String, String>,
 }
 
 /// An LLM model (GET /v1/models).
@@ -761,19 +924,19 @@ pub struct ModelInfo {
     pub provider: String,
     #[serde(default)]
     pub capabilities: Vec<String>,
-    #[serde(default)]
+    #[serde(default, alias = "contextWindow")]
     pub context_window: i32,
-    #[serde(default)]
+    #[serde(default, alias = "costPer1mInputUsd")]
     pub cost_per_1m_input_usd: f64,
-    #[serde(default)]
+    #[serde(default, alias = "costPer1mOutputUsd")]
     pub cost_per_1m_output_usd: f64,
     #[serde(default)]
     pub available: bool,
-    #[serde(default)]
+    #[serde(default, alias = "maxOutputTokens")]
     pub max_output_tokens: i32,
-    #[serde(default)]
+    #[serde(default, alias = "isReasoning")]
     pub is_reasoning: bool,
-    #[serde(default)]
+    #[serde(default, alias = "showInDropdown")]
     pub show_in_dropdown: bool,
 }
 
@@ -783,23 +946,33 @@ pub struct ProviderEntry {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
-    pub model: String,
-    #[serde(default)]
+    pub config: LLMConfig,
+    /// Derived from ListProvidersResponse.active_provider, never from an entry.
+    #[serde(skip_deserializing)]
     pub active: bool,
+}
+
+/// Provider fields used by the inspector from the nested LLMConfig message.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LLMConfig {
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub model: String,
 }
 
 /// Artifact stats (GET /v1/artifacts/stats).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactStats {
-    #[serde(default)]
+    #[serde(default, alias = "totalFiles")]
     pub total_files: i32,
-    #[serde(default, deserialize_with = "de_i64")]
+    #[serde(default, alias = "totalSizeBytes", deserialize_with = "de_i64")]
     pub total_size_bytes: i64,
-    #[serde(default)]
+    #[serde(default, alias = "userFiles")]
     pub user_files: i32,
-    #[serde(default)]
+    #[serde(default, alias = "generatedFiles")]
     pub generated_files: i32,
-    #[serde(default)]
+    #[serde(default, alias = "deletedFiles")]
     pub deleted_files: i32,
 }
 
@@ -807,7 +980,61 @@ pub struct ArtifactStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     #[serde(default)]
-    pub config: std::collections::HashMap<String, String>,
+    pub name: String,
+    pub network: Option<NetworkConfig>,
+    pub tls: Option<TlsConfig>,
+    pub behavior: Option<ServerBehavior>,
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
+    pub storage: Option<ServerStorageConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkConfig {
+    #[serde(default, alias = "grpcAddress")]
+    pub grpc_address: String,
+    #[serde(default, alias = "httpAddress")]
+    pub http_address: String,
+    #[serde(default, alias = "httpEnabled")]
+    pub http_enabled: bool,
+    #[serde(default, alias = "reflectionEnabled")]
+    pub reflection_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerBehavior {
+    #[serde(default, alias = "maxConcurrentRequests")]
+    pub max_concurrent_requests: i32,
+    #[serde(default, alias = "requestTimeoutSeconds")]
+    pub request_timeout_seconds: i32,
+    #[serde(default, alias = "gracefulShutdown")]
+    pub graceful_shutdown: bool,
+    #[serde(default, alias = "shutdownTimeoutSeconds")]
+    pub shutdown_timeout_seconds: i32,
+    #[serde(default, alias = "corsEnabled")]
+    pub cors_enabled: bool,
+    #[serde(default, alias = "corsAllowedOrigins")]
+    pub cors_allowed_origins: Vec<String>,
+}
+
+/// Only the storage backend is shown; connection credentials stay out of the UI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerStorageConfig {
+    #[serde(default)]
+    pub backend: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct StorageStatusResponse {
+    status: StorageStatus,
 }
 
 /// Storage status (GET /v1/server/storage).
@@ -818,7 +1045,9 @@ pub struct StorageStatus {
     #[serde(default)]
     pub healthy: bool,
     #[serde(default)]
-    pub detail: String,
+    pub error: String,
+    #[serde(default, alias = "latencyMs", deserialize_with = "de_i64")]
+    pub latency_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1271,7 +1500,7 @@ async fn list_providers() -> Result<Vec<ProviderEntry>, String> {
         .map_err(|e| e.to_string())??;
     let resp: ProviderListResponse =
         serde_json::from_value(value).map_err(|e| format!("Unexpected providers response: {e}"))?;
-    Ok(resp.providers)
+    Ok(resp.into_entries())
 }
 
 /// Switch the LLM model for a session (POST /v1/sessions/{session_id}:switch-model).
@@ -1346,20 +1575,9 @@ async fn get_artifact_content(
     let value = tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
         .await
         .map_err(|e| e.to_string())??;
-    let resp: GetArtifactContentResponse =
-        serde_json::from_value(value).map_err(|e| format!("Unexpected artifact content response: {e}"))?;
-    // content is bytes; try UTF-8 first, fall back to base64 decode
-    match resp.content {
-        serde_json::Value::String(s) => Ok(s),
-        serde_json::Value::Array(bytes) => {
-            let b: Vec<u8> = bytes
-                .into_iter()
-                .filter_map(|v| v.as_u64().map(|n| n as u8))
-                .collect();
-            String::from_utf8(b).map_err(|e| format!("Artifact content is not valid UTF-8: {e}"))
-        }
-        _ => Err("Artifact content had an unexpected format.".to_string()),
-    }
+    let resp: GetArtifactContentResponse = serde_json::from_value(value)
+        .map_err(|e| format!("Unexpected artifact content response: {e}"))?;
+    resp.decode()
 }
 
 /// Search artifacts (GET /v1/artifacts:search).
@@ -1383,28 +1601,33 @@ async fn search_artifacts(query: String) -> Result<Vec<Artifact>, String> {
 /// Get artifact storage statistics (GET /v1/artifacts/stats).
 #[tauri::command]
 async fn get_artifact_stats() -> Result<ArtifactStats, String> {
-    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/artifacts/stats", None))
-        .await
-        .map_err(|e| e.to_string())??;
+    let value =
+        tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/artifacts/stats", None))
+            .await
+            .map_err(|e| e.to_string())??;
     serde_json::from_value(value).map_err(|e| format!("Unexpected artifact stats response: {e}"))
 }
 
 /// Get server configuration (GET /v1/server/config).
 #[tauri::command]
 async fn get_server_config() -> Result<ServerConfig, String> {
-    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/config", None))
-        .await
-        .map_err(|e| e.to_string())??;
+    let value =
+        tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/config", None))
+            .await
+            .map_err(|e| e.to_string())??;
     serde_json::from_value(value).map_err(|e| format!("Unexpected server config response: {e}"))
 }
 
 /// Get storage backend status (GET /v1/server/storage).
 #[tauri::command]
 async fn get_storage_status() -> Result<StorageStatus, String> {
-    let value = tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/storage", None))
-        .await
-        .map_err(|e| e.to_string())??;
-    serde_json::from_value(value).map_err(|e| format!("Unexpected storage status response: {e}"))
+    let value =
+        tauri::async_runtime::spawn_blocking(|| loom_request("GET", "/v1/server/storage", None))
+            .await
+            .map_err(|e| e.to_string())??;
+    let resp: StorageStatusResponse = serde_json::from_value(value)
+        .map_err(|e| format!("Unexpected storage status response: {e}"))?;
+    Ok(resp.status)
 }
 
 #[tauri::command]
@@ -1461,18 +1684,22 @@ async fn ask_loom(
 // Workspace explorer (local filesystem; independent of the Loom server)
 // ---------------------------------------------------------------------------
 
-/// The Loom data/workspace directory: $LOOM_DATA_DIR, else ~/.loom.
-fn loom_data_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("LOOM_DATA_DIR") {
-        let p = PathBuf::from(dir);
-        if p.is_dir() {
-            return p;
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".loom");
-    }
-    PathBuf::from(".loom")
+#[tauri::command]
+fn get_workspace(state: State<AppState>) -> WorkspaceInfo {
+    state
+        .workspace
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .info()
+}
+
+#[tauri::command]
+fn open_workspace(path: String, state: State<AppState>) -> Result<WorkspaceInfo, String> {
+    state
+        .workspace
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .open(&path)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1483,15 +1710,12 @@ struct DirEntry {
 }
 
 /// List a directory's entries: directories first, then files, each
-/// alphabetically; hidden entries (dotfiles) are skipped.
+/// alphabetically. Include dotfiles so files such as .gitignore are visible.
 fn list_dir_entries(dir: &Path) -> Result<Vec<DirEntry>, String> {
     let read = std::fs::read_dir(dir).map_err(|e| format!("Cannot read {}: {e}", dir.display()))?;
     let mut out: Vec<DirEntry> = Vec::new();
     for entry in read.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
-            continue;
-        }
         let path = entry.path();
         out.push(DirEntry {
             name,
@@ -1508,68 +1732,137 @@ fn list_dir_entries(dir: &Path) -> Result<Vec<DirEntry>, String> {
 }
 
 #[tauri::command]
-fn list_workspace() -> Result<Vec<DirEntry>, String> {
-    list_dir_entries(&loom_data_dir())
+fn list_workspace(state: State<AppState>) -> Result<Vec<DirEntry>, String> {
+    list_dir_entries(
+        state
+            .workspace
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .root(),
+    )
 }
 
 #[tauri::command]
-fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
-    let target = workspace_path(&path)?;
+fn list_directory(path: String, state: State<AppState>) -> Result<Vec<DirEntry>, String> {
+    let workspace = state.workspace.lock().unwrap_or_else(|e| e.into_inner());
+    let target = workspace::resolve(workspace.root(), &path)?;
     if !target.is_dir() {
         return Err(format!("Not a directory: {}", target.display()));
     }
     list_dir_entries(&target)
 }
 
-/// Read a text file from within the workspace, bounded and UTF-8 only.
-#[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    const MAX_BYTES: u64 = 1024 * 1024;
-    let target = workspace_path(&path)?;
-    if !target.is_file() {
-        return Err(format!("Not a file: {}", target.display()));
+/// Create a single entry without replacing anything that already exists.
+fn create_workspace_entry_at(
+    root: &Path,
+    parent: &str,
+    name: &str,
+    is_dir: bool,
+) -> Result<DirEntry, String> {
+    let name = name.trim();
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains(['/', '\\'])
+        || name.chars().any(char::is_control)
+    {
+        return Err(
+            "Enter a file or folder name without path separators or control characters.".into(),
+        );
     }
-    let meta = target.metadata().map_err(|e| e.to_string())?;
-    if meta.len() > MAX_BYTES {
-        return Err(format!(
-            "File is larger than 1 MB and was not opened: {}",
-            target.display()
-        ));
+    let root = root
+        .canonicalize()
+        .map_err(|e| format!("Workspace not found: {e}"))?;
+    let requested = Path::new(parent);
+    let parent = if requested.is_absolute() {
+        requested.to_path_buf()
+    } else {
+        root.join(requested)
+    };
+    let parent = parent
+        .canonicalize()
+        .map_err(|e| format!("Cannot open destination folder: {e}"))?;
+    if !parent.starts_with(&root) {
+        return Err("Destination is outside the workspace.".into());
     }
-    let bytes = std::fs::read(&target).map_err(|e| e.to_string())?;
-    if bytes.contains(&0) {
-        return Err(format!("Binary file: {}", target.display()));
+    if !parent.is_dir() {
+        return Err("Destination is not a folder.".into());
     }
-    String::from_utf8(bytes).map_err(|_| format!("File is not UTF-8 text: {}", target.display()))
+    let target = parent.join(name);
+    let result = if is_dir {
+        std::fs::create_dir(&target)
+    } else {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map(|_| ())
+    };
+    result.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            format!("An entry named \"{name}\" already exists in this folder.")
+        } else {
+            format!("Could not create \"{name}\": {e}")
+        }
+    })?;
+    Ok(DirEntry {
+        name: name.into(),
+        path: target.display().to_string(),
+        is_dir,
+    })
 }
 
-/// Resolve an absolute or workspace-relative path and require it to stay
-/// inside the workspace directory (following symlinks for the comparison).
-fn workspace_path(path: &str) -> Result<PathBuf, String> {
-    let root = loom_data_dir();
-    // Workspace-relative paths resolve against the workspace root, not the
-    // process working directory.
-    let requested = {
-        let p = PathBuf::from(path);
-        if p.is_relative() { root.join(p) } else { p }
-    };
+#[tauri::command]
+fn create_workspace_file(
+    parent: String,
+    name: String,
+    state: State<AppState>,
+) -> Result<DirEntry, String> {
+    create_workspace_entry_at(
+        state
+            .workspace
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .root(),
+        &parent,
+        &name,
+        false,
+    )
+}
 
-    let (canon_root, canon_target) = if requested == root {
-        (root.clone(), root.clone())
-    } else {
-        let canon_root = root
-            .canonicalize()
-            .map_err(|e| format!("Workspace not found: {e}"))?;
-        let canon_target = requested
-            .canonicalize()
-            .map_err(|e| format!("Cannot read {}: {e}", requested.display()))?;
-        (canon_root, canon_target)
-    };
+#[tauri::command]
+fn create_workspace_directory(
+    parent: String,
+    name: String,
+    state: State<AppState>,
+) -> Result<DirEntry, String> {
+    create_workspace_entry_at(
+        state
+            .workspace
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .root(),
+        &parent,
+        &name,
+        true,
+    )
+}
 
-    if !canon_target.starts_with(&canon_root) {
-        return Err("Path is outside the workspace.".to_string());
-    }
-    Ok(canon_target)
+#[tauri::command]
+fn read_file(path: String, state: State<AppState>) -> Result<String, String> {
+    let workspace = state.workspace.lock().unwrap_or_else(|e| e.into_inner());
+    workspace::read_text(workspace.root(), &path)
+}
+
+#[tauri::command]
+fn write_file(
+    path: String,
+    content: String,
+    original: String,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let workspace = state.workspace.lock().unwrap_or_else(|e| e.into_inner());
+    workspace::write_text(workspace.root(), &path, &content, &original)
 }
 
 // ---------------------------------------------------------------------------
@@ -1578,8 +1871,24 @@ fn workspace_path(path: &str) -> Result<PathBuf, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let instance = match navigation::Instance::claim(navigation::TAURI) {
+        Ok(Some(instance)) => instance,
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
     tauri::Builder::default()
-        .setup(|app| {
+        .setup(move |app| {
+            let handle = app.handle().clone();
+            instance.serve(move || {
+                if let Some(window) = handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            });
             // Refuse to guess where data lives: if the app-data directory
             // cannot be determined, fail startup loudly instead of writing
             // work.json next to wherever the app was launched from.
@@ -1594,10 +1903,15 @@ pub fn run() {
             let exp_store = ExperimentStore::load(exp_path)?;
             let int_path = intents_file_path(app.handle());
             let int_store = IntentStore::load(int_path)?;
+            let workspace_settings = workspace_settings_path(app.handle())?;
+            let documents = app.handle().path().document_dir()
+                .map_err(|e| format!("Could not locate your Documents folder: {e}"))?;
+            let workspace_store = WorkspaceStore::load(workspace_settings, documents.join("Loom"))?;
             app.manage(AppState {
                 work: Mutex::new(store),
                 experiments: Mutex::new(exp_store),
                 intents: Mutex::new(int_store),
+                workspace: Mutex::new(workspace_store),
             });
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -1609,6 +1923,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            open_living_workbench,
             get_work_items,
             add_work_item,
             set_work_status,
@@ -1655,10 +1970,135 @@ pub fn run() {
             set_experiment_arm_result,
             choose_experiment_arm,
             clear_experiment_decision,
+            get_workspace,
+            open_workspace,
             list_workspace,
             list_directory,
-            read_file
+            create_workspace_file,
+            create_workspace_directory,
+            read_file,
+            write_file
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------------------
+    // de_i64: the gateway sends every int64 as a JSON string.
+    // ------------------------------------------------------------------
+
+    #[derive(Debug, Deserialize)]
+    struct I64Holder {
+        #[serde(default, deserialize_with = "de_i64")]
+        v: i64,
+    }
+
+    fn parse_i64(json: &str) -> Result<i64, String> {
+        serde_json::from_str::<I64Holder>(json)
+            .map(|h| h.v)
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn de_i64_accepts_number_and_string_forms() {
+        assert_eq!(parse_i64(r#"{"v": 42}"#).unwrap(), 42);
+        assert_eq!(parse_i64(r#"{"v": "3600"}"#).unwrap(), 3600);
+        assert_eq!(parse_i64(r#"{"v": -5}"#).unwrap(), -5);
+        assert_eq!(parse_i64(r#"{"v": "-5"}"#).unwrap(), -5);
+        assert_eq!(parse_i64(r#"{"v": 0}"#).unwrap(), 0);
+    }
+
+    #[test]
+    fn de_i64_rejects_floats_bools_and_garbage() {
+        // A float must fail: this is the trap that mistyped total_cost_usd
+        // fell into (proto double read through de_i64).
+        assert!(parse_i64(r#"{"v": 0.05}"#).is_err());
+        assert!(parse_i64(r#"{"v": true}"#).is_err());
+        assert!(parse_i64(r#"{"v": "abc"}"#).is_err());
+        assert!(parse_i64(r#"{"v": null}"#).is_err());
+        // Out of range for i64.
+        assert!(parse_i64(r#"{"v": 18446744073709551615}"#).is_err());
+    }
+
+    #[test]
+    fn de_i64_missing_key_defaults_to_zero() {
+        assert_eq!(parse_i64(r#"{}"#).unwrap(), 0);
+    }
+
+    // ------------------------------------------------------------------
+    // percent_encode (ids interpolated into request paths)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn percent_encode_keeps_unreserved_and_escapes_the_rest() {
+        assert_eq!(percent_encode("abc-_.~123"), "abc-_.~123");
+        assert_eq!(percent_encode("hello world"), "hello%20world");
+        assert_eq!(percent_encode("a/b?c=d&e"), "a%2Fb%3Fc%3Dd%26e");
+        assert_eq!(percent_encode("sess:1"), "sess%3A1");
+        assert_eq!(percent_encode(""), "");
+    }
+
+    // ------------------------------------------------------------------
+    // Wire format: gateway-shaped JSON (camelCase keys, int64 as strings).
+    // Existing response structs retain their gateway compatibility. The
+    // newer response shapes and content decoding are tested in gateway_tests.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn session_parses_gateway_json_camel_and_snake_case() {
+        let camel = r#"{"id":"s-1","name":"Main","state":"active","agentId":"a-1","agentName":"Weaver","updatedAt":"1720000000","conversationCount":3}"#;
+        let s: Session = serde_json::from_str(camel).unwrap();
+        assert_eq!(s.id, "s-1");
+        assert_eq!(s.agent_id, "a-1");
+        assert_eq!(s.agent_name, "Weaver");
+        assert_eq!(s.updated_at, 1_720_000_000);
+        assert_eq!(s.conversation_count, 3);
+        // protojson also accepts the proto field names; the aliases must
+        // not break that.
+        let snake = r#"{"id":"s-1","agent_id":"a-1","agent_name":"Weaver","updated_at":"1720000000","conversation_count":3}"#;
+        let s2: Session = serde_json::from_str(snake).unwrap();
+        assert_eq!(s2.agent_id, "a-1");
+        assert_eq!(s2.updated_at, 1_720_000_000);
+    }
+
+    #[test]
+    fn agent_parses_gateway_json() {
+        let json = r#"{"id":"a-1","name":"Weaver","status":"active","uptimeSeconds":"3600","activeSessions":2,"totalMessages":"123"}"#;
+        let a: Agent = serde_json::from_str(json).unwrap();
+        assert_eq!(a.uptime_seconds, 3600);
+        assert_eq!(a.active_sessions, 2);
+        assert_eq!(a.total_messages, 123);
+    }
+
+    #[test]
+    fn workflow_execution_parses_gateway_json() {
+        let json = r#"{"id":"e-1","status":"completed","startedAt":"1720000000","completedAt":"1720000300","error":"","result":{"merged_output":"ok"}}"#;
+        let e: WorkflowExecution = serde_json::from_str(json).unwrap();
+        assert_eq!(e.started_at, 1_720_000_000);
+        assert_eq!(e.completed_at, 1_720_000_300);
+        assert!(e.result.is_some());
+    }
+
+    #[test]
+    fn artifact_parses_gateway_json() {
+        let json = r#"{"id":"art-1","name":"notes.md","purpose":"notes","source":"session","createdAt":"1720000000","sessionId":"s-1"}"#;
+        let a: Artifact = serde_json::from_str(json).unwrap();
+        assert_eq!(a.created_at, 1_720_000_000);
+        assert_eq!(a.session_id, "s-1");
+    }
+
+    #[test]
+    fn sessions_and_agents_wrappers_parse() {
+        let sessions = r#"{"sessions":[{"id":"s-1","updatedAt":"1720000000"}]}"#;
+        let r: SessionsResponse = serde_json::from_str(sessions).unwrap();
+        assert_eq!(r.sessions.len(), 1);
+        assert_eq!(r.sessions[0].updated_at, 1_720_000_000);
+        let agents = r#"{"agents":[{"id":"a-1","uptimeSeconds":"60"}]}"#;
+        let r: AgentsResponse = serde_json::from_str(agents).unwrap();
+        assert_eq!(r.agents[0].uptime_seconds, 60);
+    }
 }
