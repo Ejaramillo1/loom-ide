@@ -1,0 +1,857 @@
+{
+  "target": "/home/ed/loom-ide-tauri/target/debug/loom-frontend",
+  "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1",
+  "address_note": "entry is ELF image address. Ghidra engine_entry and DAT/FUN symbols are rebased by +0x100000. Pseudocode is derived and may be incomplete, especially functions incorrectly truncated at memcpy.",
+  "functions": [
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_fb613b281dd3bc1cbb170b366adfa18434a2ae17f8dbc0f114721636da10e276",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7ca680"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7ca680"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8ca680",
+        "entry": "0x7ca680",
+        "function": "sphere_state",
+        "pseudo_code": "\n/* DWARF original prototype: SphereState sphere_state(LoomApp * self) */\n\nSphereState __rustcall loom_frontend::LoomApp::sphere_state(LoomApp *self)\n\n{\n  bool bVar1;\n  f64 fVar2;\n  _str _Var3;\n  undefined1 local_28 [12];\n  undefined1 local_18 [12];\n  LoomApp *local_8;\n  \n  if (((self->attention_open & 1U) != 0) || (local_8 = self, bVar1 = has_attention(self), bVar1)) {\n    return Attention;\n  }\n  local_28 = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n  fVar2 = core::time::Duration::as_secs_f64((Duration *)local_28);\n  if ((double)fVar2 < (double)self->processing_until) {\n    return Processing;\n  }\n  if (self->busy == 0) {\n    _Var3 = ::alloc::string::deref(&self->chat_input);\n    _Var3 = core::str::trim(_Var3);\n    bVar1 = core::str::is_empty(_Var3);\n    if (!bVar1) {\n      return Listening;\n    }\n    local_18 = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n    fVar2 = core::time::Duration::as_secs_f64((Duration *)local_18);\n    if ((double)self->completed_until <= (double)fVar2) {\n      return Idle;\n    }\n    return Completed;\n  }\n  return Executing;\n}\n\n",
+        "signature": "SphereState __rustcall loom_frontend::LoomApp::sphere_state(LoomApp *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for sphere_state from the Deep engine (38 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_20568f9f1ecae548d66565f48b60db8e57e31434bd99993e85666ccb401e332b",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7ce860"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7ce860"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8ce860",
+        "entry": "0x7ce860",
+        "function": "words",
+        "pseudo_code": "\n/* DWARF original prototype: &str words(SphereState * self) */\n\n_str __rustcall loom_frontend::SphereState::words(SphereState *self)\n\n{\n  _str _Var1;\n  u8 *puStack_18;\n  usize uStack_10;\n  \n                    /* WARNING (jumptable): Sanity check requires truncation of jumptable */\n                    /* WARNING: Could not find normalized switch variable to match jumptable */\n  switch(*self) {\n  case Idle:\n    puStack_18 = &UNK_00304805;\n    uStack_10 = 0x1f;\n    break;\n  case Listening:\n    puStack_18 = &UNK_00304824;\n    uStack_10 = 0x1f;\n    break;\n  case Processing:\n    puStack_18 = &UNK_00304843;\n    uStack_10 = 0x1f;\n    break;\n  case Executing:\n    puStack_18 = &UNK_00304862;\n    uStack_10 = 0x21;\n    break;\n  case Attention:\n    puStack_18 = &UNK_00304883;\n    uStack_10 = 0x24;\n    break;\n  case Completed:\n    puStack_18 = &UNK_003048a7;\n    uStack_10 = 0x16;\n  }\n  _Var1.length = uStack_10;\n  _Var1.data_ptr = puStack_18;\n  return _Var1;\n}\n\n",
+        "signature": "&str __rustcall loom_frontend::SphereState::words(SphereState *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for words from the Deep engine (42 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_59da443342a4d6c4fcec4bd37e17f0cc422fe7eda9f6ffa24c5c2ab829720a55",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7cc560"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7cc560"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8cc560",
+        "entry": "0x7cc560",
+        "function": "send_chat",
+        "pseudo_code": "\n/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */\n/* DWARF original prototype: void send_chat(LoomApp * self) */\n\nvoid __rustcall loom_frontend::LoomApp::send_chat(LoomApp *self)\n\n{\n  f64 fVar1;\n  bool bVar2;\n  byte bVar3;\n  _str _Var4;\n  Arguments args;\n  String local_1b0;\n  _str local_198;\n  UsizeNoHighBit local_188;\n  u8 *local_180;\n  usize local_178;\n  undefined8 local_170;\n  undefined4 uStack_168;\n  undefined4 uStack_164;\n  undefined8 local_160;\n  undefined1 local_158 [12];\n  ChatMsg local_148;\n  usize local_108;\n  NonNull<u8> NStack_100;\n  usize local_f8;\n  usize local_f0;\n  NonNull<u8> NStack_e8;\n  usize local_e0;\n  ChatMsg local_d8;\n  usize local_a0;\n  NonNull<u8> NStack_98;\n  usize local_90;\n  usize local_88;\n  NonNull<u8> NStack_80;\n  usize local_78;\n  String local_70;\n  Argument local_58;\n  ArgumentType local_40;\n  undefined1 local_30 [16];\n  LoomApp *local_20;\n  String *local_8;\n  \n  local_20 = self;\n  _Var4 = ::alloc::string::deref(&self->chat_input);\n  _Var4 = core::str::trim(_Var4);\n  (*(code *)PTR_to_string<str>_01a668f8)(&local_1b0,_Var4.data_ptr,_Var4.length);\n                    /* Unresolved local var: String text@[???] */\n  bVar2 = ::alloc::string::String::is_empty(&local_1b0);\n  if (!bVar2) {\n    local_198 = ::alloc::string::String::as_str(&(self->store).autonomy);\n                    /* Unresolved local var: &str level@[???] */\n    bVar3 = (*(code *)PTR_eq<str,_str>_01a66990)(&local_198,&PTR_DAT_019db538);\n    if ((bVar3 & 1) == 0) {\n      ::alloc::string::String::clear(&self->chat_input);\n      local_170 = 0xffffffffffffffff;\n      (*(code *)PTR_drop_glue<core::option::Option<alloc::string::String>>_01a66518)\n                (&self->chat_failed);\n      *(undefined8 *)&(self->chat_failed).field_0x10 = local_160;\n      *(undefined4 *)&self->chat_failed = (undefined4)local_170;\n      *(undefined4 *)&(self->chat_failed).field_0x4 = local_170._4_4_;\n      *(undefined4 *)&(self->chat_failed).field_0x8 = uStack_168;\n      *(undefined4 *)&(self->chat_failed).field_0xc = uStack_164;\n      local_158 = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n      fVar1 = core::time::Duration::as_secs_f64((Duration *)local_158);\n      self->processing_until = (f64)((double)fVar1 + _DAT_00301ab0);\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_108,&DAT_00303c10,3,&PTR_s_src_main_rs_019db548);\n      (*(code *)PTR_clone_01a66a20)(&local_f0,&local_1b0);\n      local_148.who.vec.len = local_f8;\n      local_148.who.vec.buf.inner.cap.__0 = local_108;\n      local_148.who.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)NStack_100.pointer\n      ;\n      local_148.text.vec.len = local_e0;\n      local_148.text.vec.buf.inner.cap.__0 = local_f0;\n      local_148.text.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)NStack_e8.pointer\n      ;\n      local_148.mine = true;\n      local_148.card = false;\n      ::alloc::vec::Vec<loom_frontend::ChatMsg,_alloc::alloc::Global>::\n      push<loom_frontend::ChatMsg,_alloc::alloc::Global>(&(self->store).chat,&local_148);\n      if ((self->server_online & 1U) == 0) {\n        (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                  (&local_a0,&DAT_00304586,0x14,&PTR_s_src_main_rs_019db560);\n        local_8 = &local_1b0;\n                    /* Unresolved local var: (&alloc::string::String) args@[???] */\n        (*(code *)PTR_new_display<alloc::string::String>_01a66978)(&local_40);\n        local_58.ty._0_8_ = local_40._0_8_;\n        local_58.ty._8_8_ = local_40._8_8_;\n                    /* Unresolved local var: Argument[1] args@[???] */\n        args = core::fmt::Arguments::new<249,_1>\n                         ((u8 (*) [249])&DAT_0030459a,(Argument (*) [1])&local_58);\n        ::alloc::fmt::format(&local_70,args);\n        local_88 = local_70.vec.buf.inner.cap.__0;\n        NStack_80 = local_70.vec.buf.inner.ptr.pointer.pointer;\n        local_78 = local_70.vec.len;\n        local_d8.who.vec.len = local_90;\n        local_d8.who.vec.buf.inner.cap.__0 = local_a0;\n        local_d8.who.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)NStack_98.pointer\n        ;\n        local_d8.text.vec.len = local_70.vec.len;\n        local_d8.text.vec.buf.inner.cap.__0 = local_70.vec.buf.inner.cap.__0;\n        local_d8.text.vec.buf.inner.ptr.pointer.pointer = local_70.vec.buf.inner.ptr.pointer.pointer\n        ;\n        local_d8.mine = false;\n        local_d8.card = true;\n        ::alloc::vec::Vec<loom_frontend::ChatMsg,_alloc::alloc::Global>::\n        push<loom_frontend::ChatMsg,_alloc::alloc::Global>(&(self->store).chat,&local_d8);\n        local_30._0_12_ = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n        fVar1 = core::time::Duration::as_secs_f64((Duration *)local_30);\n        self->completed_until = (f64)((double)fVar1 + DAT_003019a0);\n      }\n      else {\n        _Var4 = ::alloc::string::deref(&local_1b0);\n        weave(self,_Var4);\n      }\n      persist(self);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_1b0);\n      return;\n    }\n    (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n              (&local_188,&DAT_00304693,0x73,&PTR_s_src_main_rs_019db578);\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&self->notice);\n    (self->notice).vec.buf.inner.cap.__0 = local_188.__0;\n    (self->notice).vec.buf.inner.ptr.pointer.pointer = local_180;\n    (self->notice).vec.len = local_178;\n  }\n  (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_1b0);\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::LoomApp::send_chat(LoomApp *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for send_chat from the Deep engine (131 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_46baf03baba6c363521144e98d1c47242e505a498d9a32e1d760fef215d505ff",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7cc0f0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7cc0f0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8cc0f0",
+        "entry": "0x7cc0f0",
+        "function": "persist",
+        "pseudo_code": "\n/* DWARF original prototype: void persist(LoomApp * self) */\n\nvoid __rustcall loom_frontend::LoomApp::persist(LoomApp *self)\n\n{\n  _str _Var1;\n  __loom_frontend__CodeFile_ self_00;\n  Store local_1a0;\n  usize local_e8;\n  NonNull<u8> NStack_e0;\n  usize local_d8;\n  Option<&loom_frontend::CodeFile> local_d0;\n  Iter<loom_frontend::CodeFile> local_c8;\n  undefined1 local_b8 [24];\n  undefined1 local_a0 [16];\n  usize local_90;\n  usize local_88;\n  NonNull<u8> NStack_80;\n  usize local_78;\n  Result<(),_core::io::error::Error> local_68;\n  PathBuf local_60;\n  String local_48;\n  undefined1 local_21;\n  LoomApp *local_20;\n  Option<&loom_frontend::CodeFile> local_8;\n  \n  local_21 = 0;\n  local_20 = self;\n  loom_frontend::clone(&local_1a0,&self->store);\n                    /* Unresolved local var: Store s@[???] */\n  _Var1 = Mode::label(&self->mode);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_e8,_Var1.data_ptr,_Var1.length,&PTR_s_src_main_rs_019db508);\n  (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_1a0.mode);\n  local_1a0.mode.vec.len = local_d8;\n  local_1a0.mode.vec.buf.inner.cap.__0 = local_e8;\n  local_1a0.mode.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)NStack_e0.pointer;\n                    /* Unresolved local var: CodeFile * f@[???] */\n  self_00 = ::alloc::vec::deref<loom_frontend::CodeFile,_alloc::alloc::Global>(&self->files);\n  local_c8 = core::slice::iter<loom_frontend::CodeFile>(self_00);\n  local_d0 = core::slice::iter::\n             find<loom_frontend::CodeFile,_loom_frontend::_impl_2_::persist::_closure_env_0_>\n                       (&local_c8);\n  if (local_d0 != (Option<&loom_frontend::CodeFile>)0x0) {\n    local_8 = local_d0;\n    (*(code *)PTR_clone_01a66a20)(local_b8,(long)local_d0 + 0x30);\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_1a0.code_notes);\n  }\n                    /* Unresolved local var: String text@[???] */\n  serde_json::ser::to_string_pretty<loom_frontend::Store>\n            ((Result<alloc::string::String,_serde_json::error::Error> *)local_a0,&local_1a0);\n  if (local_a0._0_8_ != 0xffffffffffffffff) {\n    local_21 = 1;\n    local_78 = local_90;\n    local_88 = local_a0._0_8_;\n    NStack_80.pointer = (u8 *)local_a0._8_8_;\n    store_path(&local_60);\n    local_21 = 0;\n    local_48.vec.len = local_78;\n    local_48.vec.buf.inner.cap.__0 = local_88;\n    local_48.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)NStack_80.pointer;\n    local_68 = std::fs::write<std::path::PathBuf,_alloc::string::String>(&local_60,&local_48);\n    (*(code *)PTR_drop_glue<core::result::Result<(),_core::io::error::Error>>_01a668a8)(&local_68);\n    local_21 = 0;\n  }\n  core::ptr::drop_glue<loom_frontend::Store>(&local_1a0);\n  if (local_a0._0_8_ == 0xffffffffffffffff) {\n    core::ptr::drop_glue<core::result::Result<alloc::string::String,_serde_json::error::Error>>\n              ((Result<alloc::string::String,_serde_json::error::Error> *)local_a0);\n  }\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::LoomApp::persist(LoomApp *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for persist from the Deep engine (74 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_b32ac23b51ec420a669b1b74eec52928a8176c4c61eb7c9da908d30f00b75243",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7ca790"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7ca790"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8ca790",
+        "entry": "0x7ca790",
+        "function": "has_attention",
+        "pseudo_code": "\n/* DWARF original prototype: bool has_attention(LoomApp * self) */\n\nbool __rustcall loom_frontend::LoomApp::has_attention(LoomApp *self)\n\n{\n  ulong uVar1;\n  bool local_9;\n  \n  uVar1 = (*(code *)PTR_is_some<alloc::string::String>_01a66ae8)(&self->chat_failed);\n  if ((uVar1 & 1) == 0) {\n    local_9 = self->demo_step == 2;\n  }\n  else {\n    local_9 = true;\n  }\n  return local_9;\n}\n\n",
+        "signature": "bool __rustcall loom_frontend::LoomApp::has_attention(LoomApp *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for has_attention from the Deep engine (19 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_f1d408140d0f622bce1754f9a1b8bae145a481196316dd37737a9e3281410089",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7c77b0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7c77b0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8c77b0",
+        "entry": "0x7c77b0",
+        "function": "paint_scene",
+        "pseudo_code": "\n/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */\n/* DWARF original prototype: void paint_scene(LoomApp * self, Ui * ui) */\n\nvoid __rustcall loom_frontend::LoomApp::paint_scene(LoomApp *self,Ui *ui)\n\n{\n  code *pcVar1;\n  f64 fVar2;\n  double dVar3;\n  byte bVar4;\n  u8 r;\n  u8 g;\n  u8 b;\n  ulong uVar5;\n  undefined1 extraout_DL;\n  byte extraout_DL_00;\n  undefined4 extraout_EDX;\n  int extraout_EDX_00;\n  undefined4 extraout_EDX_01;\n  int extraout_EDX_02;\n  Color32 fill_color;\n  undefined4 extraout_EDX_03;\n  int extraout_EDX_04;\n  undefined4 extraout_EDX_05;\n  int extraout_EDX_06;\n  Color32 fill_color_00;\n  undefined4 extraout_EDX_07;\n  int extraout_EDX_08;\n  Color32 fill_color_01;\n  int extraout_EDX_09;\n  Color32 fill_color_02;\n  Pos2 center;\n  Pos2 center_00;\n  Pos2 center_01;\n  Pos2 center_02;\n  f32 fVar6;\n  f32 fVar7;\n  f32 fVar8;\n  float fVar9;\n  float fVar10;\n  float fVar11;\n  float fVar12;\n  float fVar13;\n  float fVar14;\n  undefined1 auVar15 [16];\n  _str _Var16;\n  float local_4a8;\n  float fStack_4a4;\n  float fStack_4a0;\n  float fStack_49c;\n  Painter local_498;\n  undefined4 local_45c;\n  undefined4 local_458;\n  uint local_454;\n  int local_450;\n  u8 local_44c [4];\n  float local_448;\n  float local_444;\n  float local_440;\n  float local_43c;\n  float local_438;\n  float local_434;\n  float local_430;\n  float local_42c;\n  u8 local_428 [4];\n  undefined1 local_424;\n  undefined1 local_423;\n  byte local_422;\n  byte local_421;\n  float local_420;\n  float local_41c;\n  float local_418;\n  float local_414;\n  undefined8 local_410;\n  u8 local_404 [4];\n  f64 local_400;\n  undefined1 local_3f8 [19];\n  SphereState local_3e5;\n  undefined4 local_3e4;\n  undefined4 local_3e0;\n  uint local_3dc;\n  int local_3d8;\n  u8 local_3d4 [4];\n  Color32 local_3d0;\n  float local_3cc;\n  undefined4 local_3c8;\n  undefined4 local_3c4;\n  uint local_3c0;\n  int local_3bc;\n  u8 local_3b8 [4];\n  undefined4 local_3b4;\n  undefined4 local_3b0;\n  uint local_3ac;\n  int local_3a8;\n  u8 local_3a4 [4];\n  Pos2 local_3a0;\n  u8 local_394 [4];\n  double local_390;\n  undefined4 local_384;\n  undefined4 local_380;\n  uint local_37c;\n  int local_378;\n  float local_374;\n  undefined8 local_370;\n  undefined8 uStack_368;\n  undefined8 local_360;\n  undefined8 local_354;\n  undefined4 local_34c;\n  undefined1 local_348 [12];\n  undefined8 local_33c;\n  undefined4 local_334;\n  uint local_330;\n  int local_32c;\n  undefined1 local_328 [80];\n  undefined8 local_2d8;\n  undefined8 uStack_2d0;\n  undefined8 local_2c8;\n  undefined8 local_2c0;\n  u8 local_2b8 [4];\n  u8 local_2b4 [4];\n  undefined1 local_2b0 [16];\n  FontId local_2a0;\n  undefined1 local_280 [16];\n  undefined *local_270;\n  undefined8 local_268;\n  FontId local_260;\n  byte local_23a;\n  undefined1 local_239;\n  LoomApp *local_238;\n  Ui *local_230;\n  float local_228;\n  float fStack_224;\n  float fStack_220;\n  float fStack_21c;\n  undefined4 local_214;\n  float local_1fc;\n  u8 local_1f8 [4];\n  u8 local_1f4 [4];\n  float local_1f0;\n  float local_1ec;\n  f32 local_1e8;\n  float local_1e4;\n  float local_1e0;\n  u8 local_1dc [4];\n  u8 local_1d8 [4];\n  u8 local_1d4 [4];\n  Pos2 local_1d0;\n  Pos2 local_1c8;\n  float local_1bc;\n  u8 local_1b8 [4];\n  u8 local_1b4 [4];\n  undefined2 local_1ae;\n  undefined4 local_1ac;\n  undefined2 local_1a6;\n  undefined4 local_1a4;\n  int local_1a0;\n  float local_19c;\n  u8 local_198 [4];\n  u8 local_194 [4];\n  undefined8 local_190;\n  undefined8 local_188;\n  int local_180;\n  float local_17c;\n  float local_178;\n  float local_174;\n  float local_170;\n  float local_16c;\n  int local_168;\n  float local_164;\n  u8 local_160 [4];\n  u8 local_15c [4];\n  int local_158;\n  float local_154;\n  u8 local_14d;\n  u8 local_14c [4];\n  u8 local_148 [4];\n  int local_144;\n  float local_140;\n  u8 local_13c [4];\n  u8 local_138 [4];\n  byte local_131;\n  float local_130;\n  u8 local_129;\n  u8 local_128 [4];\n  u8 local_124 [4];\n  undefined8 local_120;\n  undefined8 local_118;\n  int local_110;\n  float local_10c;\n  float local_108;\n  float local_104;\n  u8 local_100 [4];\n  u8 local_fc [4];\n  float local_f8;\n  float local_f4;\n  float local_f0;\n  float local_ec;\n  float local_e8;\n  float local_e4;\n  float local_e0;\n  float local_dc;\n  float *local_d8;\n  float *local_d0;\n  float *local_c8;\n  float *local_c0;\n  float *local_b8;\n  float *local_b0;\n  float *local_a8;\n  undefined1 local_9a;\n  byte local_99;\n  float local_98;\n  float local_94;\n  float local_90;\n  float local_8c;\n  float local_88;\n  float local_84;\n  float local_80;\n  float local_7c;\n  float local_78;\n  float local_74;\n  float local_70;\n  float local_6c;\n  float local_68;\n  float local_64;\n  float local_60;\n  float local_5c;\n  float local_58;\n  float local_54;\n  float local_50;\n  float local_4c;\n  float local_48;\n  float local_44;\n  float *local_40;\n  float *local_38;\n  float *local_30;\n  float *local_28;\n  float *local_20;\n  float *local_18;\n  float *local_10;\n  float *local_8;\n  \n  local_23a = 0;\n  local_239 = 0;\n  local_238 = self;\n  local_230 = ui;\n  (*(code *)PTR_available_rect_before_wrap_01a66a30)(&local_4a8);\n                    /* Unresolved local var: Rect rect@[???] */\n  local_228 = local_4a8;\n  fStack_224 = fStack_4a4;\n  fStack_220 = fStack_4a0;\n  fStack_21c = fStack_49c;\n  (*(code *)PTR_painter_at_01a66a38)(&local_498,ui,&local_228);\n                    /* Unresolved local var: Painter painter@[???] */\n  local_214 = 0x18;\n                    /* Unresolved local var: i32 steps@[???] */\n  local_45c = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,0x18);\n  local_458 = extraout_EDX;\n  do {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n    local_454 = (*(code *)PTR_next<i32>_01a66a50)(&local_45c);\n    local_450 = extraout_EDX_00;\n    if ((local_454 & 1) == 0) {\n      local_8 = &local_4a8;\n      local_a8 = &local_4a8;\n      fVar9 = fStack_49c - (fStack_49c - fStack_4a4) * DAT_00303750;\n      local_20 = &local_4a8;\n                    /* Unresolved local var: f32 water_top@[???] */\n      local_48 = local_4a8;\n      local_e8 = local_4a8;\n      local_e0 = fStack_4a0;\n      local_dc = fStack_49c;\n      local_438 = local_4a8;\n      local_430 = fStack_4a0;\n      local_42c = fStack_49c;\n      local_434 = fVar9;\n      local_1fc = fVar9;\n      local_e4 = fVar9;\n      local_44 = fVar9;\n      local_428 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied(0xe9,0xe0,0xd6,0xff);\n      local_1f8 = local_428;\n      local_1f4 = local_428;\n      (*(code *)PTR_rect_filled<f32,_ecolor::color32::Color32>_01a66a58)\n                (0,&local_498,&local_438,local_428);\n      local_424 = (*(code *)PTR_into_iter<core::ops::range::Range<u8>>_01a66a60)(0,7);\n      local_423 = extraout_DL;\n      while( true ) {\n                    /* Unresolved local var: Range<u8> iter@[???] */\n        local_422 = (*(code *)PTR_next<u8>_01a66a68)(&local_424);\n        local_422 = local_422 & 1;\n        local_421 = extraout_DL_00;\n        if (local_422 == 0) {\n          if (((self->store).reduced_motion & 1U) == 0) {\n            local_3f8._0_12_ = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n            local_400 = core::time::Duration::as_secs_f64((Duration *)local_3f8);\n          }\n          else {\n            local_400 = 0.0;\n          }\n                    /* Unresolved local var: f64 t@[???] */\n          local_3e5 = sphere_state(self);\n          local_d0 = &local_4a8;\n                    /* Unresolved local var: SphereState state@[???] */\n          fVar12 = (local_4a8 + fStack_4a0) * DAT_0030344c;\n          local_d8 = &local_4a8;\n          local_b0 = &local_4a8;\n          fVar13 = (fStack_4a4 + fStack_49c) * DAT_0030344c +\n                   (fStack_49c - fStack_4a4) * DAT_00303400;\n          local_b8 = &local_4a8;\n                    /* Unresolved local var: Pos2 centre@[???] */\n          local_1f0 = fVar12;\n          local_1ec = fVar13;\n          local_50 = fVar12;\n          local_4c = fVar13;\n          fVar6 = core::f32::min((f32)((fStack_49c - fStack_4a4) * DAT_00303824),DAT_00303828);\n          fVar6 = core::f32::max(fVar6,DAT_0030329c);\n                    /* Unresolved local var: f32 radius@[???] */\n          local_1e0 = fVar9 + (float)fVar6 * DAT_00303320;\n          local_1e8 = fVar6;\n          local_1e4 = fVar12;\n          local_58 = fVar12;\n          local_54 = local_1e0;\n                    /* Unresolved local var: Pos2 refl@[???] */\n          local_3e4 = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,6);\n          local_3e0 = extraout_EDX_01;\n          while( true ) {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n            local_3dc = (*(code *)PTR_next<i32>_01a66a50)(&local_3e4);\n            local_3d8 = extraout_EDX_02;\n            if ((local_3dc & 1) == 0) break;\n                    /* Unresolved local var: i32 i@[???] */\n            local_140 = (float)fVar6 * ((float)extraout_EDX_02 * DAT_003039d4 + DAT_00303548);\n            local_144 = extraout_EDX_02;\n                    /* Unresolved local var: f32 rr@[???] */\n            local_3d4 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                           (0xff,0xfa,0xf2,0x10);\n            center_02.y = 0.0;\n            center_02.x = (f32)local_3d4;\n            local_13c = local_3d4;\n            local_138 = local_3d4;\n            egui::painter::Painter::circle_filled<ecolor::color32::Color32>\n                      (&local_498,center_02,(f32)fVar12,fill_color);\n          }\n          if (local_3e5 - 2 < 2) {\n            local_3d0.__0[0] = DAT_003033c4[0];\n            local_3d0.__0[1] = DAT_003033c4[1];\n            local_3d0.__0[2] = DAT_003033c4[2];\n            local_3d0.__0[3] = DAT_003033c4[3];\n          }\n          else if (local_3e5 == Attention) {\n            local_3d0.__0[0] = DAT_0030387c[0];\n            local_3d0.__0[1] = DAT_0030387c[1];\n            local_3d0.__0[2] = DAT_0030387c[2];\n            local_3d0.__0[3] = DAT_0030387c[3];\n          }\n          else {\n            local_3d0 = ecolor::color32::Color32::from_rgb(0xff,0xf4,0xe6);\n            local_1dc = local_3d0.__0;\n          }\n                    /* Unresolved local var: Color32 glow@[???] */\n          if (((self->store).reduced_motion & 1U) == 0) {\n            fVar2 = std::f64::sin((f64)((double)local_400 * DAT_00301718));\n            local_3cc = (float)(double)fVar2 * DAT_0030344c + DAT_0030344c;\n          }\n          else {\n            local_3cc = 0.0;\n          }\n                    /* Unresolved local var: f32 pulse@[???] */\n          local_3c8 = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,7);\n          local_3c4 = extraout_EDX_03;\n          while( true ) {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n            local_3c0 = (*(code *)PTR_next<i32>_01a66a50)(&local_3c8);\n            local_3bc = extraout_EDX_04;\n            if ((local_3c0 & 1) == 0) break;\n                    /* Unresolved local var: i32 i@[???] */\n            local_154 = (float)fVar6 * ((float)extraout_EDX_04 * DAT_00303400 + DAT_00303450);\n                    /* Unresolved local var: f32 rr@[???] */\n            fVar10 = local_3cc * DAT_00303268 + DAT_003031ac;\n            fVar9 = 0.0;\n            if (0.0 <= fVar10) {\n              fVar9 = fVar10;\n            }\n            fVar10 = DAT_00303754;\n            if (fVar9 <= DAT_00303754) {\n              fVar10 = fVar9;\n            }\n            local_158 = extraout_EDX_04;\n            local_14d = (u8)(int)fVar10;\n                    /* Unresolved local var: u8 a@[???] */\n            r = ecolor::color32::Color32::r(&local_3d0);\n            g = ecolor::color32::Color32::g(&local_3d0);\n            b = ecolor::color32::Color32::b(&local_3d0);\n            local_3b8 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                           (r,g,b,(u8)(int)fVar10);\n            center_01.y = 0.0;\n            center_01.x = (f32)local_3b8;\n            local_14c = local_3b8;\n            local_148 = local_3b8;\n            egui::painter::Painter::circle_filled<ecolor::color32::Color32>\n                      (&local_498,center_01,(f32)fVar12,fill_color_02);\n          }\n          local_3b4 = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,9);\n          local_3b0 = extraout_EDX_05;\n          while( true ) {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n            local_3ac = (*(code *)PTR_next<i32>_01a66a50)(&local_3b4);\n            local_3a8 = extraout_EDX_06;\n            if ((local_3ac & 1) == 0) break;\n                    /* Unresolved local var: i32 i@[???] */\n            local_164 = (float)extraout_EDX_06 / DAT_003035ec;\n            local_168 = extraout_EDX_06;\n                    /* Unresolved local var: f32 f@[???] */\n            local_3a4 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                           (0xff,0xfb,0xf5,0x1a);\n            center_00.y = 0.0;\n            center_00.x = (f32)local_3a4;\n            local_160 = local_3a4;\n            local_15c = local_3a4;\n            egui::painter::Painter::circle_filled<ecolor::color32::Color32>\n                      (&local_498,center_00,(f32)fVar12,fill_color_00);\n          }\n          local_394 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                         (0xbe,0xaf,0xa0,0x78);\n          local_1d8 = local_394;\n          local_1d4 = local_394;\n          auVar15 = (*(code *)PTR_new<f32,_ecolor::color32::Color32>_01a66840)\n                              (DAT_003031a8,local_394);\n          local_3a0 = auVar15._0_8_;\n          local_1d0 = local_3a0;\n          local_1c8 = local_3a0;\n          egui::painter::Painter::circle_stroke<epaint::stroke::Stroke>\n                    (&local_498,local_3a0,(f32)fVar12,auVar15._8_8_);\n          if (local_3e5 == Processing) {\n            local_390 = DAT_00301bb0;\n          }\n          else if (local_3e5 == Executing) {\n            local_390 = DAT_00301d68;\n          }\n          else {\n            local_390 = DAT_003012f0;\n          }\n                    /* Unresolved local var: f64 speed@[???] */\n          dVar3 = (double)local_400 * local_390;\n          local_1bc = (float)dVar3;\n                    /* Unresolved local var: f32 phase@[???] */\n          local_384 = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,6);\n          local_380 = extraout_EDX_07;\n          while( true ) {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n            local_37c = (*(code *)PTR_next<i32>_01a66a50)(&local_384);\n            local_378 = extraout_EDX_08;\n            if ((local_37c & 1) == 0) break;\n                    /* Unresolved local var: i32 k@[???] */\n            fVar9 = ((float)extraout_EDX_08 - DAT_0030320c) * (float)fVar6 * DAT_0030382c;\n                    /* Unresolved local var: f32 off@[???] */\n            local_1a0 = extraout_EDX_08;\n            local_19c = fVar9;\n            if (((self->store).reduced_motion & 1U) == 0) {\n              fVar2 = std::f64::sin((f64)((double)local_400 * _s__00301998 + (double)extraout_EDX_08\n                                         ));\n              local_374 = (float)(double)fVar2 * (float)fVar6 * DAT_00303870;\n            }\n            else {\n              local_374 = 0.0;\n            }\n                    /* Unresolved local var: f32 wob@[???] */\n            (*(code *)PTR_new<emath::pos2::Pos2>_01a66a80)(&local_370);\n                    /* Unresolved local var: Vec<emath::pos2::Pos2,_alloc::alloc::Global> pts@[???]\n                        */\n            local_23a = 1;\n            (*(code *)PTR_new<i32>_01a66a88)(local_348,0,0x30);\n            (*(code *)PTR_into_iter<core::ops::range::RangeInclusive<i32>>_01a66a90)(&local_354);\n            local_33c = local_354;\n            local_334 = local_34c;\n            while( true ) {\n                    /* Unresolved local var: RangeInclusive<i32> iter@[???] */\n              local_330 = (*(code *)PTR_next<i32>_01a66a98)(&local_33c);\n              local_32c = extraout_EDX_09;\n              if ((local_330 & 1) == 0) break;\n                    /* Unresolved local var: i32 s@[???] */\n              fVar14 = (float)extraout_EDX_09 / DAT_00303324;\n                    /* Unresolved local var: f32 f@[???] */\n              fVar11 = (fVar12 - (float)fVar6) + ((float)fVar6 + (float)fVar6) * fVar14;\n                    /* Unresolved local var: f32 x@[???] */\n              local_174 = (fVar11 - fVar12) / (float)fVar6;\n                    /* Unresolved local var: f32 dx@[???] */\n              local_180 = extraout_EDX_09;\n              local_17c = fVar14;\n              local_178 = fVar11;\n              fVar7 = core::f32::max((f32)(DAT_003031a8 - local_174 * local_174),0.0);\n              fVar7 = std::f32::sqrt(fVar7);\n                    /* Unresolved local var: f32 half@[???] */\n              fVar10 = fVar13 + fVar9 + local_374;\n              local_170 = (float)fVar7 * (float)fVar6;\n              fVar8 = std::f32::sin((f32)(fVar14 * DAT_00303874 + fVar14 * DAT_00303874 +\n                                          (float)dVar3 + (float)extraout_EDX_08));\n              fVar10 = fVar10 + (float)fVar8 * (float)fVar6 * DAT_003035f0;\n                    /* Unresolved local var: f32 y@[???] */\n              local_16c = fVar10;\n              fVar8 = core::f32::abs((f32)(fVar10 - fVar13));\n              if ((float)fVar8 <= (float)fVar7 * (float)fVar6) {\n                local_78 = fVar11;\n                local_74 = fVar10;\n                (*(code *)PTR_push<emath::pos2::Pos2,_alloc::alloc::Global>_01a66ac0)\n                          (fVar11,fVar10,&local_370);\n              }\n            }\n            uVar5 = (*(code *)PTR_len<emath::pos2::Pos2,_alloc::alloc::Global>_01a66aa0)(&local_370)\n            ;\n            if (2 < uVar5) {\n              local_23a = 0;\n              local_239 = 1;\n              local_2c8 = local_360;\n              local_2d8 = local_370;\n              uStack_2d0 = uStack_368;\n              local_2b8 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                             (0xb0,0xa0,0x92,0x78);\n              local_198 = local_2b8;\n              local_194 = local_2b8;\n              local_2c0 = (*(code *)PTR_new<f32,_ecolor::color32::Color32>_01a66840)\n                                    (DAT_00303370,local_2b8);\n              local_239 = 0;\n              local_190 = local_2c0;\n              local_188 = local_2c0;\n              (*(code *)PTR_line<epaint::stroke::Stroke>_01a66aa8)(local_328,&local_2d8,local_2c0);\n              local_239 = 0;\n              (*(code *)PTR_add<epaint::shape::Shape>_01a66ab0)(&local_498);\n            }\n            if ((local_23a & 1) != 0) {\n              (*(code *)\n                PTR_drop_glue<alloc::vec::Vec<emath::pos2::Pos2,_alloc::alloc::Global>>_01a66ab8)\n                        (&local_370);\n            }\n            local_23a = 0;\n          }\n          fVar9 = fVar12 + (float)fVar6 * DAT_003032e0;\n          local_5c = fVar13 + (float)fVar6 * DAT_00303944;\n          local_60 = fVar9;\n          local_2b4 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                         (0xff,0xff,0xfc,0x2e);\n          center.y = 0.0;\n          center.x = (f32)local_2b4;\n          local_1b8 = local_2b4;\n          local_1b4 = local_2b4;\n          egui::painter::Painter::circle_filled<ecolor::color32::Color32>\n                    (&local_498,center,(f32)fVar9,fill_color_01);\n          fVar9 = fVar13 + (float)fVar6 + DAT_003037dc;\n          local_68 = fVar12;\n          local_64 = fVar9;\n          _Var16 = SphereState::words(&local_3e5);\n          epaint::text::fonts::FontId::proportional(&local_2a0,(f32)DAT_003039d0);\n          local_1ae = 0x101;\n          local_1ac = 0xff6d7177;\n          (*(code *)PTR_text<&str>_01a66a78)\n                    (fVar12,fVar9,local_2b0,&local_498,0x101,_Var16.data_ptr,_Var16.length,\n                     &local_2a0,0xff6d7177);\n          fVar9 = fVar13 + (float)fVar6 + DAT_003036f8;\n          if ((self->server_online & 1U) == 0) {\n            local_270 = &DAT_0030444e;\n            local_268 = 0x2a;\n          }\n          else {\n            local_270 = &DAT_00304478;\n            local_268 = 0x15;\n          }\n          local_70 = fVar12;\n          local_6c = fVar9;\n          epaint::text::fonts::FontId::proportional(&local_260,DAT_003039cc);\n          local_1a6 = 0x101;\n          local_1a4 = 0xff6d7177;\n          (*(code *)PTR_text<&str>_01a66a78)\n                    (fVar12,fVar9,local_280,&local_498,0x101,local_270,local_268,&local_260,\n                     0xff6d7177);\n          (*(code *)PTR_drop_glue<egui::painter::Painter>_01a66a48)(&local_498);\n          return;\n        }\n                    /* Unresolved local var: u8 i@[???] */\n        local_130 = fVar9 + DAT_00303268 + (float)extraout_DL_00 * DAT_003039d0;\n                    /* Unresolved local var: f32 y@[???] */\n        bVar4 = (byte)((ushort)extraout_DL_00 * 5);\n        local_131 = extraout_DL_00;\n        if ((char)((ushort)((ushort)extraout_DL_00 * 5) >> 8) != '\\0') break;\n        local_9a = 0x2e;\n        local_129 = 0x2e - bVar4;\n        if (0x2e < bVar4) {\n          local_129 = 0;\n        }\n        local_28 = &local_4a8;\n                    /* Unresolved local var: u8 a@[???] */\n        local_420 = local_4a8 + DAT_00303454;\n        local_10 = &local_4a8;\n        local_418 = fStack_4a0 + DAT_00303374;\n        local_41c = local_130;\n        local_414 = local_130;\n        local_99 = bVar4;\n        local_88 = local_418;\n        local_84 = local_130;\n        local_80 = local_420;\n        local_7c = local_130;\n        local_404 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                       (0xbe,0xaf,0xa0,local_129);\n        local_128 = local_404;\n        local_124 = local_404;\n        local_410 = (*(code *)PTR_new<f32,_ecolor::color32::Color32>_01a66840)\n                              (DAT_003031a8,local_404);\n        local_120 = local_410;\n        local_118 = local_410;\n        (*(code *)PTR_line_segment<epaint::stroke::Stroke>_01a66ad0)\n                  (&local_498,&local_420,local_410);\n      }\n      (*(code *)PTR_panic_const_mul_overflow_01a66ac8)(&PTR_s_src_main_rs_019db3c0);\nLAB_008c9009:\n                    /* WARNING: Does not return */\n      pcVar1 = (code *)invalidInstructionException();\n      (*pcVar1)();\n    }\n                    /* Unresolved local var: i32 i@[???] */\n    local_10c = (float)extraout_EDX_00 / DAT_003033c0;\n    local_38 = &local_4a8;\n    local_c0 = &local_4a8;\n    fVar9 = fStack_4a4 + (fStack_49c - fStack_4a4) * local_10c;\n    local_40 = &local_4a8;\n                    /* Unresolved local var: f32 y0@[???] */\n    local_c8 = &local_4a8;\n    local_110 = extraout_EDX_00;\n    local_108 = fVar9;\n                    /* Unresolved local var: f32 t0@[???] */\n    if (SCARRY4(extraout_EDX_00,1)) {\n      (*(code *)PTR_panic_const_add_overflow_01a66890)(&PTR_s_src_main_rs_019db3d8);\n      goto LAB_008c9009;\n    }\n    fVar10 = fStack_4a4 + (fStack_49c - fStack_4a4) * ((float)(extraout_EDX_00 + 1) / DAT_003033c0);\n                    /* Unresolved local var: f32 y1@[???] */\n    fVar11 = local_10c * DAT_003037e0 + DAT_00303908;\n    fVar12 = 0.0;\n    fVar13 = fVar12;\n    if (0.0 <= fVar11) {\n      fVar13 = fVar11;\n    }\n    fVar11 = DAT_00303754;\n    if (fVar13 <= DAT_00303754) {\n      fVar11 = fVar13;\n    }\n    fVar14 = local_10c * DAT_0030354c + DAT_003036c0;\n    fVar13 = fVar12;\n    if (0.0 <= fVar14) {\n      fVar13 = fVar14;\n    }\n    fVar14 = DAT_00303754;\n    if (fVar13 <= DAT_00303754) {\n      fVar14 = fVar13;\n    }\n    fVar13 = local_10c * DAT_003036c4 + DAT_003032e4;\n    if (0.0 <= fVar13) {\n      fVar12 = fVar13;\n    }\n    fVar13 = DAT_00303754;\n    if (fVar12 <= DAT_00303754) {\n      fVar13 = fVar12;\n    }\n    local_104 = fVar10;\n    local_44c = (u8  [4])ecolor::color32::Color32::from_rgb\n                                   ((u8)(int)fVar11,(u8)(int)fVar14,(u8)(int)fVar13);\n    local_30 = &local_4a8;\n                    /* Unresolved local var: Color32 c@[???] */\n    local_90 = local_4a8;\n    local_18 = &local_4a8;\n    local_43c = fVar10 + DAT_003031a8;\n    local_98 = fStack_4a0;\n    local_f8 = local_4a8;\n    local_f0 = fStack_4a0;\n    local_448 = local_4a8;\n    local_440 = fStack_4a0;\n    local_444 = fVar9;\n    local_100 = local_44c;\n    local_fc = local_44c;\n    local_f4 = fVar9;\n    local_ec = local_43c;\n    local_94 = local_43c;\n    local_8c = fVar9;\n    (*(code *)PTR_rect_filled<f32,_ecolor::color32::Color32>_01a66a58)\n              (0,&local_498,&local_448,local_44c);\n  } while( true );\n}\n\n",
+        "signature": "void __rustcall loom_frontend::LoomApp::paint_scene(LoomApp *self,Ui *ui);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for paint_scene from the Deep engine (686 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_ff6e98b347da631f5d9db53825428f598a5d5f8e7cd7347bbf4f651f1f3a4cc7",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7ce9e0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7ce9e0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8ce9e0",
+        "entry": "0x7ce9e0",
+        "function": "update",
+        "pseudo_code": "\n/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */\n/* DWARF original prototype: void update(LoomApp * self, Context * ctx, Frame * _frame) */\n\nvoid __rustcall loom_frontend::update(LoomApp *self,Context *ctx,Frame *_frame)\n\n{\n  undefined **in_RCX;\n  LoomApp *pLVar1;\n  undefined8 uVar2;\n  Duration DVar3;\n  _str id;\n  _str id_00;\n  _str id_01;\n  Margin inner_margin;\n  Margin inner_margin_00;\n  Margin inner_margin_01;\n  RangeInclusive<f32> width_range;\n  RangeInclusive<f32> width_range_00;\n  InnerResponse<()> local_b78;\n  TopBottomPanel local_b10;\n  TopBottomPanel local_aa0;\n  Frame local_a30;\n  Frame local_9e0;\n  Frame local_990;\n  undefined1 local_940 [16];\n  InnerResponse<()> local_930;\n  SidePanel local_8c8;\n  SidePanel local_858;\n  SidePanel local_7e8;\n  SidePanel local_778;\n  SidePanel local_708;\n  undefined1 local_698 [12];\n  Frame local_68c;\n  Frame local_63c;\n  Frame local_5ec;\n  u8 local_59c [4];\n  undefined1 local_598 [16];\n  InnerResponse<()> local_588;\n  SidePanel local_520;\n  SidePanel local_4b0;\n  SidePanel local_440;\n  SidePanel local_3d0;\n  SidePanel local_360;\n  undefined1 local_2f0 [12];\n  Frame local_2e4;\n  Frame local_294;\n  Frame local_244;\n  u8 local_1f4 [4];\n  undefined1 local_1f0 [16];\n  InnerResponse<()> local_1e0;\n  CentralPanel local_178;\n  CentralPanel local_124;\n  Frame local_d0;\n  Frame local_80;\n  LoomApp *local_30;\n  Context *local_28;\n  Frame *local_20;\n  u8 local_18 [4];\n  u8 local_14 [4];\n  u8 local_10 [4];\n  u8 local_c [4];\n  u8 local_8 [4];\n  u8 local_4 [4];\n  \n  local_30 = self;\n  local_28 = ctx;\n  local_20 = _frame;\n  LoomApp::poll_network(self);\n  if ((self->busy != 0) || (((self->store).reduced_motion & 1U) == 0)) {\n    DVar3 = core::time::Duration::from_millis(0x78);\n    in_RCX = &PTR_s_src_main_rs_019db618;\n    (*(code *)PTR_request_repaint_after_01a66b68)(ctx,DVar3.secs,DVar3._8_8_);\n  }\n  id.length = 3;\n  id.data_ptr = (u8 *)\"top\";\n  egui::containers::panel::TopBottomPanel::top<&str>(&local_aa0,id);\n  (*(code *)PTR_none_01a66b70)(&local_990);\n  local_18[0] = DAT_003032a0.__0[0];\n  local_18[1] = DAT_003032a0.__0[1];\n  local_18[2] = DAT_003032a0.__0[2];\n  local_18[3] = DAT_003032a0.__0[3];\n  egui::containers::frame::Frame::fill(&local_9e0,&local_990,DAT_003032a0);\n  epaint::margin::Margin::symmetric(DAT_003030ec,DAT_003031ac);\n  inner_margin._8_8_ = in_RCX;\n  inner_margin._0_8_ = local_940;\n  egui::containers::frame::Frame::inner_margin<epaint::margin::Margin>\n            (&local_a30,&local_9e0,inner_margin);\n  egui::containers::panel::TopBottomPanel::frame(&local_b10,&local_aa0,&local_a30);\n  pLVar1 = self;\n  egui::containers::panel::TopBottomPanel::\n  show<(),_loom_frontend::_impl_3_::update::_closure_env_0_>\n            (&local_b78,&local_b10,ctx,(_closure_env_0_)self);\n  (*(code *)PTR_drop_glue<egui::response::InnerResponse<()>>_01a66b10)(&local_b78);\n  id_00.length = 4;\n  id_00.data_ptr = &DAT_0030367c;\n  egui::containers::panel::SidePanel::left<&str>(&local_708,id_00);\n  egui::containers::panel::SidePanel::resizable(&local_778,&local_708,true);\n  egui::containers::panel::SidePanel::default_width(&local_7e8,&local_778,_s__00303620);\n  (*(code *)PTR_new<f32>_01a66b78)(_DAT_003032e8,DAT_003031b0,local_698);\n  width_range._8_4_ = SUB84(pLVar1,0);\n  width_range._0_8_ = local_698;\n  egui::containers::panel::SidePanel::width_range<core::ops::range::RangeInclusive<f32>>\n            (&local_858,&local_7e8,width_range);\n  (*(code *)PTR_none_01a66b70)(&local_5ec);\n  uVar2 = 0xeb;\n  local_59c = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied(0xf5,0xf0,0xeb,0xeb);\n  local_14 = local_59c;\n  local_10 = local_59c;\n  egui::containers::frame::Frame::fill(&local_63c,&local_5ec,(Color32)local_59c);\n  epaint::margin::Margin::same(DAT_003031ac);\n  inner_margin_00.top = (f32)(int)uVar2;\n  inner_margin_00.bottom = (f32)(int)((ulong)uVar2 >> 0x20);\n  inner_margin_00._0_8_ = local_598;\n  egui::containers::frame::Frame::inner_margin<epaint::margin::Margin>\n            (&local_68c,&local_63c,inner_margin_00);\n  egui::containers::panel::SidePanel::frame(&local_8c8,&local_858,&local_68c);\n  pLVar1 = self;\n  egui::containers::panel::SidePanel::show<(),_loom_frontend::_impl_3_::update::_closure_env_1_>\n            (&local_930,&local_8c8,ctx,(_closure_env_1_)self);\n  (*(code *)PTR_drop_glue<egui::response::InnerResponse<()>>_01a66b10)(&local_930);\n  id_01.length = 5;\n  id_01.data_ptr = (u8 *)\"right\";\n  egui::containers::panel::SidePanel::right<&str>(&local_360,id_01);\n  egui::containers::panel::SidePanel::resizable(&local_3d0,&local_360,true);\n  egui::containers::panel::SidePanel::default_width(&local_440,&local_3d0,DAT_00303828);\n  (*(code *)PTR_new<f32>_01a66b78)(DAT_003036fc,_DAT_0030337c,local_2f0);\n  width_range_00._8_4_ = SUB84(pLVar1,0);\n  width_range_00._0_8_ = local_2f0;\n  egui::containers::panel::SidePanel::width_range<core::ops::range::RangeInclusive<f32>>\n            (&local_4b0,&local_440,width_range_00);\n  (*(code *)PTR_none_01a66b70)(&local_244);\n  uVar2 = 0xeb;\n  local_1f4 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied(0xf5,0xf0,0xeb,0xeb);\n  local_c = local_1f4;\n  local_8 = local_1f4;\n  egui::containers::frame::Frame::fill(&local_294,&local_244,(Color32)local_1f4);\n  epaint::margin::Margin::same(DAT_003031ac);\n  inner_margin_01.top = (f32)(int)uVar2;\n  inner_margin_01.bottom = (f32)(int)((ulong)uVar2 >> 0x20);\n  inner_margin_01._0_8_ = local_1f0;\n  egui::containers::frame::Frame::inner_margin<epaint::margin::Margin>\n            (&local_2e4,&local_294,inner_margin_01);\n  egui::containers::panel::SidePanel::frame(&local_520,&local_4b0,&local_2e4);\n  egui::containers::panel::SidePanel::show<(),_loom_frontend::_impl_3_::update::_closure_env_2_>\n            (&local_588,&local_520,ctx,(_closure_env_2_)self);\n  (*(code *)PTR_drop_glue<egui::response::InnerResponse<()>>_01a66b10)(&local_588);\n  egui::containers::panel::default(&local_124);\n  (*(code *)PTR_none_01a66b70)(&local_80);\n  local_4[0] = DAT_003032a0.__0[0];\n  local_4[1] = DAT_003032a0.__0[1];\n  local_4[2] = DAT_003032a0.__0[2];\n  local_4[3] = DAT_003032a0.__0[3];\n  egui::containers::frame::Frame::fill(&local_d0,&local_80,DAT_003032a0);\n  egui::containers::panel::CentralPanel::frame(&local_178,&local_124,&local_d0);\n  egui::containers::panel::CentralPanel::show<(),_loom_frontend::_impl_3_::update::_closure_env_3_>\n            (&local_1e0,&local_178,ctx,(_closure_env_3_)self);\n  (*(code *)PTR_drop_glue<egui::response::InnerResponse<()>>_01a66b10)(&local_1e0);\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::update(LoomApp *self,Context *ctx,Frame *_frame);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for update from the Deep engine (161 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_cb137b963cfca2d10fb31436cf0efdb67acb0ed9d794cd7ce4e27831ff1496c0",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7e49c0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7e49c0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8e49c0",
+        "entry": "0x7e49c0",
+        "function": "{closure#1}",
+        "pseudo_code": "\n/* DWARF original prototype: void {closure#1}(Ui * ui) */\n\nvoid __rustcall loom_frontend::experiment_mode::{closure#0}::_closure_1_(Ui *ui)\n\n{\n  Option<&mut_loom_frontend::WorkItem> OVar1;\n  u64 uVar2;\n  undefined8 in_RSI;\n  _mut__loom_frontend__WorkItem_ _Var3;\n  Response local_340;\n  undefined8 local_2d8;\n  undefined8 local_2d0;\n  undefined8 local_2c8;\n  Response local_2c0;\n  undefined8 local_258;\n  undefined8 local_250;\n  undefined8 local_248;\n  Response local_240;\n  undefined8 local_1d8;\n  undefined8 local_1d0;\n  undefined8 local_1c8;\n  Option<&mut_loom_frontend::WorkItem> local_1c0;\n  undefined1 local_1b8 [24];\n  Response local_1a0;\n  undefined8 local_138;\n  undefined8 local_130;\n  undefined8 local_128;\n  Option<&mut_loom_frontend::WorkItem> local_120;\n  undefined1 local_118 [24];\n  Response local_100;\n  String local_98;\n  Ui *local_80;\n  Option<&mut_loom_frontend::WorkItem> local_60;\n  Option<&mut_loom_frontend::WorkItem> local_58;\n  bool local_49;\n  Response *local_48;\n  bool local_39;\n  Response *local_38;\n  bool local_29;\n  Response *local_28;\n  bool local_19;\n  Response *local_18;\n  bool local_9;\n  Response *local_8;\n  \n                    /* Unresolved local var: LoomApp self@[???] */\n  local_80 = ui;\n  if (ui[1].placer.region.max_rect.min == (Pos2)0x0) {\n    (*(code *)PTR_button<&str>_01a66d70)(&local_340,in_RSI,&DAT_00305209,0x1f);\n    local_8 = &local_340;\n    if ((local_340.fake_primary_click & 1U) == 0) {\n      local_9 = egui::response::Response::clicked_by(&local_340,Primary);\n    }\n    else {\n      local_9 = true;\n    }\n    if (local_9 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_340);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_340);\n      ui[1].placer.region.max_rect.min.x = 1.4013e-45;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_2d8,&DAT_00305228,0x42,&PTR_s_src_main_rs_019dbd30);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(undefined8 *)&ui[1].placer.grid.field_0x90 = local_2d8;\n      *(undefined8 *)&ui[1].placer.grid.field_0x98 = local_2d0;\n      *(undefined8 *)&ui[1].placer.grid.field_0xa0 = local_2c8;\n    }\n  }\n  if (ui[1].placer.region.max_rect.min == (Pos2)0x1) {\n    (*(code *)PTR_button<&str>_01a66d70)(&local_2c0,in_RSI,&DAT_0030526a,0x12);\n    local_18 = &local_2c0;\n    if ((local_2c0.fake_primary_click & 1U) == 0) {\n      local_19 = egui::response::Response::clicked_by(&local_2c0,Primary);\n    }\n    else {\n      local_19 = true;\n    }\n    if (local_19 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_2c0);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_2c0);\n      ui[1].placer.region.max_rect.min.x = 2.8026e-45;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_258,&DAT_0030527c,0x44,&PTR_s_src_main_rs_019dbd48);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(undefined8 *)&ui[1].placer.grid.field_0x90 = local_258;\n      *(undefined8 *)&ui[1].placer.grid.field_0x98 = local_250;\n      *(undefined8 *)&ui[1].placer.grid.field_0xa0 = local_248;\n    }\n  }\n  if (ui[1].placer.region.max_rect.min == (Pos2)0x2) {\n    (*(code *)PTR_button<&str>_01a66d70)(&local_240,in_RSI,&DAT_003052c0,0x1d);\n    local_28 = &local_240;\n    if ((local_240.fake_primary_click & 1U) == 0) {\n      local_29 = egui::response::Response::clicked_by(&local_240,Primary);\n    }\n    else {\n      local_29 = true;\n    }\n    if (local_29 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_240);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_240);\n      ui[1].placer.region.max_rect.min.x = 4.2039e-45;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)(&local_1d8,&DAT_003052dd,0x7d);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(undefined8 *)&ui[1].placer.grid.field_0x90 = local_1d8;\n      *(undefined8 *)&ui[1].placer.grid.field_0x98 = local_1d0;\n      *(undefined8 *)&ui[1].placer.grid.field_0xa0 = local_1c8;\n                    /* Unresolved local var: WorkItem * w@[???] */\n      _Var3 = ::alloc::vec::deref_mut<loom_frontend::WorkItem,_alloc::alloc::Global>\n                        ((Vec<loom_frontend::WorkItem,_alloc::alloc::Global> *)\n                         &(ui->placer).grid.field_0x20);\n      OVar1 = core::slice::get_mut<loom_frontend::WorkItem,_usize>\n                        (_Var3,*(usize *)&(ui->placer).grid.field_0xc8);\n      local_1c0 = OVar1;\n      if (OVar1 != (Option<&mut_loom_frontend::WorkItem>)0x0) {\n        local_60 = OVar1;\n        (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                  (local_1b8,&DAT_0030535a,0x3c,&PTR_s_src_main_rs_019dbd78);\n        (*(code *)PTR_push<alloc::string::String,_alloc::alloc::Global>_01a66478)\n                  ((long)OVar1 + 0x60,local_1b8);\n        uVar2 = now_secs();\n        *(u64 *)((long)OVar1 + 0x98) = uVar2;\n      }\n      LoomApp::persist((LoomApp *)ui);\n    }\n    (*(code *)PTR_button<&str>_01a66d70)(&local_1a0,in_RSI,&DAT_00305396,0x1d);\n    local_38 = &local_1a0;\n    if ((local_1a0.fake_primary_click & 1U) == 0) {\n      local_39 = egui::response::Response::clicked_by(&local_1a0,Primary);\n    }\n    else {\n      local_39 = true;\n    }\n    if (local_39 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_1a0);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_1a0);\n      ui[1].placer.region.max_rect.min.x = 4.2039e-45;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)(&local_138,&DAT_003053b3,0x7d);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(undefined8 *)&ui[1].placer.grid.field_0x90 = local_138;\n      *(undefined8 *)&ui[1].placer.grid.field_0x98 = local_130;\n      *(undefined8 *)&ui[1].placer.grid.field_0xa0 = local_128;\n                    /* Unresolved local var: WorkItem * w@[???] */\n      _Var3 = ::alloc::vec::deref_mut<loom_frontend::WorkItem,_alloc::alloc::Global>\n                        ((Vec<loom_frontend::WorkItem,_alloc::alloc::Global> *)\n                         &(ui->placer).grid.field_0x20);\n      OVar1 = core::slice::get_mut<loom_frontend::WorkItem,_usize>\n                        (_Var3,*(usize *)&(ui->placer).grid.field_0xc8);\n      local_120 = OVar1;\n      if (OVar1 != (Option<&mut_loom_frontend::WorkItem>)0x0) {\n        local_58 = OVar1;\n        (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                  (local_118,&DAT_00305430,0x3c,&PTR_s_src_main_rs_019dbda8);\n        (*(code *)PTR_push<alloc::string::String,_alloc::alloc::Global>_01a66478)\n                  ((long)OVar1 + 0x60,local_118);\n        uVar2 = now_secs();\n        *(u64 *)((long)OVar1 + 0x98) = uVar2;\n      }\n      LoomApp::persist((LoomApp *)ui);\n    }\n  }\n  if (ui[1].placer.region.max_rect.min == (Pos2)0x3) {\n    (*(code *)PTR_button<&str>_01a66d70)(&local_100,in_RSI,&DAT_0030546c,0xb);\n    local_48 = &local_100;\n    if ((local_100.fake_primary_click & 1U) == 0) {\n      local_49 = egui::response::Response::clicked_by(&local_100,Primary);\n    }\n    else {\n      local_49 = true;\n    }\n    if (local_49 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_100);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_100);\n      ui[1].placer.region.max_rect.min.x = 0.0;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      ::alloc::string::String::new(&local_98);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(usize *)&ui[1].placer.grid.field_0x90 = local_98.vec.buf.inner.cap.__0;\n      *(NonNull<u8> *)&ui[1].placer.grid.field_0x98 = local_98.vec.buf.inner.ptr.pointer.pointer;\n      *(usize *)&ui[1].placer.grid.field_0xa0 = local_98.vec.len;\n    }\n  }\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::experiment_mode::{closure#0}::{closure#1}(Ui *ui);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for {closure#1} from the Deep engine (200 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_1a59480b4d7e7cede44df5ca938553ba72580830865f66e6c7d67522ce1afd9f",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7eb8d0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7eb8d0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8eb8d0",
+        "entry": "0x7eb8d0",
+        "function": "{closure#0}",
+        "pseudo_code": "\n/* DWARF original prototype: void {closure#0}(Ui * ui) */\n\nvoid __rustcall loom_frontend::experiment_mode::_closure_0_(Ui *ui)\n\n{\n  undefined *puVar1;\n  undefined *puVar2;\n  undefined *puVar3;\n  bool bVar4;\n  Ui *in_RSI;\n  f32 fVar5;\n  undefined1 auVar6 [16];\n  Arguments args;\n  _str hint_text;\n  undefined1 local_16b0 [104];\n  RichText local_1648;\n  RichText local_15d8;\n  RichText local_1568;\n  RichText local_14f8;\n  FontId local_1488;\n  undefined1 local_1468 [104];\n  undefined1 local_1400 [112];\n  RichText local_1390;\n  RichText local_1320;\n  undefined4 local_12b0;\n  undefined4 uStack_12ac;\n  undefined4 uStack_12a8;\n  undefined4 uStack_12a4;\n  undefined8 local_12a0;\n  undefined1 local_1298 [102];\n  byte local_1232;\n  TextEdit local_1230;\n  TextEdit local_1108;\n  TextEdit local_fe0;\n  undefined4 local_eb8;\n  undefined4 uStack_eb4;\n  undefined4 uStack_eb0;\n  undefined4 uStack_eac;\n  undefined8 local_ea8;\n  undefined1 local_ea0 [104];\n  undefined *local_e38;\n  undefined8 local_e30;\n  undefined *local_e28;\n  undefined8 local_e20;\n  undefined *local_e18;\n  undefined8 local_e10;\n  undefined8 local_e08;\n  undefined8 local_e00;\n  undefined8 local_df8;\n  undefined1 local_df0 [24];\n  undefined8 local_dd8;\n  undefined8 local_dd0;\n  undefined8 local_dc8;\n  undefined1 local_dc0 [16];\n  long local_db0;\n  undefined1 local_da8 [104];\n  undefined1 local_d40 [112];\n  RichText local_cd0;\n  RichText local_c60;\n  usize local_bf0;\n  NonNull<u8> local_be8;\n  usize local_be0;\n  String local_bd8;\n  undefined **local_bc0;\n  long *local_bb8;\n  undefined **local_bb0;\n  undefined *local_ba8;\n  undefined8 local_ba0;\n  undefined *local_b98;\n  undefined8 local_b90;\n  Argument local_b88;\n  ArgumentType local_b78;\n  ArgumentType local_b68;\n  ArgumentType local_b58;\n  ArgumentType local_b48;\n  ArgumentType local_b38;\n  InnerResponse<()> local_b28;\n  undefined1 local_ac0 [104];\n  undefined1 local_a58 [112];\n  RichText local_9e8;\n  RichText local_978;\n  undefined4 local_908;\n  undefined4 uStack_904;\n  undefined4 uStack_900;\n  undefined4 uStack_8fc;\n  undefined8 local_8f8;\n  undefined1 local_8f0 [102];\n  byte local_88a;\n  TextEdit local_888;\n  TextEdit local_760;\n  TextEdit local_638;\n  TextEdit local_510;\n  undefined4 local_3e8;\n  undefined4 uStack_3e4;\n  undefined4 uStack_3e0;\n  undefined4 uStack_3dc;\n  undefined8 local_3d8;\n  undefined1 local_3d0 [104];\n  undefined1 local_368 [112];\n  RichText local_2f8;\n  RichText local_288;\n  undefined1 local_218 [104];\n  undefined1 local_1b0 [112];\n  RichText local_140;\n  RichText local_d0;\n  byte local_5d;\n  byte local_5c;\n  undefined1 local_5b;\n  undefined1 local_5a;\n  undefined1 local_59;\n  Ui *local_58;\n  undefined4 local_34;\n  undefined4 local_30;\n  undefined4 local_2c;\n  undefined4 local_28;\n  undefined4 local_24;\n  Pos2 local_20;\n  undefined1 local_15;\n  undefined4 local_14;\n  undefined1 *local_10;\n  undefined1 *local_8;\n  \n                    /* Unresolved local var: LoomApp self@[???] */\n  local_1108.char_limit = 0;\n  local_59 = 0;\n  local_5c = 0;\n  local_5a = 0;\n  local_5d = 0;\n  local_5b = 0;\n  local_58 = ui;\n  (*(code *)PTR_available_width_01a66db8)();\n  (*(code *)PTR_set_width_01a66d78)(in_RSI);\n  local_59 = 1;\n  (*(code *)PTR_new<&str>_01a66af8)(&local_14f8,&DAT_0030597a,0x28);\n  epaint::text::fonts::FontId::proportional(&local_1488,DAT_003030f0);\n  local_59 = 0;\n  egui::widget_text::RichText::font(&local_1568,&local_14f8,&local_1488);\n  puVar2 = PTR_color<ecolor::color32::Color32>_01a66b00;\n  local_59 = 0;\n  local_34 = 0xff252729;\n  (*(code *)PTR_color<ecolor::color32::Color32>_01a66b00)(&local_15d8,&local_1568,0xff252729);\n  egui::widget_text::RichText::strong(&local_1648,&local_15d8);\n  puVar3 = PTR_label<egui::widget_text::RichText>_01a66b08;\n  (*(code *)PTR_label<egui::widget_text::RichText>_01a66b08)(local_16b0,in_RSI,&local_1648);\n  puVar1 = PTR_drop_glue<egui::response::Response>_01a66340;\n  (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_16b0);\n  (*(code *)PTR_new<&str>_01a66af8)(&local_1320,&DAT_003059a2,0x1a);\n  egui::widget_text::RichText::small(&local_1390,&local_1320);\n  local_30 = 0xff6d7177;\n  (*(code *)puVar2)(local_1400,&local_1390,0xff6d7177);\n  (*(code *)puVar3)(local_1468,in_RSI,local_1400);\n  (*(code *)puVar1)(local_1468);\n  local_5c = 1;\n  (*(code *)PTR_clone_01a66a20)(&local_12b0,&(ui->placer).grid.field_0x80);\n                    /* Unresolved local var: String hyp@[???] */\n  (*(code *)PTR_multiline_01a66db0)\n            (&local_fe0,&local_12b0,\n             &<alloc::string::String_as_egui::widgets::text_edit::text_buffer::TextBuffer>___vtable_\n            );\n  egui::widgets::text_edit::builder::TextEdit::desired_rows(&local_1108,&local_fe0,2);\n  local_5a = 1;\n  fVar5 = (f32)(*(code *)PTR_available_width_01a66db8)(in_RSI);\n  local_5a = 0;\n  egui::widgets::text_edit::builder::TextEdit::desired_width(&local_1230,&local_1108,fVar5);\n  local_5a = 0;\n  (*(code *)PTR_add<egui::widgets::text_edit::builder::TextEdit>_01a66d90)\n            (local_1298,in_RSI,&local_1230);\n  local_8 = local_1298;\n  if ((local_1232 & 1) == 0) {\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_1298);\n  }\n  else {\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_1298);\n    local_5c = 0;\n    local_ea8 = local_12a0;\n    local_eb8 = local_12b0;\n    uStack_eb4 = uStack_12ac;\n    uStack_eb0 = uStack_12a8;\n    uStack_eac = uStack_12a4;\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&(ui->placer).grid.field_0x80);\n    *(undefined8 *)&(ui->placer).grid.field_0x90 = local_ea8;\n    *(ulong *)&(ui->placer).grid.field_0x80 = CONCAT44(uStack_eb4,local_eb8);\n    *(ulong *)&(ui->placer).grid.field_0x88 = CONCAT44(uStack_eac,uStack_eb0);\n    LoomApp::persist((LoomApp *)ui);\n  }\n  egui::ui::Ui::add_space(in_RSI,DAT_003035a4);\n  egui::ui::Ui::\n  horizontal<(),_loom_frontend::_impl_4_::experiment_mode::_closure_0_::_closure_env_0_>\n            (local_ea0,in_RSI);\n  (*(code *)PTR_drop_glue<egui::response::InnerResponse<()>>_01a66b10)(local_ea0);\n  egui::ui::Ui::add_space(in_RSI,DAT_003035a4);\n  local_e38 = &DAT_003059ec;\n  local_e30 = 0xf;\n  local_e28 = &DAT_003059bc;\n  local_e20 = 0x1e;\n  local_e18 = &DAT_003059da;\n  local_e10 = 0x12;\n                    /* Unresolved local var: &str[3] steps@[???] */\n  auVar6 = (*(code *)PTR_iter<&str>_01a66900)(&local_e38,3);\n  (*(code *)PTR_enumerate<core::slice::iter::Iter<&str>>_01a66ed8)\n            (local_df0,auVar6._0_8_,auVar6._8_8_);\n  (*(code *)\n    PTR_into_iter<core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<&str>>>_01a66ee0\n  )(&local_e08,local_df0);\n  local_dd8 = local_e08;\n  local_dd0 = local_e00;\n  local_dc8 = local_df8;\n  while( true ) {\n                    /* Unresolved local var: Enumerate<core::slice::iter::Iter<&str>> iter@[???] */\n    auVar6 = (*(code *)PTR_next<core::slice::iter::Iter<&str>>_01a66ee8)(&local_dd8);\n    local_dc0 = auVar6;\n    if (auVar6._8_8_ == 0) break;\n                    /* Unresolved local var: &str * s@[???]\n                       Unresolved local var: usize i@[???] */\n    local_15 = (ulong)auVar6._0_8_ < (ulong)ui[1].placer.region.max_rect.min;\n                    /* Unresolved local var: bool done@[???] */\n    if ((bool)local_15) {\n      local_ba8 = &DAT_00305a90;\n    }\n    else {\n      local_ba8 = &DAT_00305a8d;\n    }\n    local_ba0 = 3;\n    if ((bool)local_15) {\n      local_b98 = &DAT_00305a9a;\n      local_b90 = 0x18;\n    }\n    else {\n      local_b98 = &DAT_00305a93;\n      local_b90 = 7;\n    }\n    local_bc0 = &local_ba8;\n    local_bb8 = &local_db0;\n    local_bb0 = &local_b98;\n                    /* Unresolved local var: (&&str,_&&&str,_&&str) args@[???] */\n    local_db0 = auVar6._8_8_;\n    local_20 = auVar6._0_8_;\n    (*(code *)PTR_new_display<&str>_01a668c0)(&local_b58,local_bc0);\n    (*(code *)PTR_new_display<&&str>_01a66de0)(&local_b48,local_bb8);\n    (*(code *)PTR_new_display<&str>_01a668c0)(&local_b38,local_bb0);\n    local_b88.ty._0_8_ = local_b58._0_8_;\n    local_b88.ty._8_8_ = local_b58._8_8_;\n    local_b78._0_8_ = local_b48._0_8_;\n    local_b78._8_8_ = local_b48._8_8_;\n    local_b68._0_8_ = local_b38._0_8_;\n    local_b68._8_8_ = local_b38._8_8_;\n                    /* Unresolved local var: Argument[3] args@[???] */\n    args = core::fmt::Arguments::new<12,_3>((u8 (*) [12])&DAT_002e3d04,(Argument (*) [3])&local_b88)\n    ;\n    ::alloc::fmt::format(&local_bd8,args);\n    local_bf0 = local_bd8.vec.buf.inner.cap.__0;\n    local_be8 = local_bd8.vec.buf.inner.ptr.pointer.pointer;\n    local_be0 = local_bd8.vec.len;\n    (*(code *)PTR_new<alloc::string::String>_01a66b48)(&local_c60,&local_bf0);\n    egui::widget_text::RichText::small(&local_cd0,&local_c60);\n    local_14 = 0xff252729;\n    (*(code *)PTR_color<ecolor::color32::Color32>_01a66b00)(local_d40,&local_cd0,0xff252729);\n    (*(code *)PTR_label<egui::widget_text::RichText>_01a66b08)(local_da8,in_RSI,local_d40);\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_da8);\n  }\n  egui::ui::Ui::\n  horizontal<(),_loom_frontend::_impl_4_::experiment_mode::_closure_0_::_closure_env_1_>\n            (&local_b28,in_RSI,(_closure_env_1_)ui);\n  (*(code *)PTR_drop_glue<egui::response::InnerResponse<()>>_01a66b10)(&local_b28);\n  (*(code *)PTR_new<&str>_01a66af8)(&local_978,&DAT_003059fb,10);\n  egui::widget_text::RichText::small(&local_9e8,&local_978);\n  local_2c = 0xff6d7177;\n  (*(code *)PTR_color<ecolor::color32::Color32>_01a66b00)(local_a58,&local_9e8,0xff6d7177);\n  (*(code *)PTR_label<egui::widget_text::RichText>_01a66b08)(local_ac0,in_RSI,local_a58);\n  (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_ac0);\n  (*(code *)PTR_clone_01a66a20)(&local_908,&(ui->placer).grid.field_0x98);\n  local_5d = 1;\n                    /* Unresolved local var: String notes@[???] */\n  (*(code *)PTR_multiline_01a66db0)\n            (&local_510,&local_908,\n             &<alloc::string::String_as_egui::widgets::text_edit::text_buffer::TextBuffer>___vtable_\n            );\n  egui::widgets::text_edit::builder::TextEdit::desired_rows(&local_638,&local_510,2);\n  local_5b = 1;\n  fVar5 = (f32)(*(code *)PTR_available_width_01a66db8)(in_RSI);\n  local_5b = 0;\n  egui::widgets::text_edit::builder::TextEdit::desired_width(&local_760,&local_638,fVar5);\n  local_5b = 0;\n  hint_text.length = 0x28;\n  hint_text.data_ptr = &DAT_00305a05;\n  egui::widgets::text_edit::builder::TextEdit::hint_text<&str>(&local_888,&local_760,hint_text);\n  (*(code *)PTR_add<egui::widgets::text_edit::builder::TextEdit>_01a66d90)\n            (local_8f0,in_RSI,&local_888);\n  local_10 = local_8f0;\n  if ((local_88a & 1) == 0) {\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_8f0);\n  }\n  else {\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_8f0);\n    local_5d = 0;\n    local_3d8 = local_8f8;\n    local_3e8 = local_908;\n    uStack_3e4 = uStack_904;\n    uStack_3e0 = uStack_900;\n    uStack_3dc = uStack_8fc;\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&(ui->placer).grid.field_0x98);\n    *(undefined8 *)&(ui->placer).grid.field_0xa8 = local_3d8;\n    *(ulong *)&(ui->placer).grid.field_0x98 = CONCAT44(uStack_3e4,local_3e8);\n    *(ulong *)&(ui->placer).grid.field_0xa0 = CONCAT44(uStack_3dc,uStack_3e0);\n    LoomApp::persist((LoomApp *)ui);\n  }\n  bVar4 = ::alloc::string::String::is_empty((String *)&ui[1].placer.grid.field_0x90);\n  if (!bVar4) {\n    (*(code *)PTR_new<&alloc::string::String>_01a66b18)(&local_288,&ui[1].placer.grid.field_0x90);\n    egui::widget_text::RichText::small(&local_2f8,&local_288);\n    local_28 = 0xff6d7177;\n    (*(code *)PTR_color<ecolor::color32::Color32>_01a66b00)(local_368,&local_2f8,0xff6d7177);\n    (*(code *)PTR_label<egui::widget_text::RichText>_01a66b08)(local_3d0,in_RSI,local_368);\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_3d0);\n  }\n  (*(code *)PTR_new<&str>_01a66af8)(&local_d0,&DAT_00305a2d,0x60);\n  egui::widget_text::RichText::small(&local_140,&local_d0);\n  local_24 = 0xff5fa6d9;\n  (*(code *)PTR_color<ecolor::color32::Color32>_01a66b00)(local_1b0,&local_140,0xff5fa6d9);\n  (*(code *)PTR_label<egui::widget_text::RichText>_01a66b08)(local_218,in_RSI,local_1b0);\n  (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(local_218);\n  if ((local_5d & 1) != 0) {\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_908);\n  }\n  local_5d = 0;\n  if ((local_5c & 1) != 0) {\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_12b0);\n  }\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::experiment_mode::{closure#0}(Ui *ui);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for {closure#0} from the Deep engine (332 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_37174031028c885f1dc8eeb167a11ac645b85e7fdcb9725381a6093e37ea291c",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7c96e0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7c96e0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8c96e0",
+        "entry": "0x7c96e0",
+        "function": "poll_network",
+        "pseudo_code": "\n/* DWARF original prototype: void poll_network(LoomApp * self) */\n\nvoid __rustcall loom_frontend::LoomApp::poll_network(LoomApp *self)\n\n{\n  Result<loom_frontend::NetEvent,_std::sync::mpsc::TryRecvError> local_428;\n  undefined1 local_3f8 [935];\n  undefined1 local_51;\n  undefined1 local_50;\n  undefined1 local_4f;\n  undefined1 local_4e;\n  undefined1 local_4d;\n  undefined1 local_4c;\n  undefined1 local_4b;\n  undefined1 local_4a;\n  undefined1 local_49;\n  LoomApp *local_48;\n  \n  local_51 = 0;\n  local_50 = 0;\n  local_49 = 0;\n  local_4a = 0;\n  local_4b = 0;\n  local_4c = 0;\n  local_4d = 0;\n  local_4e = 0;\n  local_4f = 0;\n                    /* Unresolved local var: NetEvent ev@[???] */\n  local_48 = self;\n  std::sync::mpsc::Receiver<loom_frontend::NetEvent>::try_recv<loom_frontend::NetEvent>\n            (&local_428,&self->rx);\n  if (local_428._0_8_ != -1) {\n    local_4f = 1;\n    local_4e = 1;\n    local_4d = 1;\n    local_4c = 1;\n    local_4b = 1;\n    local_4a = 1;\n    local_49 = 1;\n                    /* WARNING: Subroutine does not return */\n    memcpy(local_3f8,&local_428,0x30);\n  }\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::LoomApp::poll_network(LoomApp *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for poll_network from the Deep engine (46 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_eb0629ebc4f3ddfaadcd9a3f7d537e8704f591da87180aef36773e941f9c083e",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7e28e0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7e28e0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8e28e0",
+        "entry": "0x7e28e0",
+        "function": "{closure#0}",
+        "pseudo_code": "\n/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */\n/* DWARF original prototype: void {closure#0}(Ui * ui) */\n\nvoid __rustcall loom_frontend::update::{closure#1}::{closure#0}::_closure_0_(Ui *ui)\n\n{\n  undefined1 local_c58 [144];\n  undefined *local_bc8;\n  undefined8 local_bc0;\n  undefined *local_bb8;\n  undefined8 local_bb0;\n  undefined *local_ba8;\n  undefined8 local_ba0;\n  undefined *local_b98;\n  undefined8 local_b90;\n  undefined *local_b88;\n  undefined8 local_b80;\n  undefined *local_b78;\n  undefined8 local_b70;\n  undefined *local_b68;\n  undefined8 local_b60;\n  undefined *local_b58;\n  undefined8 local_b50;\n  undefined *local_b48;\n  undefined8 local_b40;\n  Ui *local_228;\n  \n  local_228 = ui;\n                    /* Unresolved local var: LoomApp self@[???] */\n  (*(code *)PTR_set_width_01a66d78)(_DAT_00303408);\n  local_bc8 = &DAT_00303a28;\n  local_bc0 = 4;\n  local_bb8 = &DAT_0030503e;\n  local_bb0 = 3;\n  local_ba8 = &DAT_00305041;\n  local_ba0 = 0x1d;\n  local_b98 = &DAT_0030505e;\n  local_b90 = 6;\n  local_b88 = &DAT_00305064;\n  local_b80 = 3;\n  local_b78 = &DAT_00305067;\n  local_b70 = 0x17;\n  local_b68 = &DAT_00301418;\n  local_b60 = 8;\n  local_b58 = &DAT_0030507e;\n  local_b50 = 3;\n  local_b48 = &DAT_00305081;\n  local_b40 = 0x18;\n                    /* WARNING: Subroutine does not return */\n  memcpy(local_c58,&local_bc8,0x30);\n}\n\n",
+        "signature": "void __rustcall loom_frontend::update::{closure#1}::{closure#0}::{closure#0}(Ui *ui);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for {closure#0} from the Deep engine (53 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_0788047473b15fe47a15e088aa84583a3aa54f080a50baf80221dcb715132dca",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7e4690"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7e4690"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8e4690",
+        "entry": "0x7e4690",
+        "function": "{closure#0}",
+        "pseudo_code": "\n/* DWARF original prototype: void {closure#0}({closure_env#0} param_0, Ui * ui) */\n\nvoid __rustcall loom_frontend::experiment_mode::{closure#0}::_closure_0_(undefined8 param_1)\n\n{\n  IntoIter<(&str,_&str),_2> local_3a8;\n  __str___str_ local_358;\n  undefined *local_338;\n  undefined8 local_330;\n  undefined *local_328;\n  undefined8 local_320;\n  undefined *local_318;\n  undefined8 local_310;\n  undefined *local_308;\n  undefined8 local_300;\n  undefined *local_2f8;\n  undefined8 local_2f0;\n  undefined *local_2e8;\n  undefined8 local_2e0;\n  undefined1 local_2d8 [680];\n  undefined8 local_30;\n  \n  local_318 = &DAT_00305175;\n  local_310 = 0xf;\n  local_308 = &DAT_00305184;\n  local_300 = 0x3c;\n  local_2f8 = &DAT_003051c0;\n  local_2f0 = 0xf;\n  local_2e8 = &DAT_003051cf;\n  local_2e0 = 0x3a;\n  local_358.__0.data_ptr = &DAT_00305175;\n  local_358.__0.length = 0xf;\n  local_358.__1.data_ptr = &DAT_00305184;\n  local_358.__1.length = 0x3c;\n  local_338 = &DAT_003051c0;\n  local_330 = 0xf;\n  local_328 = &DAT_003051cf;\n  local_320 = 0x3a;\n  local_30 = param_1;\n  core::array::iter::into_iter<(&str,_&str),_2>(&local_3a8,(__str___str_ (*) [2])&local_358);\n                    /* WARNING: Subroutine does not return */\n  memcpy(local_2d8,&local_3a8,0x50);\n}\n\n",
+        "signature": "void __rustcall loom_frontend::experiment_mode::{closure#0}::{closure#0}(undefined8 param_1);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for {closure#0} from the Deep engine (45 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_09051bd6160bf5ad54bba2d57ed6a5d2be360c880eaf775ac8ce730508e3b718",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7bde70"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7bde70"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8bde70",
+        "entry": "0x7bde70",
+        "function": "store_path",
+        "pseudo_code": "\n/* DWARF original prototype: PathBuf store_path(void) */\n\nPathBuf * __rustcall loom_frontend::store_path(PathBuf *__return_storage_ptr__)\n\n{\n  _std__path__Path _Var1;\n  undefined1 local_60 [16];\n  usize local_50;\n  PathBuf local_48;\n  undefined1 local_30 [16];\n  undefined1 local_10 [16];\n  \n                    /* Unresolved local var: PathBuf exe@[???] */\n  (*(code *)PTR_current_exe_01a66798)(local_60);\n  if (local_60._0_8_ != 0xffffffffffffffff) {\n    local_48.inner.inner.inner.len = local_50;\n    local_48.inner.inner.inner.buf.inner.cap.__0 = local_60._0_8_;\n    local_48.inner.inner.inner.buf.inner.ptr.pointer.pointer =\n         (NonNull<u8>)(NonNull<u8>)local_60._8_8_;\n                    /* Unresolved local var: &std::path::Path dir@[???] */\n    _Var1 = std::path::deref(&local_48);\n    local_30 = (*(code *)PTR_parent_01a667a0)(_Var1.data_ptr,_Var1.length);\n    if (local_30._0_8_ != 0) {\n      local_10 = local_30;\n      (*(code *)PTR_join<&str>_01a667a8)\n                (__return_storage_ptr__,local_30._0_8_,local_30._8_8_,&DAT_00303cbf,0x13);\n      (*(code *)PTR_drop_glue<std::path::PathBuf>_01a66588)(&local_48);\n      if (local_60._0_8_ != 0xffffffffffffffff) {\n        return __return_storage_ptr__;\n      }\n      core::ptr::drop_glue<core::result::Result<std::path::PathBuf,_core::io::error::Error>>\n                ((Result<std::path::PathBuf,_core::io::error::Error> *)local_60);\n      return __return_storage_ptr__;\n    }\n    (*(code *)PTR_drop_glue<std::path::PathBuf>_01a66588)(&local_48);\n  }\n  if (local_60._0_8_ == 0xffffffffffffffff) {\n    core::ptr::drop_glue<core::result::Result<std::path::PathBuf,_core::io::error::Error>>\n              ((Result<std::path::PathBuf,_core::io::error::Error> *)local_60);\n  }\n  (*(code *)PTR_from<str>_01a667b0)(__return_storage_ptr__,&DAT_00303cbf,0x13);\n  return __return_storage_ptr__;\n}\n\n",
+        "signature": "PathBuf * __rustcall loom_frontend::store_path(PathBuf *__return_storage_ptr__);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for store_path from the Deep engine (45 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_7cb5b2aff2f1cfaebcdb7568dcd18eb57609cdf482e74a7659cd0857d87efaa5",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7c6eb0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7c6eb0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8c6eb0",
+        "entry": "0x7c6eb0",
+        "function": "main",
+        "pseudo_code": "\n/* DWARF original prototype: Result<(),_eframe::Error> main(void) */\n\nResult<(),_eframe::Error> * __rustcall\nloom_frontend::main(Result<(),_eframe::Error> *__return_storage_ptr__)\n\n{\n  Result<(),_eframe::Error> *pRVar1;\n  _str title;\n  Option<alloc::string::String> local_498;\n  Option<alloc::string::String> OStack_480;\n  Option<alloc::sync::Arc<egui::viewport::IconData,_alloc::alloc::Global>> local_468;\n  Option<emath::pos2::Pos2> aOStack_460 [2];\n  Option<emath::vec2::Vec2> local_448 [4];\n  undefined4 local_418;\n  undefined4 uStack_414;\n  undefined4 uStack_410;\n  undefined4 uStack_40c;\n  undefined8 local_408;\n  undefined8 local_400;\n  undefined8 local_3f8;\n  undefined8 local_3f0;\n  undefined8 local_3e8;\n  undefined2 local_3e0;\n  undefined1 local_3de;\n  undefined1 local_3dd;\n  undefined1 local_3dc;\n  undefined1 local_3db;\n  undefined1 local_3da;\n  undefined1 local_3d9;\n  undefined1 local_3d8;\n  undefined1 local_3d7;\n  undefined1 local_3d6;\n  ViewportBuilder local_3d0;\n  ViewportBuilder local_350;\n  ViewportBuilder local_2d0;\n  ViewportBuilder local_250;\n  undefined4 local_1d0;\n  undefined4 uStack_1cc;\n  undefined4 local_1c8;\n  undefined4 uStack_1c4;\n  undefined1 local_1c0 [128];\n  undefined4 local_140;\n  undefined4 uStack_13c;\n  undefined4 uStack_138;\n  undefined4 uStack_134;\n  undefined8 local_130;\n  undefined8 local_128;\n  undefined8 local_120;\n  undefined8 local_118;\n  undefined8 local_110;\n  undefined2 local_108;\n  undefined1 local_106;\n  undefined1 local_105;\n  undefined1 local_104;\n  undefined1 local_103;\n  undefined1 local_102;\n  undefined1 local_101;\n  undefined1 local_100;\n  undefined1 local_ff;\n  undefined1 local_fe;\n  undefined1 local_f8 [206];\n  undefined1 local_2a;\n  undefined1 local_29;\n  undefined8 local_28;\n  undefined8 local_20;\n  \n  local_29 = 0;\n  local_2a = 0;\n  egui::viewport::default(&local_250);\n  title.length = 0x2f;\n  title.data_ptr = &DAT_00304415;\n  egui::viewport::ViewportBuilder::with_title<&str>(&local_2d0,&local_250,title);\n  local_1d0 = 0x44ce0000;\n  uStack_1cc = 0x44680000;\n  local_28 = 0x4468000044ce0000;\n  egui::viewport::ViewportBuilder::with_inner_size<[f32__2]>\n            (&local_350,&local_2d0,(f32  [2])0x4468000044ce0000);\n  local_1c8 = 0x44610000;\n  uStack_1c4 = 0x44160000;\n  local_20 = 0x4416000044610000;\n  egui::viewport::ViewportBuilder::with_min_inner_size<[f32__2]>\n            (&local_3d0,&local_350,(f32  [2])0x4416000044610000);\n  (*(code *)PTR_default_01a669e8)(local_1c0);\n  local_29 = 1;\n  local_448[2]._8_1_ = local_3d0.fullsize_content_view;\n  local_448[2]._9_1_ = local_3d0.title_shown;\n  local_448[2]._10_1_ = local_3d0.titlebar_buttons_shown;\n  local_448[2]._11_1_ = local_3d0.titlebar_shown;\n  local_448[3]._0_1_ = local_3d0.drag_and_drop;\n  local_448[3]._1_1_ = local_3d0.taskbar;\n  local_448[3]._2_1_ = local_3d0.close_button;\n  local_448[3]._3_1_ = local_3d0.minimize_button;\n  local_448[3]._4_1_ = local_3d0.maximize_button;\n  local_448[3]._5_1_ = local_3d0.mouse_passthrough;\n  local_448[3]._6_1_ = local_3d0.window_level;\n  local_448[3]._7_1_ = local_3d0.window_type;\n  local_448[3]._8_4_ = local_3d0._124_4_;\n  local_448[1]._4_8_ = local_3d0.max_inner_size._4_8_;\n  local_448[2]._0_1_ = local_3d0.clamp_size_to_monitor_size;\n  local_448[2]._1_1_ = local_3d0.fullscreen;\n  local_448[2]._2_1_ = local_3d0.maximized;\n  local_448[2]._3_1_ = local_3d0.resizable;\n  local_448[2]._4_1_ = local_3d0.transparent;\n  local_448[2]._5_1_ = local_3d0.decorations;\n  local_448[2]._6_1_ = local_3d0.active;\n  local_448[2]._7_1_ = local_3d0.visible;\n  local_448[0]._0_8_ = local_3d0.min_inner_size._0_8_;\n  local_448[0]._8_4_ = local_3d0.min_inner_size._8_4_;\n  local_448[1]._0_4_ = local_3d0.max_inner_size._0_4_;\n  aOStack_460[0]._8_4_ = local_3d0.position._8_4_;\n  aOStack_460[1]._0_4_ = local_3d0.inner_size._0_4_;\n  aOStack_460[1]._4_8_ = local_3d0.inner_size._4_8_;\n  local_468._0_4_ = local_3d0.icon._0_4_;\n  local_468._4_4_ = local_3d0.icon._4_4_;\n  aOStack_460[0]._0_4_ = local_3d0.position._0_4_;\n  aOStack_460[0]._4_4_ = local_3d0.position._4_4_;\n  OStack_480._8_4_ = local_3d0.app_id._8_4_;\n  OStack_480._12_4_ = local_3d0.app_id._12_4_;\n  OStack_480._16_4_ = local_3d0.app_id._16_4_;\n  OStack_480._20_4_ = local_3d0.app_id._20_4_;\n  local_498._16_4_ = local_3d0.title._16_4_;\n  local_498._20_4_ = local_3d0.title._20_4_;\n  OStack_480._0_4_ = local_3d0.app_id._0_4_;\n  OStack_480._4_4_ = local_3d0.app_id._4_4_;\n  local_498._0_8_ = local_3d0.title._0_8_;\n  local_498._8_8_ = local_3d0.title._8_8_;\n  local_3de = local_106;\n  local_3e0 = local_108;\n  local_3d7 = local_ff;\n  local_3d6 = local_fe;\n  local_3d9 = local_101;\n  local_3dd = local_105;\n  local_400 = local_128;\n  local_3f8 = local_120;\n  local_3f0 = local_118;\n  local_3e8 = local_110;\n  local_3d8 = local_100;\n  local_3dc = local_104;\n  local_3db = local_103;\n  local_408 = local_130;\n  local_418 = local_140;\n  uStack_414 = uStack_13c;\n  uStack_410 = uStack_138;\n  uStack_40c = uStack_134;\n  local_3da = local_102;\n  (*(code *)PTR_drop_glue<egui::viewport::ViewportBuilder>_01a66510)(local_1c0);\n                    /* Unresolved local var: NativeOptions options@[???] */\n  local_29 = 0;\n  local_2a = 1;\n  pRVar1 = (Result<(),_eframe::Error> *)(*(code *)PTR_memcpy_01a661d8)(local_f8,&local_498,200);\n  return pRVar1;\n}\n\n",
+        "signature": "Result<(),_eframe::Error> * __rustcall loom_frontend::main(Result<(),_eframe::Error> *__return_storage_ptr__);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for main from the Deep engine (154 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_c592937a0d022b184227958ad4f8b862b2bb6758859bd308ecb66de2bd605a81",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7bc5a0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7bc5a0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8bc5a0",
+        "entry": "0x7bc5a0",
+        "function": "load_store",
+        "pseudo_code": "\n/* WARNING: Removing unreachable block (ram,0x008bc716) */\n/* DWARF original prototype: Store load_store(void) */\n\nStore * __rustcall loom_frontend::load_store(Store *__return_storage_ptr__)\n\n{\n  u8 *puVar1;\n  u8 *puVar2;\n  Store *pSVar3;\n  u64 uVar4;\n  _str s;\n  Layout layout;\n  Layout layout_00;\n  Layout layout_01;\n  Layout layout_02;\n  Layout layout_03;\n  PathBuf local_928;\n  undefined1 local_910 [16];\n  usize local_900;\n  String local_8f8;\n  Result<loom_frontend::Store,_serde_json::error::Error> local_8d8;\n  undefined1 local_820 [184];\n  usize local_768;\n  u8 *local_760;\n  usize local_758;\n  u8 *local_750;\n  undefined8 local_748;\n  undefined8 uStack_740;\n  undefined8 local_738;\n  undefined8 local_730;\n  undefined8 uStack_728;\n  undefined8 local_720;\n  undefined8 local_718;\n  undefined8 uStack_710;\n  undefined8 local_708;\n  undefined8 local_700;\n  undefined8 uStack_6f8;\n  undefined8 local_6f0;\n  undefined8 local_6e8;\n  u8 *puStack_6e0;\n  undefined8 local_6d8;\n  undefined4 local_6d0;\n  undefined4 uStack_6cc;\n  undefined4 uStack_6c8;\n  undefined4 uStack_6c4;\n  undefined8 local_6c0;\n  u64 local_6b8;\n  u64 local_6b0;\n  undefined8 local_6a0;\n  undefined8 uStack_698;\n  undefined8 local_690;\n  undefined8 local_688;\n  undefined8 uStack_680;\n  undefined8 local_678;\n  undefined8 local_670;\n  undefined8 uStack_668;\n  undefined8 local_660;\n  undefined8 local_658;\n  undefined8 uStack_650;\n  undefined8 local_648;\n  undefined8 local_640;\n  u8 *puStack_638;\n  undefined8 local_630;\n  u8 *local_628;\n  undefined8 local_620;\n  undefined8 local_618;\n  undefined8 local_610;\n  undefined8 local_608;\n  undefined8 local_600;\n  undefined8 local_5f8;\n  undefined8 local_5f0;\n  undefined8 uStack_5e8;\n  undefined8 local_5e0;\n  u8 *local_5d8;\n  undefined8 local_5d0;\n  undefined8 local_5c8;\n  undefined8 local_5c0;\n  undefined8 local_5b8;\n  undefined8 uStack_5b0;\n  undefined8 local_5a8;\n  undefined8 local_5a0;\n  undefined8 uStack_598;\n  undefined8 local_590;\n  undefined8 local_588;\n  undefined8 uStack_580;\n  undefined8 local_578;\n  undefined8 local_570;\n  undefined8 uStack_568;\n  undefined8 local_560;\n  undefined8 local_558;\n  u8 *puStack_550;\n  undefined8 local_548;\n  undefined4 local_540;\n  undefined4 uStack_53c;\n  undefined4 uStack_538;\n  undefined4 uStack_534;\n  undefined8 local_530;\n  u64 local_528;\n  u64 local_520;\n  undefined8 local_518;\n  undefined8 uStack_510;\n  undefined8 local_508;\n  undefined8 local_500;\n  undefined8 uStack_4f8;\n  undefined8 local_4f0;\n  undefined8 local_4e8;\n  undefined8 uStack_4e0;\n  undefined8 local_4d8;\n  undefined8 local_4d0;\n  undefined8 uStack_4c8;\n  undefined8 local_4c0;\n  undefined8 local_4b8;\n  u8 *puStack_4b0;\n  undefined8 local_4a8;\n  u8 *local_4a0;\n  undefined8 local_498;\n  undefined8 local_490;\n  undefined8 local_488;\n  undefined4 local_480;\n  undefined4 uStack_47c;\n  undefined4 uStack_478;\n  undefined4 uStack_474;\n  undefined8 local_470;\n  undefined8 local_468;\n  undefined8 local_460;\n  undefined8 local_458;\n  undefined8 local_450;\n  undefined8 local_448;\n  undefined8 local_440;\n  undefined8 local_438;\n  undefined8 local_430;\n  undefined8 local_428;\n  undefined8 local_420;\n  undefined8 local_418;\n  undefined8 local_410;\n  undefined8 local_408;\n  undefined8 local_400;\n  undefined8 local_3f8;\n  undefined8 local_3f0;\n  undefined8 local_3e8;\n  undefined8 local_3e0;\n  u64 local_3d8;\n  u64 local_3d0;\n  undefined8 local_3c8;\n  undefined8 local_3c0;\n  undefined8 local_3b8;\n  undefined8 local_3b0;\n  undefined8 local_3a8;\n  undefined8 local_3a0;\n  undefined8 local_398;\n  undefined8 local_390;\n  undefined8 local_388;\n  undefined8 local_380;\n  undefined8 local_378;\n  undefined8 local_370;\n  undefined8 local_368;\n  undefined8 local_360;\n  undefined8 local_358;\n  undefined8 local_350;\n  undefined8 local_348;\n  undefined8 local_340;\n  usize local_338;\n  u8 *local_330;\n  usize local_328;\n  u8 *local_320;\n  undefined8 local_318;\n  undefined8 uStack_310;\n  undefined8 local_308;\n  undefined4 local_300;\n  undefined4 uStack_2fc;\n  undefined4 uStack_2f8;\n  undefined4 uStack_2f4;\n  undefined8 local_2f0;\n  undefined1 local_2e8;\n  undefined1 local_2e7;\n  undefined8 local_2e0;\n  undefined8 uStack_2d8;\n  undefined8 local_2d0;\n  undefined4 local_2c8;\n  undefined4 uStack_2c4;\n  undefined4 uStack_2c0;\n  undefined4 uStack_2bc;\n  undefined8 local_2b8;\n  undefined8 local_2b0;\n  undefined8 local_2a8;\n  undefined8 local_2a0;\n  undefined8 local_298;\n  undefined8 local_290;\n  undefined8 local_288;\n  undefined1 local_280;\n  undefined1 local_27f;\n  undefined8 local_278;\n  undefined8 local_270;\n  undefined8 local_268;\n  undefined8 local_260;\n  undefined8 local_258;\n  undefined8 local_250;\n  UsizeNoHighBit local_248;\n  u8 *local_240;\n  usize local_238;\n  UsizeNoHighBit local_230;\n  u8 *local_228;\n  usize local_220;\n  UsizeNoHighBit local_218;\n  u8 *local_210;\n  usize local_208;\n  String local_200;\n  String local_1e8;\n  u64 local_1c0;\n  undefined8 local_108;\n  u8 *local_100;\n  u8 *local_f8;\n  undefined8 local_f0;\n  undefined8 local_e8;\n  u8 *local_e0;\n  undefined8 local_d8;\n  u8 *local_d0;\n  undefined8 local_c8;\n  u8 *local_c0;\n  u8 *local_b8;\n  undefined8 local_b0;\n  u8 *local_a8;\n  u8 *local_a0;\n  undefined8 local_98;\n  undefined8 local_90;\n  u8 *local_88;\n  undefined8 local_80;\n  u8 *local_78;\n  undefined8 local_70;\n  u8 *local_68;\n  u8 *local_60;\n  undefined8 local_58;\n  u8 *local_50;\n  u8 *local_48;\n  undefined8 local_40;\n  undefined8 local_38;\n  u8 *local_30;\n  undefined8 local_28;\n  u8 *local_20;\n  undefined8 local_18;\n  u8 *local_10;\n  u8 *local_8;\n  \n  store_path(&local_928);\n                    /* Unresolved local var: PathBuf p@[???]\n                       Unresolved local var: String text@[???] */\n  std::fs::read_to_string<&std::path::PathBuf>\n            ((Result<alloc::string::String,_core::io::error::Error> *)local_910,&local_928);\n  if (local_910._0_8_ != 0xffffffffffffffff) {\n    local_8f8.vec.len = local_900;\n    local_8f8.vec.buf.inner.cap.__0 = local_910._0_8_;\n    local_8f8.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)local_910._8_8_;\n                    /* Unresolved local var: Store s@[???] */\n    s = ::alloc::string::deref(&local_8f8);\n    serde_json::de::from_str<loom_frontend::Store>(&local_8d8,s);\n    if (local_8d8._0_8_ != -1) {\n      pSVar3 = (Store *)(*(code *)PTR_memcpy_01a661d8)(local_820,&local_8d8,0xb8);\n      return pSVar3;\n    }\n    core::ptr::drop_glue<core::result::Result<loom_frontend::Store,_serde_json::error::Error>>\n              (&local_8d8);\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_8f8);\n  }\n  if (local_910._0_8_ == 0xffffffffffffffff) {\n    (*(code *)\n      PTR_drop_glue<core::result::Result<alloc::string::String,_core::io::error::Error>>_01a66778)\n              (local_910);\n  }\n  uVar4 = now_secs();\n  layout.size = 0x1e0;\n  layout.align._inner_repr_trick = _Align1Shl3;\n  local_1c0 = uVar4;\n                    /* Unresolved local var: u64 t@[???] */\n  local_750 = ::alloc::boxed::box_new_uninit(layout);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_6a0,&DAT_00303ac0,0xe,&PTR_s_src_main_rs_019da740);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_688,\"Investigate agent memory latencyRandR::GetScreenResourcesCurrent\",0x20,\n             &PTR_s_src_main_rs_019da758);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_670,&DAT_00303ace,6,&PTR_s_src_main_rs_019da770);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_658,&DAT_00303ad4,0xd,&PTR_s_src_main_rs_019da788);\n  layout_00.size = 0x30;\n  layout_00.align._inner_repr_trick = _Align1Shl3;\n  local_628 = ::alloc::boxed::box_new_uninit(layout_00);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_620,&DAT_00303ae1,0x45,&PTR_s_src_main_rs_019da7a0);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_608,&DAT_00303b26,0x4a,&PTR_s_src_main_rs_019da7b8);\n  puVar1 = local_628;\n  if (((ulong)local_628 & 7) == 0) {\n    if (local_628 != (u8 *)0x0) goto LAB_008bcbc8;\n    (*(code *)PTR_panic_null_pointer_dereference_01a66788)(&PTR_s_src_main_rs_019da7d0);\n  }\n  else {\n    (*(code *)PTR_panic_misaligned_pointer_dereference_01a66780)\n              (8,local_628,&PTR_s_src_main_rs_019da7d0);\nLAB_008bcbc8:\n    puVar2 = local_628;\n    *(undefined8 *)puVar1 = local_620;\n    *(undefined8 *)(puVar1 + 8) = local_618;\n    *(undefined8 *)(puVar1 + 0x10) = local_610;\n    *(undefined8 *)(puVar1 + 0x18) = local_608;\n    *(undefined8 *)(puVar1 + 0x20) = local_600;\n    *(undefined8 *)(puVar1 + 0x28) = local_5f8;\n    local_50 = local_628;\n    local_48 = local_628;\n    local_40 = 2;\n                    /* Unresolved local var:\n                       alloc::boxed::Box<[alloc::string::String],_alloc::alloc::Global> self@[???]\n                        */\n    local_38 = 2;\n                    /* Unresolved local var: usize len@[???] */\n    local_30 = local_628;\n    local_28 = 2;\n                    /* Unresolved local var:\n                       alloc::boxed::Box<[alloc::string::String],_alloc::alloc::Global> b@[???] */\n    local_20 = local_628;\n    local_18 = 2;\n                    /* Unresolved local var: *mut_[alloc::string::String] b@[???] */\n    local_10 = local_628;\n    ::alloc::vec::from_raw_parts_in::precondition_check(2,2);\n    local_8 = puVar2;\n                    /* Unresolved local var: u8 * ptr@[???] */\n    local_58 = 2;\n                    /* Unresolved local var: UsizeNoHighBit capacity@[???] */\n    core::ptr::non_null::new_unchecked::precondition_check(puVar2);\n    local_640 = local_58;\n    puStack_638 = puVar2;\n    local_630 = 2;\n  }\n  layout_01.size = 0x18;\n  layout_01.align._inner_repr_trick = _Align1Shl3;\n  local_5d8 = ::alloc::boxed::box_new_uninit(layout_01);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_5d0,&DAT_00303b70,0x2f,&PTR_s_src_main_rs_019da7e8);\n  puVar1 = local_5d8;\n  if (((ulong)local_5d8 & 7) == 0) {\n    if (local_5d8 != (u8 *)0x0) goto LAB_008bcdcd;\n    (*(code *)PTR_panic_null_pointer_dereference_01a66788)(&PTR_s_src_main_rs_019da800);\n  }\n  else {\n    (*(code *)PTR_panic_misaligned_pointer_dereference_01a66780)\n              (8,local_5d8,&PTR_s_src_main_rs_019da800);\nLAB_008bcdcd:\n    puVar2 = local_5d8;\n    *(undefined8 *)puVar1 = local_5d0;\n    *(undefined8 *)(puVar1 + 8) = local_5c8;\n    *(undefined8 *)(puVar1 + 0x10) = local_5c0;\n    local_a8 = local_5d8;\n    local_a0 = local_5d8;\n    local_98 = 1;\n                    /* Unresolved local var:\n                       alloc::boxed::Box<[alloc::string::String],_alloc::alloc::Global> self@[???]\n                        */\n    local_90 = 1;\n                    /* Unresolved local var: usize len@[???] */\n    local_88 = local_5d8;\n    local_80 = 1;\n                    /* Unresolved local var:\n                       alloc::boxed::Box<[alloc::string::String],_alloc::alloc::Global> b@[???] */\n    local_78 = local_5d8;\n    local_70 = 1;\n                    /* Unresolved local var: *mut_[alloc::string::String] b@[???] */\n    local_68 = local_5d8;\n    ::alloc::vec::from_raw_parts_in::precondition_check(1,1);\n    local_60 = puVar2;\n                    /* Unresolved local var: u8 * ptr@[???] */\n    local_b0 = 1;\n                    /* Unresolved local var: UsizeNoHighBit capacity@[???] */\n    core::ptr::non_null::new_unchecked::precondition_check(puVar2);\n    local_5f0 = local_b0;\n    uStack_5e8 = puVar2;\n    local_5e0 = 1;\n  }\n  local_738 = local_690;\n  local_748 = local_6a0;\n  uStack_740 = uStack_698;\n  local_720 = local_678;\n  local_730 = local_688;\n  uStack_728 = uStack_680;\n  local_708 = local_660;\n  local_718 = local_670;\n  uStack_710 = uStack_668;\n  local_6f0 = local_648;\n  local_700 = local_658;\n  uStack_6f8 = uStack_650;\n  local_6d8 = local_630;\n  local_6e8 = local_640;\n  puStack_6e0 = puStack_638;\n  local_6c0 = local_5e0;\n  local_6d0 = (undefined4)local_5f0;\n  uStack_6cc = local_5f0._4_4_;\n  uStack_6c8 = (undefined4)uStack_5e8;\n  uStack_6c4 = uStack_5e8._4_4_;\n  local_6b8 = uVar4;\n  local_6b0 = uVar4;\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_518,&DAT_00300180,0x10,&PTR_s_src_main_rs_019da818);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_500,&DAT_00303b9f,0x18,&PTR_s_src_main_rs_019da830);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_4e8,&DAT_00303ace,6,&PTR_s_src_main_rs_019da848);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_4d0,\"Assisted\",8,&PTR_s_src_main_rs_019da860);\n  layout_02.size = 0x18;\n  layout_02.align._inner_repr_trick = _Align1Shl3;\n  local_4a0 = ::alloc::boxed::box_new_uninit(layout_02);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_498,&DAT_00303bb7,0x37,&PTR_s_src_main_rs_019da878);\n  puVar1 = local_4a0;\n  if (((ulong)local_4a0 & 7) == 0) {\n    if (local_4a0 == (u8 *)0x0) {\n      (*(code *)PTR_panic_null_pointer_dereference_01a66788)(&PTR_s_src_main_rs_019da890);\n      goto LAB_008bd2bc;\n    }\n  }\n  else {\n    (*(code *)PTR_panic_misaligned_pointer_dereference_01a66780)\n              (8,local_4a0,&PTR_s_src_main_rs_019da890);\n  }\n  puVar2 = local_4a0;\n  *(undefined8 *)puVar1 = local_498;\n  *(undefined8 *)(puVar1 + 8) = local_490;\n  *(undefined8 *)(puVar1 + 0x10) = local_488;\n  local_100 = local_4a0;\n  local_f8 = local_4a0;\n  local_f0 = 1;\n                    /* Unresolved local var:\n                       alloc::boxed::Box<[alloc::string::String],_alloc::alloc::Global> self@[???]\n                        */\n  local_e8 = 1;\n                    /* Unresolved local var: usize len@[???] */\n  local_e0 = local_4a0;\n  local_d8 = 1;\n                    /* Unresolved local var:\n                       alloc::boxed::Box<[alloc::string::String],_alloc::alloc::Global> b@[???] */\n  local_d0 = local_4a0;\n  local_c8 = 1;\n                    /* Unresolved local var: *mut_[alloc::string::String] b@[???] */\n  local_c0 = local_4a0;\n  ::alloc::vec::from_raw_parts_in::precondition_check(1,1);\n  local_b8 = puVar2;\n                    /* Unresolved local var: u8 * ptr@[???] */\n  local_108 = 1;\n                    /* Unresolved local var: UsizeNoHighBit capacity@[???] */\n  core::ptr::non_null::new_unchecked::precondition_check(puVar2);\n  local_4b8 = local_108;\n  puStack_4b0 = puVar2;\n  local_4a8 = 1;\nLAB_008bd2bc:\n  (*(code *)PTR_new<alloc::string::String>_01a66790)(&local_480);\n  local_5a8 = local_508;\n  local_5b8 = local_518;\n  uStack_5b0 = uStack_510;\n  local_590 = local_4f0;\n  local_5a0 = local_500;\n  uStack_598 = uStack_4f8;\n  local_578 = local_4d8;\n  local_588 = local_4e8;\n  uStack_580 = uStack_4e0;\n  local_560 = local_4c0;\n  local_570 = local_4d0;\n  uStack_568 = uStack_4c8;\n  local_548 = local_4a8;\n  local_558 = local_4b8;\n  puStack_550 = puStack_4b0;\n  local_530 = local_470;\n  local_540 = local_480;\n  uStack_53c = uStack_47c;\n  uStack_538 = uStack_478;\n  uStack_534 = uStack_474;\n  local_528 = uVar4;\n  local_520 = uVar4;\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_3c8,&DAT_00303bee,7,&PTR_s_src_main_rs_019da8a8);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_3b0,&DAT_00303bf5,0xf,&PTR_s_src_main_rs_019da8c0);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_398,&DAT_00303c04,6,&PTR_s_src_main_rs_019da8d8);\n  (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n            (&local_380,&DAT_00303c0a,6,&PTR_s_src_main_rs_019da8f0);\n  (*(code *)PTR_new<alloc::string::String>_01a66790)(&local_368);\n  (*(code *)PTR_new<alloc::string::String>_01a66790)(&local_350);\n  puVar1 = local_750;\n  local_468 = local_3c8;\n  local_460 = local_3c0;\n  local_458 = local_3b8;\n  local_450 = local_3b0;\n  local_448 = local_3a8;\n  local_440 = local_3a0;\n  local_438 = local_398;\n  local_430 = local_390;\n  local_428 = local_388;\n  local_420 = local_380;\n  local_418 = local_378;\n  local_410 = local_370;\n  local_408 = local_368;\n  local_400 = local_360;\n  local_3f8 = local_358;\n  local_3f0 = local_350;\n  local_3e8 = local_348;\n  local_3e0 = local_340;\n  local_3d8 = uVar4;\n  local_3d0 = uVar4;\n  if (((ulong)local_750 & 7) == 0) {\n    if (local_750 == (u8 *)0x0) {\n      (*(code *)PTR_panic_null_pointer_dereference_01a66788)(&PTR_s_src_main_rs_019da908);\n      layout_03.size = 0x70;\n      layout_03.align._inner_repr_trick = _Align1Shl3;\n      local_320 = ::alloc::boxed::box_new_uninit(layout_03);\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_2e0,&DAT_00303c10,3,&PTR_s_src_main_rs_019da920);\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_2c8,&DAT_00303c13,0x2b,&PTR_s_src_main_rs_019da938);\n      local_308 = local_2d0;\n      local_318 = local_2e0;\n      uStack_310 = uStack_2d8;\n      local_2f0 = local_2b8;\n      local_300 = local_2c8;\n      uStack_2fc = uStack_2c4;\n      uStack_2f8 = uStack_2c0;\n      uStack_2f4 = uStack_2bc;\n      local_2e8 = 1;\n      local_2e7 = 0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_278,&DAT_00303404,4,&PTR_s_src_main_rs_019da950);\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_260,&DAT_00303c3e,0x31,&PTR_s_src_main_rs_019da968);\n      puVar1 = local_320;\n      local_2b0 = local_278;\n      local_2a8 = local_270;\n      local_2a0 = local_268;\n      local_298 = local_260;\n      local_290 = local_258;\n      local_288 = local_250;\n      local_280 = 0;\n      local_27f = 1;\n      if (((ulong)local_320 & 7) == 0) {\n        if (local_320 == (u8 *)0x0) {\n          (*(code *)PTR_panic_null_pointer_dereference_01a66788)(&PTR_s_src_main_rs_019da980);\n          (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                    (&local_248,&DAT_00303ad4,0xd,&PTR_s_src_main_rs_019da998);\n          (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                    (&local_230,&DAT_00303624,4,&PTR_s_src_main_rs_019da9b0);\n          (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                    (&local_218,&DAT_00303c6f,0x50,&PTR_s_src_main_rs_019da9c8);\n          ::alloc::string::String::new(&local_200);\n          ::alloc::string::String::new(&local_1e8);\n          (__return_storage_ptr__->works).buf.inner.cap.__0 = local_768;\n          (__return_storage_ptr__->works).buf.inner.ptr.pointer.pointer = local_760;\n          (__return_storage_ptr__->works).len = local_758;\n          __return_storage_ptr__->active_work = 0;\n          (__return_storage_ptr__->chat).buf.inner.cap.__0 = local_338;\n          (__return_storage_ptr__->chat).buf.inner.ptr.pointer.pointer = local_330;\n          (__return_storage_ptr__->chat).len = local_328;\n          (__return_storage_ptr__->autonomy).vec.buf.inner.cap.__0 = local_248.__0;\n          (__return_storage_ptr__->autonomy).vec.buf.inner.ptr.pointer.pointer = local_240;\n          (__return_storage_ptr__->autonomy).vec.len = local_238;\n          (__return_storage_ptr__->mode).vec.buf.inner.cap.__0 = local_230.__0;\n          (__return_storage_ptr__->mode).vec.buf.inner.ptr.pointer.pointer = local_228;\n          (__return_storage_ptr__->mode).vec.len = local_220;\n          (__return_storage_ptr__->hypothesis).vec.buf.inner.cap.__0 = local_218.__0;\n          (__return_storage_ptr__->hypothesis).vec.buf.inner.ptr.pointer.pointer = local_210;\n          (__return_storage_ptr__->hypothesis).vec.len = local_208;\n          (__return_storage_ptr__->exp_notes).vec.buf.inner.cap.__0 =\n               local_200.vec.buf.inner.cap.__0;\n          (__return_storage_ptr__->exp_notes).vec.buf.inner.ptr.pointer.pointer =\n               (u8 *)local_200.vec.buf.inner.ptr.pointer.pointer;\n          (__return_storage_ptr__->exp_notes).vec.len = local_200.vec.len;\n          __return_storage_ptr__->reduced_motion = false;\n          (__return_storage_ptr__->code_notes).vec.buf.inner.cap.__0 =\n               local_1e8.vec.buf.inner.cap.__0;\n          (__return_storage_ptr__->code_notes).vec.buf.inner.ptr.pointer.pointer =\n               (u8 *)local_1e8.vec.buf.inner.ptr.pointer.pointer;\n          (__return_storage_ptr__->code_notes).vec.len = local_1e8.vec.len;\n          (*(code *)PTR_drop_glue<std::path::PathBuf>_01a66588)(&local_928);\n          return __return_storage_ptr__;\n        }\n      }\n      else {\n        (*(code *)PTR_panic_misaligned_pointer_dereference_01a66780)\n                  (8,local_320,&PTR_s_src_main_rs_019da980);\n      }\n                    /* WARNING: Subroutine does not return */\n      memcpy(puVar1,&local_318,0x38);\n    }\n  }\n  else {\n    (*(code *)PTR_panic_misaligned_pointer_dereference_01a66780)\n              (8,local_750,&PTR_s_src_main_rs_019da908);\n  }\n                    /* WARNING: Subroutine does not return */\n  memcpy(puVar1,&local_748,0xa0);\n}\n\n",
+        "signature": "Store * __rustcall loom_frontend::load_store(Store *__return_storage_ptr__);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for load_store from the Deep engine (598 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_7c44178ad99db91eee362ffda7e02449e6cdbc40a4526e072bbcc79df5f2f7da",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7ca7e0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7ca7e0"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8ca7e0",
+        "entry": "0x7ca7e0",
+        "function": "new",
+        "pseudo_code": "\n/* DWARF original prototype: LoomApp new(void) */\n\nLoomApp * __rustcall loom_frontend::LoomApp::new(LoomApp *__return_storage_ptr__)\n\n{\n  bool bVar1;\n  Option<&loom_frontend::AgentInfo> OVar2;\n  __loom_frontend__AgentInfo_ self;\n  _str self_00;\n  _str other;\n  _str other_00;\n  _std__sync__mpsc__Sender<loom_frontend::NetEvent>__std__sync__mpsc__Receiver<loom_frontend::NetEvent>_\n  local_c08;\n  Vec<loom_frontend::AgentInfo,_alloc::alloc::Global> local_be8;\n  usize local_bc8;\n  NonNull<u8> NStack_bc0;\n  usize local_bb8;\n  _alloc__vec__Vec<loom_frontend::AgentInfo,_alloc::alloc::Global>__alloc__string__String_ local_ba8\n  ;\n  usize local_b78;\n  NonNull<u8> NStack_b70;\n  usize local_b68;\n  usize local_b58;\n  NonNull<u8> NStack_b50;\n  usize local_b48;\n  _alloc__vec__Vec<loom_frontend::PatternInfo,_alloc::alloc::Global>__alloc__string__String_\n  local_b40;\n  undefined1 local_b10 [24];\n  undefined1 local_af8 [24];\n  Store local_ae0;\n  undefined1 local_a21;\n  Vec<loom_frontend::CodeFile,_alloc::alloc::Global> local_a20;\n  IntoIter<(&str,_&str),_3> local_a08;\n  __str___str_ local_998;\n  undefined *local_978;\n  undefined8 uStack_970;\n  undefined *local_968;\n  undefined8 uStack_960;\n  undefined *local_958;\n  undefined8 uStack_950;\n  undefined *local_948;\n  undefined8 uStack_940;\n  undefined *local_938;\n  undefined8 uStack_930;\n  undefined *local_928;\n  undefined8 uStack_920;\n  undefined *local_918;\n  undefined8 uStack_910;\n  undefined *local_908;\n  undefined8 uStack_900;\n  undefined *local_8f8;\n  undefined8 uStack_8f0;\n  undefined *local_8e8;\n  undefined8 uStack_8e0;\n  undefined1 local_8d8 [2222];\n  undefined1 local_2a;\n  undefined1 local_29;\n  undefined1 local_28;\n  undefined1 local_27;\n  undefined1 local_26;\n  undefined1 local_25;\n  undefined1 local_24;\n  undefined1 local_23;\n  undefined1 local_22;\n  undefined1 local_21;\n  \n  local_21 = 0;\n  local_22 = 0;\n  local_23 = 0;\n  local_24 = 0;\n  local_25 = 0;\n  local_26 = 0;\n  local_27 = 0;\n  local_28 = 0;\n  local_29 = 0;\n  local_2a = 0;\n  std::sync::mpsc::channel<loom_frontend::NetEvent>(&local_c08);\n  local_21 = 1;\n  local_22 = 1;\n                    /* Unresolved local var: Sender<loom_frontend::NetEvent> tx@[???]\n                       Unresolved local var: Receiver<loom_frontend::NetEvent> rx@[???] */\n  load_agents(&local_ba8);\n  local_23 = 1;\n  local_be8.len = local_ba8.__0.len;\n  local_be8.buf.inner.cap.__0 = local_ba8.__0.buf.inner.cap.__0;\n  local_be8.buf.inner.ptr.pointer.pointer = local_ba8.__0.buf.inner.ptr.pointer.pointer;\n  local_24 = 1;\n  local_bb8 = local_ba8.__1.vec.len;\n  local_bc8 = local_ba8.__1.vec.buf.inner.cap.__0;\n  NStack_bc0 = local_ba8.__1.vec.buf.inner.ptr.pointer.pointer;\n                    /* Unresolved local var: Vec<loom_frontend::AgentInfo,_alloc::alloc::Global>\n                       agents@[???]\n                       Unresolved local var: String agents_source@[???] */\n  load_patterns(&local_b40);\n  local_25 = 1;\n  local_b68 = local_b40.__0.len;\n  local_b78 = local_b40.__0.buf.inner.cap.__0;\n  NStack_b70 = local_b40.__0.buf.inner.ptr.pointer.pointer;\n  local_b48 = local_b40.__1.vec.len;\n  local_b58 = local_b40.__1.vec.buf.inner.cap.__0;\n  NStack_b50 = local_b40.__1.vec.buf.inner.ptr.pointer.pointer;\n                    /* Unresolved local var: Vec<loom_frontend::PatternInfo,_alloc::alloc::Global>\n                       patterns@[???]\n                       Unresolved local var: String _ps@[???] */\n  self = ::alloc::vec::deref<loom_frontend::AgentInfo,_alloc::alloc::Global>(&local_be8);\n  OVar2 = core::slice::first<loom_frontend::AgentInfo>(self);\n  core::option::Option<&loom_frontend::AgentInfo>::\n  map<&loom_frontend::AgentInfo,_alloc::string::String,_loom_frontend::_impl_2_::new::_closure_env_0_>\n            (local_af8,OVar2);\n  (*(code *)PTR_unwrap_or_default<alloc::string::String>_01a66af0)(local_b10,local_af8);\n  local_26 = 1;\n                    /* Unresolved local var: String chat_agent@[???] */\n  load_store(&local_ae0);\n                    /* Unresolved local var: Store store@[???] */\n  local_27 = 1;\n  self_00 = ::alloc::string::String::as_str(&local_ae0.mode);\n  other.length = 4;\n  other.data_ptr = &DAT_003032a4;\n  bVar1 = core::str::traits::eq(self_00,other);\n  if (bVar1) {\n    local_a21 = 0;\n  }\n  else {\n    other_00.length = 10;\n    other_00.data_ptr = &DAT_00304444;\n    bVar1 = core::str::traits::eq(self_00,other_00);\n    if (bVar1) {\n      local_a21 = 1;\n    }\n    else {\n      local_a21 = 2;\n    }\n  }\n                    /* Unresolved local var: Mode mode@[???] */\n  ::alloc::vec::Vec<loom_frontend::CodeFile,_alloc::alloc::Global>::new<loom_frontend::CodeFile>\n            (&local_a20);\n                    /* Unresolved local var: Vec<loom_frontend::CodeFile,_alloc::alloc::Global>\n                       files@[???] */\n  local_28 = 1;\n  local_938 = &DAT_003044c6;\n  uStack_930 = 0x1b;\n  local_928 = &DAT_003044e1;\n  uStack_920 = 0x1c;\n  local_918 = &DAT_003044fd;\n  uStack_910 = 0x1b;\n  local_908 = &DAT_00304518;\n  uStack_900 = 0x1c;\n  local_8f8 = &DAT_00304534;\n  uStack_8f0 = 0x24;\n  local_8e8 = &DAT_00304558;\n  uStack_8e0 = 7;\n  local_998.__1.data_ptr = &DAT_003044e1;\n  local_998.__1.length = 0x1c;\n  local_998.__0.data_ptr = &DAT_003044c6;\n  local_998.__0.length = 0x1b;\n  local_968 = &DAT_00304518;\n  uStack_960 = 0x1c;\n  local_978 = &DAT_003044fd;\n  uStack_970 = 0x1b;\n  local_948 = &DAT_00304558;\n  uStack_940 = 7;\n  local_958 = &DAT_00304534;\n  uStack_950 = 0x24;\n  core::array::iter::into_iter<(&str,_&str),_3>(&local_a08,(__str___str_ (*) [3])&local_998);\n                    /* WARNING: Subroutine does not return */\n  memcpy(local_8d8,&local_a08,0x70);\n}\n\n",
+        "signature": "LoomApp * __rustcall loom_frontend::LoomApp::new(LoomApp *__return_storage_ptr__);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for new from the Deep engine (169 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_43e5b53a00f5c36673e771c5734d8d4219e21d059dc5bc75a28146bc6cb90f0b",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7d9020"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7d9020"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8d9020",
+        "entry": "0x7d9020",
+        "function": "serialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>",
+        "pseudo_code": "\n/* DWARF original name: serialize<&mut serde_json::ser::Serializer<&mut alloc::vec::Vec<u8,\n   alloc::alloc::Global>, serde_json::ser::PrettyFormatter>>\n   DWARF original prototype: Result<(),_serde_json::error::Error>\n   serialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>(Store\n   * self,\n   Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter> *\n   __serializer) */\n\nResult<(),_serde_json::error::Error> __rustcall\nloom_frontend::_::\nserialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>\n          (Store *self,\n          Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n          *__serializer)\n\n{\n  Result<(),_serde_json::error::Error> RVar1;\n  ControlFlow<core::result::Result<core::convert::Infallible,_serde_json::error::Error>,_serde_json::ser::Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>\n  CVar2;\n  Result<serde_json::ser::Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>,_serde_json::error::Error>\n  self_00;\n  Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter> self_01\n  ;\n  _str name;\n  _str key;\n  _str key_00;\n  _str key_01;\n  _str key_02;\n  _str key_03;\n  _str key_04;\n  _str key_05;\n  _str key_06;\n  _str key_07;\n  Result<(),_serde_json::error::Error> local_108;\n  Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  local_100;\n  Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  local_f0;\n  Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  local_e0;\n  long local_b8;\n  long local_b0;\n  long local_a8;\n  long local_a0;\n  long local_98;\n  long local_90;\n  undefined1 local_82;\n  undefined1 local_81;\n  Store *local_80;\n  Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  *local_78;\n  Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  local_60;\n  long local_50;\n  long local_48;\n  long local_40;\n  long local_38;\n  long local_30;\n  long local_28;\n  long local_20;\n  usize local_18;\n  usize local_10;\n  undefined8 local_8;\n  \n  local_82 = 0;\n  local_81 = 0;\n  name.length = (usize)&DAT_00304efa;\n  name.data_ptr = (u8 *)__serializer;\n  local_80 = self;\n  local_78 = __serializer;\n  serde_json::ser::\n  serialize_struct<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n            (&local_e0,name,5);\n  local_81 = 0;\n  self_00._8_8_ = &local_e0;\n  self_00._0_8_ = &local_f0;\n  CVar2 = core::result::\n          branch<serde_json::ser::Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>,_serde_json::error::Error>\n                    (self_00);\n  if (local_f0._8_1_ == -1) {\n    local_8 = local_f0._0_8_;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n    local_108 = (Result<(),_serde_json::error::Error>)\n                (*(code *)\n                  PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                )(local_f0._0_8_,&PTR_s_src_main_rs_019db9c8,CVar2._8_8_);\n  }\n  else {\n    local_60._0_8_ = local_f0._0_8_;\n    local_60._8_1_ = local_f0._8_1_;\n                    /* Unresolved local var:\n                       Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n                       val@[???] */\n    local_82 = 1;\n    local_100._0_8_ = local_f0._0_8_;\n    local_100._8_1_ = local_f0._8_1_;\n                    /* Unresolved local var:\n                       Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n                       __serde_state@[???] */\n    key.length = 5;\n    key.data_ptr = &DAT_00304eff;\n    RVar1 = serde_json::ser::\n            serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::vec::Vec<loom_frontend::WorkItem,_alloc::alloc::Global>>\n                      (&local_100,key,&self->works);\n    local_e0.formatter.indent.length =\n         (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n    if (local_e0.formatter.indent.length == 0) {\n      key_00.length = 0xb;\n      key_00.data_ptr = &DAT_00304f04;\n      RVar1 = serde_json::ser::\n              serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_usize>\n                        (&local_100,key_00,&self->active_work);\n      local_e0.formatter.current_indent =\n           (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n      if (local_e0.formatter.current_indent == 0) {\n        key_01.length = 4;\n        key_01.data_ptr = &DAT_003038b4;\n        RVar1 = serde_json::ser::\n                serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::vec::Vec<loom_frontend::ChatMsg,_alloc::alloc::Global>>\n                          (&local_100,key_01,&self->chat);\n        local_e0.formatter._24_8_ =\n             (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n        if (local_e0.formatter._24_8_ == 0) {\n          key_02.length = 8;\n          key_02.data_ptr = (u8 *)\"autonomy\";\n          RVar1 = serde_json::ser::\n                  serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                            (&local_100,key_02,&self->autonomy);\n          local_b8 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n          if (local_b8 == 0) {\n            key_03.length = 4;\n            key_03.data_ptr = (u8 *)\"modeBack\";\n            RVar1 = serde_json::ser::\n                    serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                              (&local_100,key_03,&self->mode);\n            local_b0 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n            if (local_b0 == 0) {\n              key_04.length = 10;\n              key_04.data_ptr = &DAT_00304f0f;\n              RVar1 = serde_json::ser::\n                      serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                                (&local_100,key_04,&self->hypothesis);\n              local_a8 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n              if (local_a8 == 0) {\n                key_05.length = 9;\n                key_05.data_ptr = &DAT_00304f19;\n                RVar1 = serde_json::ser::\n                        serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                                  (&local_100,key_05,&self->exp_notes);\n                local_a0 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n                if (local_a0 == 0) {\n                  key_06.length = 0xe;\n                  key_06.data_ptr = &DAT_00304f22;\n                  RVar1 = serde_json::ser::\n                          serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_bool>\n                                    (&local_100,key_06,&self->reduced_motion);\n                  local_98 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n                  if (local_98 == 0) {\n                    key_07.length = 10;\n                    key_07.data_ptr = &DAT_00304f30;\n                    RVar1 = serde_json::ser::\n                            serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                                      (&local_100,key_07,&self->code_notes);\n                    local_90 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n                    if (local_90 == 0) {\n                      local_82 = 0;\n                      self_01._8_1_ = local_100._8_1_;\n                      self_01._0_8_ = local_100._0_8_;\n                      self_01._9_7_ = 0;\n                      local_108 = serde_json::ser::\n                                  end<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n                                            (self_01);\n                    }\n                    else {\n                      local_50 = local_90;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n                      local_108 = (Result<(),_serde_json::error::Error>)\n                                  (*(code *)\n                                    PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                                  )(local_90,&PTR_s_src_main_rs_019db9c8);\n                    }\n                  }\n                  else {\n                    local_48 = local_98;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n                    local_108 = (Result<(),_serde_json::error::Error>)\n                                (*(code *)\n                                  PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                                )(local_98,&PTR_s_src_main_rs_019db9c8);\n                  }\n                }\n                else {\n                  local_40 = local_a0;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n                  local_108 = (Result<(),_serde_json::error::Error>)\n                              (*(code *)\n                                PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                              )(local_a0,&PTR_s_src_main_rs_019db9c8);\n                }\n              }\n              else {\n                local_38 = local_a8;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n                local_108 = (Result<(),_serde_json::error::Error>)\n                            (*(code *)\n                              PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                            )(local_a8,&PTR_s_src_main_rs_019db9c8);\n              }\n            }\n            else {\n              local_30 = local_b0;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n              local_108 = (Result<(),_serde_json::error::Error>)\n                          (*(code *)\n                            PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                          )(local_b0,&PTR_s_src_main_rs_019db9c8);\n            }\n          }\n          else {\n            local_28 = local_b8;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n            local_108 = (Result<(),_serde_json::error::Error>)\n                        (*(code *)\n                          PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                        )(local_b8,&PTR_s_src_main_rs_019db9c8);\n          }\n        }\n        else {\n          local_20 = local_e0.formatter._24_8_;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n          local_108 = (Result<(),_serde_json::error::Error>)\n                      (*(code *)\n                        PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                      )(local_e0.formatter._24_8_,&PTR_s_src_main_rs_019db9c8);\n        }\n      }\n      else {\n        local_18 = local_e0.formatter.current_indent;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n        local_108 = (Result<(),_serde_json::error::Error>)\n                    (*(code *)\n                      PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                    )(local_e0.formatter.current_indent,&PTR_s_src_main_rs_019db9c8);\n      }\n    }\n    else {\n      local_10 = local_e0.formatter.indent.length;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n      local_108 = (Result<(),_serde_json::error::Error>)\n                  (*(code *)\n                    PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                  )(local_e0.formatter.indent.length,&PTR_s_src_main_rs_019db9c8);\n    }\n  }\n  return local_108;\n}\n\n",
+        "signature": "Result<(),_serde_json::error::Error> __rustcall loom_frontend::_::serialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>(Store *self,Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>*__serializer);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for serialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>> from the Deep engine (268 lines)."
+    }
+  ]
+}

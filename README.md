@@ -364,7 +364,21 @@ loom-ide/                  # Tauri prototype (this repo's current direction)
 ├── HOW_TO_OPEN.md        # how to run this prototype
 ├── src/main.rs           # DEPRECATED eframe/egui app — do not extend
 ├── Cargo.toml            # DEPRECATED eframe app manifest — do not use
-└── run.sh                # DEPRECATED eframe launcher — do not use
+├── run.sh                # DEPRECATED eframe launcher — do not use
+├── native-app/           # MERGED: eframe/egui "living-workbench" native workbench
+│   ├── src/              # main.rs, adapter.rs, knowledge.rs, mechanics.rs,
+│   │   │                 # scene.rs, visual.rs (native UI + local vault)
+│   ├── Cargo.toml        # living-workbench v0.1.0 (eframe 0.29.1)
+│   ├── Cargo.lock
+│   ├── assets/           # Inter fonts
+│   ├── docs/             # native investigation (pseudocode, verification)
+│   ├── CREDITS.md
+│   ├── MECHANICS.md
+│   ├── mechanics.json
+│   └── README.md
+│   (target/, test-data/, Research Vault/, .loom/, shots/ excluded — build
+│    output and runtime vault data)
+└── ...
 ```
 
 ## Status / known gaps

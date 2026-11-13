@@ -1,0 +1,406 @@
+{
+  "target": "/home/ed/loom-ide-tauri/target/debug/loom-frontend",
+  "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1",
+  "functions": [
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_29128d2756d85adb2157da42e1caab71bea7e6ffaaf9821f19c7e22088d0a6e9",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7e4410"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "0x7e4410"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8e4410",
+        "entry": "0x7e4410",
+        "function": "{closure#0}",
+        "pseudo_code": "\n/* DWARF original prototype: void {closure#0}(Ui * ui) */\n\nvoid __rustcall loom_frontend::attention_panel::{closure#0}::_closure_0_(Ui *ui)\n\n{\n  undefined8 *puVar1;\n  undefined8 in_RSI;\n  Response local_120;\n  Response local_b8;\n  undefined8 local_50;\n  undefined8 local_48;\n  undefined8 local_40;\n  bool local_19;\n  Response *local_18;\n  bool local_9;\n  Response *local_8;\n  \n                    /* Unresolved local var: bool self__attention_open@[???]\n                       Unresolved local var: String self__notice@[???]\n                       Unresolved local var: Mode self__mode@[???] */\n  (*(code *)PTR_button<&str>_01a66d70)(&local_120,in_RSI,&DAT_00305116,0x15);\n  local_8 = &local_120;\n  if ((local_120.fake_primary_click & 1U) == 0) {\n    local_9 = egui::response::Response::clicked_by(&local_120,Primary);\n  }\n  else {\n    local_9 = true;\n  }\n  if (local_9 == false) {\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_120);\n  }\n  else {\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_120);\n    **(undefined1 **)&(ui->placer).grid = 1;\n    **(undefined1 **)&(ui->placer).grid.field_0x10 = 1;\n  }\n  (*(code *)PTR_button<&str>_01a66d70)(&local_b8,in_RSI,&DAT_0030512b,0xc);\n  local_18 = &local_b8;\n  if ((local_b8.fake_primary_click & 1U) == 0) {\n    local_19 = egui::response::Response::clicked_by(&local_b8,Primary);\n  }\n  else {\n    local_19 = true;\n  }\n  if (local_19 == false) {\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_b8);\n  }\n  else {\n    (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_b8);\n    **(undefined1 **)&(ui->placer).grid.field_0x10 = 0;\n    (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n              (&local_50,&DAT_00305137,0x3e,&PTR_s_src_main_rs_019dbd18);\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)\n              (*(undefined8 *)&(ui->placer).grid.field_0x8);\n    puVar1 = *(undefined8 **)&(ui->placer).grid.field_0x8;\n    *puVar1 = local_50;\n    puVar1[1] = local_48;\n    puVar1[2] = local_40;\n  }\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::attention_panel::{closure#0}::{closure#0}(Ui *ui);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for {closure#0} from the Deep engine (63 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_4117e4506f5bb232122be534cb70bf0f2f82c0b7b30e13dd53153b9780deea99",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7cc560"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "_RNvMs0_Cs4KEK2esws7V_13loom_frontendNtB5_7LoomApp9send_chat"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8cc560",
+        "entry": "0x7cc560",
+        "function": "send_chat",
+        "pseudo_code": "\n/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */\n/* DWARF original prototype: void send_chat(LoomApp * self) */\n\nvoid __rustcall loom_frontend::LoomApp::send_chat(LoomApp *self)\n\n{\n  f64 fVar1;\n  bool bVar2;\n  byte bVar3;\n  _str _Var4;\n  Arguments args;\n  String local_1b0;\n  _str local_198;\n  UsizeNoHighBit local_188;\n  u8 *local_180;\n  usize local_178;\n  undefined8 local_170;\n  undefined4 uStack_168;\n  undefined4 uStack_164;\n  undefined8 local_160;\n  undefined1 local_158 [12];\n  ChatMsg local_148;\n  usize local_108;\n  NonNull<u8> NStack_100;\n  usize local_f8;\n  usize local_f0;\n  NonNull<u8> NStack_e8;\n  usize local_e0;\n  ChatMsg local_d8;\n  usize local_a0;\n  NonNull<u8> NStack_98;\n  usize local_90;\n  usize local_88;\n  NonNull<u8> NStack_80;\n  usize local_78;\n  String local_70;\n  Argument local_58;\n  ArgumentType local_40;\n  undefined1 local_30 [16];\n  LoomApp *local_20;\n  String *local_8;\n  \n  local_20 = self;\n  _Var4 = ::alloc::string::deref(&self->chat_input);\n  _Var4 = core::str::trim(_Var4);\n  (*(code *)PTR_to_string<str>_01a668f8)(&local_1b0,_Var4.data_ptr,_Var4.length);\n                    /* Unresolved local var: String text@[???] */\n  bVar2 = ::alloc::string::String::is_empty(&local_1b0);\n  if (!bVar2) {\n    local_198 = ::alloc::string::String::as_str(&(self->store).autonomy);\n                    /* Unresolved local var: &str level@[???] */\n    bVar3 = (*(code *)PTR_eq<str,_str>_01a66990)(&local_198,&PTR_DAT_019db538);\n    if ((bVar3 & 1) == 0) {\n      ::alloc::string::String::clear(&self->chat_input);\n      local_170 = 0xffffffffffffffff;\n      (*(code *)PTR_drop_glue<core::option::Option<alloc::string::String>>_01a66518)\n                (&self->chat_failed);\n      *(undefined8 *)&(self->chat_failed).field_0x10 = local_160;\n      *(undefined4 *)&self->chat_failed = (undefined4)local_170;\n      *(undefined4 *)&(self->chat_failed).field_0x4 = local_170._4_4_;\n      *(undefined4 *)&(self->chat_failed).field_0x8 = uStack_168;\n      *(undefined4 *)&(self->chat_failed).field_0xc = uStack_164;\n      local_158 = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n      fVar1 = core::time::Duration::as_secs_f64((Duration *)local_158);\n      self->processing_until = (f64)((double)fVar1 + _DAT_00301ab0);\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_108,&DAT_00303c10,3,&PTR_s_src_main_rs_019db548);\n      (*(code *)PTR_clone_01a66a20)(&local_f0,&local_1b0);\n      local_148.who.vec.len = local_f8;\n      local_148.who.vec.buf.inner.cap.__0 = local_108;\n      local_148.who.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)NStack_100.pointer\n      ;\n      local_148.text.vec.len = local_e0;\n      local_148.text.vec.buf.inner.cap.__0 = local_f0;\n      local_148.text.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)NStack_e8.pointer\n      ;\n      local_148.mine = true;\n      local_148.card = false;\n      ::alloc::vec::Vec<loom_frontend::ChatMsg,_alloc::alloc::Global>::\n      push<loom_frontend::ChatMsg,_alloc::alloc::Global>(&(self->store).chat,&local_148);\n      if ((self->server_online & 1U) == 0) {\n        (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                  (&local_a0,&DAT_00304586,0x14,&PTR_s_src_main_rs_019db560);\n        local_8 = &local_1b0;\n                    /* Unresolved local var: (&alloc::string::String) args@[???] */\n        (*(code *)PTR_new_display<alloc::string::String>_01a66978)(&local_40);\n        local_58.ty._0_8_ = local_40._0_8_;\n        local_58.ty._8_8_ = local_40._8_8_;\n                    /* Unresolved local var: Argument[1] args@[???] */\n        args = core::fmt::Arguments::new<249,_1>\n                         ((u8 (*) [249])&DAT_0030459a,(Argument (*) [1])&local_58);\n        ::alloc::fmt::format(&local_70,args);\n        local_88 = local_70.vec.buf.inner.cap.__0;\n        NStack_80 = local_70.vec.buf.inner.ptr.pointer.pointer;\n        local_78 = local_70.vec.len;\n        local_d8.who.vec.len = local_90;\n        local_d8.who.vec.buf.inner.cap.__0 = local_a0;\n        local_d8.who.vec.buf.inner.ptr.pointer.pointer = (NonNull<u8>)(NonNull<u8>)NStack_98.pointer\n        ;\n        local_d8.text.vec.len = local_70.vec.len;\n        local_d8.text.vec.buf.inner.cap.__0 = local_70.vec.buf.inner.cap.__0;\n        local_d8.text.vec.buf.inner.ptr.pointer.pointer = local_70.vec.buf.inner.ptr.pointer.pointer\n        ;\n        local_d8.mine = false;\n        local_d8.card = true;\n        ::alloc::vec::Vec<loom_frontend::ChatMsg,_alloc::alloc::Global>::\n        push<loom_frontend::ChatMsg,_alloc::alloc::Global>(&(self->store).chat,&local_d8);\n        local_30._0_12_ = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n        fVar1 = core::time::Duration::as_secs_f64((Duration *)local_30);\n        self->completed_until = (f64)((double)fVar1 + DAT_003019a0);\n      }\n      else {\n        _Var4 = ::alloc::string::deref(&local_1b0);\n        weave(self,_Var4);\n      }\n      persist(self);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_1b0);\n      return;\n    }\n    (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n              (&local_188,&DAT_00304693,0x73,&PTR_s_src_main_rs_019db578);\n    (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&self->notice);\n    (self->notice).vec.buf.inner.cap.__0 = local_188.__0;\n    (self->notice).vec.buf.inner.ptr.pointer.pointer = local_180;\n    (self->notice).vec.len = local_178;\n  }\n  (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&local_1b0);\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::LoomApp::send_chat(LoomApp *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for send_chat from the Deep engine (131 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_83a02d742fde46dbcbd3e331cdd280afcefcc1fec7d7ae9510b14b100af7047c",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7ce860"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "_RNvMs_Cs4KEK2esws7V_13loom_frontendNtB4_11SphereState5words"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8ce860",
+        "entry": "0x7ce860",
+        "function": "words",
+        "pseudo_code": "\n/* DWARF original prototype: &str words(SphereState * self) */\n\n_str __rustcall loom_frontend::SphereState::words(SphereState *self)\n\n{\n  _str _Var1;\n  u8 *puStack_18;\n  usize uStack_10;\n  \n                    /* WARNING (jumptable): Sanity check requires truncation of jumptable */\n                    /* WARNING: Could not find normalized switch variable to match jumptable */\n  switch(*self) {\n  case Idle:\n    puStack_18 = &UNK_00304805;\n    uStack_10 = 0x1f;\n    break;\n  case Listening:\n    puStack_18 = &UNK_00304824;\n    uStack_10 = 0x1f;\n    break;\n  case Processing:\n    puStack_18 = &UNK_00304843;\n    uStack_10 = 0x1f;\n    break;\n  case Executing:\n    puStack_18 = &UNK_00304862;\n    uStack_10 = 0x21;\n    break;\n  case Attention:\n    puStack_18 = &UNK_00304883;\n    uStack_10 = 0x24;\n    break;\n  case Completed:\n    puStack_18 = &UNK_003048a7;\n    uStack_10 = 0x16;\n  }\n  _Var1.length = uStack_10;\n  _Var1.data_ptr = puStack_18;\n  return _Var1;\n}\n\n",
+        "signature": "&str __rustcall loom_frontend::SphereState::words(SphereState *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for words from the Deep engine (42 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_f22a7825b476db0d0e90b3014591c84e8dc828b60c85cf7ff1c57a48784087de",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7c77b0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "_RNvMs0_Cs4KEK2esws7V_13loom_frontendNtB5_7LoomApp11paint_scene"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8c77b0",
+        "entry": "0x7c77b0",
+        "function": "paint_scene",
+        "pseudo_code": "\n/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */\n/* DWARF original prototype: void paint_scene(LoomApp * self, Ui * ui) */\n\nvoid __rustcall loom_frontend::LoomApp::paint_scene(LoomApp *self,Ui *ui)\n\n{\n  code *pcVar1;\n  f64 fVar2;\n  double dVar3;\n  byte bVar4;\n  u8 r;\n  u8 g;\n  u8 b;\n  ulong uVar5;\n  undefined1 extraout_DL;\n  byte extraout_DL_00;\n  undefined4 extraout_EDX;\n  int extraout_EDX_00;\n  undefined4 extraout_EDX_01;\n  int extraout_EDX_02;\n  Color32 fill_color;\n  undefined4 extraout_EDX_03;\n  int extraout_EDX_04;\n  undefined4 extraout_EDX_05;\n  int extraout_EDX_06;\n  Color32 fill_color_00;\n  undefined4 extraout_EDX_07;\n  int extraout_EDX_08;\n  Color32 fill_color_01;\n  int extraout_EDX_09;\n  Color32 fill_color_02;\n  Pos2 center;\n  Pos2 center_00;\n  Pos2 center_01;\n  Pos2 center_02;\n  f32 fVar6;\n  f32 fVar7;\n  f32 fVar8;\n  float fVar9;\n  float fVar10;\n  float fVar11;\n  float fVar12;\n  float fVar13;\n  float fVar14;\n  undefined1 auVar15 [16];\n  _str _Var16;\n  float local_4a8;\n  float fStack_4a4;\n  float fStack_4a0;\n  float fStack_49c;\n  Painter local_498;\n  undefined4 local_45c;\n  undefined4 local_458;\n  uint local_454;\n  int local_450;\n  u8 local_44c [4];\n  float local_448;\n  float local_444;\n  float local_440;\n  float local_43c;\n  float local_438;\n  float local_434;\n  float local_430;\n  float local_42c;\n  u8 local_428 [4];\n  undefined1 local_424;\n  undefined1 local_423;\n  byte local_422;\n  byte local_421;\n  float local_420;\n  float local_41c;\n  float local_418;\n  float local_414;\n  undefined8 local_410;\n  u8 local_404 [4];\n  f64 local_400;\n  undefined1 local_3f8 [19];\n  SphereState local_3e5;\n  undefined4 local_3e4;\n  undefined4 local_3e0;\n  uint local_3dc;\n  int local_3d8;\n  u8 local_3d4 [4];\n  Color32 local_3d0;\n  float local_3cc;\n  undefined4 local_3c8;\n  undefined4 local_3c4;\n  uint local_3c0;\n  int local_3bc;\n  u8 local_3b8 [4];\n  undefined4 local_3b4;\n  undefined4 local_3b0;\n  uint local_3ac;\n  int local_3a8;\n  u8 local_3a4 [4];\n  Pos2 local_3a0;\n  u8 local_394 [4];\n  double local_390;\n  undefined4 local_384;\n  undefined4 local_380;\n  uint local_37c;\n  int local_378;\n  float local_374;\n  undefined8 local_370;\n  undefined8 uStack_368;\n  undefined8 local_360;\n  undefined8 local_354;\n  undefined4 local_34c;\n  undefined1 local_348 [12];\n  undefined8 local_33c;\n  undefined4 local_334;\n  uint local_330;\n  int local_32c;\n  undefined1 local_328 [80];\n  undefined8 local_2d8;\n  undefined8 uStack_2d0;\n  undefined8 local_2c8;\n  undefined8 local_2c0;\n  u8 local_2b8 [4];\n  u8 local_2b4 [4];\n  undefined1 local_2b0 [16];\n  FontId local_2a0;\n  undefined1 local_280 [16];\n  undefined *local_270;\n  undefined8 local_268;\n  FontId local_260;\n  byte local_23a;\n  undefined1 local_239;\n  LoomApp *local_238;\n  Ui *local_230;\n  float local_228;\n  float fStack_224;\n  float fStack_220;\n  float fStack_21c;\n  undefined4 local_214;\n  float local_1fc;\n  u8 local_1f8 [4];\n  u8 local_1f4 [4];\n  float local_1f0;\n  float local_1ec;\n  f32 local_1e8;\n  float local_1e4;\n  float local_1e0;\n  u8 local_1dc [4];\n  u8 local_1d8 [4];\n  u8 local_1d4 [4];\n  Pos2 local_1d0;\n  Pos2 local_1c8;\n  float local_1bc;\n  u8 local_1b8 [4];\n  u8 local_1b4 [4];\n  undefined2 local_1ae;\n  undefined4 local_1ac;\n  undefined2 local_1a6;\n  undefined4 local_1a4;\n  int local_1a0;\n  float local_19c;\n  u8 local_198 [4];\n  u8 local_194 [4];\n  undefined8 local_190;\n  undefined8 local_188;\n  int local_180;\n  float local_17c;\n  float local_178;\n  float local_174;\n  float local_170;\n  float local_16c;\n  int local_168;\n  float local_164;\n  u8 local_160 [4];\n  u8 local_15c [4];\n  int local_158;\n  float local_154;\n  u8 local_14d;\n  u8 local_14c [4];\n  u8 local_148 [4];\n  int local_144;\n  float local_140;\n  u8 local_13c [4];\n  u8 local_138 [4];\n  byte local_131;\n  float local_130;\n  u8 local_129;\n  u8 local_128 [4];\n  u8 local_124 [4];\n  undefined8 local_120;\n  undefined8 local_118;\n  int local_110;\n  float local_10c;\n  float local_108;\n  float local_104;\n  u8 local_100 [4];\n  u8 local_fc [4];\n  float local_f8;\n  float local_f4;\n  float local_f0;\n  float local_ec;\n  float local_e8;\n  float local_e4;\n  float local_e0;\n  float local_dc;\n  float *local_d8;\n  float *local_d0;\n  float *local_c8;\n  float *local_c0;\n  float *local_b8;\n  float *local_b0;\n  float *local_a8;\n  undefined1 local_9a;\n  byte local_99;\n  float local_98;\n  float local_94;\n  float local_90;\n  float local_8c;\n  float local_88;\n  float local_84;\n  float local_80;\n  float local_7c;\n  float local_78;\n  float local_74;\n  float local_70;\n  float local_6c;\n  float local_68;\n  float local_64;\n  float local_60;\n  float local_5c;\n  float local_58;\n  float local_54;\n  float local_50;\n  float local_4c;\n  float local_48;\n  float local_44;\n  float *local_40;\n  float *local_38;\n  float *local_30;\n  float *local_28;\n  float *local_20;\n  float *local_18;\n  float *local_10;\n  float *local_8;\n  \n  local_23a = 0;\n  local_239 = 0;\n  local_238 = self;\n  local_230 = ui;\n  (*(code *)PTR_available_rect_before_wrap_01a66a30)(&local_4a8);\n                    /* Unresolved local var: Rect rect@[???] */\n  local_228 = local_4a8;\n  fStack_224 = fStack_4a4;\n  fStack_220 = fStack_4a0;\n  fStack_21c = fStack_49c;\n  (*(code *)PTR_painter_at_01a66a38)(&local_498,ui,&local_228);\n                    /* Unresolved local var: Painter painter@[???] */\n  local_214 = 0x18;\n                    /* Unresolved local var: i32 steps@[???] */\n  local_45c = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,0x18);\n  local_458 = extraout_EDX;\n  do {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n    local_454 = (*(code *)PTR_next<i32>_01a66a50)(&local_45c);\n    local_450 = extraout_EDX_00;\n    if ((local_454 & 1) == 0) {\n      local_8 = &local_4a8;\n      local_a8 = &local_4a8;\n      fVar9 = fStack_49c - (fStack_49c - fStack_4a4) * DAT_00303750;\n      local_20 = &local_4a8;\n                    /* Unresolved local var: f32 water_top@[???] */\n      local_48 = local_4a8;\n      local_e8 = local_4a8;\n      local_e0 = fStack_4a0;\n      local_dc = fStack_49c;\n      local_438 = local_4a8;\n      local_430 = fStack_4a0;\n      local_42c = fStack_49c;\n      local_434 = fVar9;\n      local_1fc = fVar9;\n      local_e4 = fVar9;\n      local_44 = fVar9;\n      local_428 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied(0xe9,0xe0,0xd6,0xff);\n      local_1f8 = local_428;\n      local_1f4 = local_428;\n      (*(code *)PTR_rect_filled<f32,_ecolor::color32::Color32>_01a66a58)\n                (0,&local_498,&local_438,local_428);\n      local_424 = (*(code *)PTR_into_iter<core::ops::range::Range<u8>>_01a66a60)(0,7);\n      local_423 = extraout_DL;\n      while( true ) {\n                    /* Unresolved local var: Range<u8> iter@[???] */\n        local_422 = (*(code *)PTR_next<u8>_01a66a68)(&local_424);\n        local_422 = local_422 & 1;\n        local_421 = extraout_DL_00;\n        if (local_422 == 0) {\n          if (((self->store).reduced_motion & 1U) == 0) {\n            local_3f8._0_12_ = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n            local_400 = core::time::Duration::as_secs_f64((Duration *)local_3f8);\n          }\n          else {\n            local_400 = 0.0;\n          }\n                    /* Unresolved local var: f64 t@[???] */\n          local_3e5 = sphere_state(self);\n          local_d0 = &local_4a8;\n                    /* Unresolved local var: SphereState state@[???] */\n          fVar12 = (local_4a8 + fStack_4a0) * DAT_0030344c;\n          local_d8 = &local_4a8;\n          local_b0 = &local_4a8;\n          fVar13 = (fStack_4a4 + fStack_49c) * DAT_0030344c +\n                   (fStack_49c - fStack_4a4) * DAT_00303400;\n          local_b8 = &local_4a8;\n                    /* Unresolved local var: Pos2 centre@[???] */\n          local_1f0 = fVar12;\n          local_1ec = fVar13;\n          local_50 = fVar12;\n          local_4c = fVar13;\n          fVar6 = core::f32::min((f32)((fStack_49c - fStack_4a4) * DAT_00303824),DAT_00303828);\n          fVar6 = core::f32::max(fVar6,DAT_0030329c);\n                    /* Unresolved local var: f32 radius@[???] */\n          local_1e0 = fVar9 + (float)fVar6 * DAT_00303320;\n          local_1e8 = fVar6;\n          local_1e4 = fVar12;\n          local_58 = fVar12;\n          local_54 = local_1e0;\n                    /* Unresolved local var: Pos2 refl@[???] */\n          local_3e4 = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,6);\n          local_3e0 = extraout_EDX_01;\n          while( true ) {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n            local_3dc = (*(code *)PTR_next<i32>_01a66a50)(&local_3e4);\n            local_3d8 = extraout_EDX_02;\n            if ((local_3dc & 1) == 0) break;\n                    /* Unresolved local var: i32 i@[???] */\n            local_140 = (float)fVar6 * ((float)extraout_EDX_02 * DAT_003039d4 + DAT_00303548);\n            local_144 = extraout_EDX_02;\n                    /* Unresolved local var: f32 rr@[???] */\n            local_3d4 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                           (0xff,0xfa,0xf2,0x10);\n            center_02.y = 0.0;\n            center_02.x = (f32)local_3d4;\n            local_13c = local_3d4;\n            local_138 = local_3d4;\n            egui::painter::Painter::circle_filled<ecolor::color32::Color32>\n                      (&local_498,center_02,(f32)fVar12,fill_color);\n          }\n          if (local_3e5 - 2 < 2) {\n            local_3d0.__0[0] = DAT_003033c4[0];\n            local_3d0.__0[1] = DAT_003033c4[1];\n            local_3d0.__0[2] = DAT_003033c4[2];\n            local_3d0.__0[3] = DAT_003033c4[3];\n          }\n          else if (local_3e5 == Attention) {\n            local_3d0.__0[0] = DAT_0030387c[0];\n            local_3d0.__0[1] = DAT_0030387c[1];\n            local_3d0.__0[2] = DAT_0030387c[2];\n            local_3d0.__0[3] = DAT_0030387c[3];\n          }\n          else {\n            local_3d0 = ecolor::color32::Color32::from_rgb(0xff,0xf4,0xe6);\n            local_1dc = local_3d0.__0;\n          }\n                    /* Unresolved local var: Color32 glow@[???] */\n          if (((self->store).reduced_motion & 1U) == 0) {\n            fVar2 = std::f64::sin((f64)((double)local_400 * DAT_00301718));\n            local_3cc = (float)(double)fVar2 * DAT_0030344c + DAT_0030344c;\n          }\n          else {\n            local_3cc = 0.0;\n          }\n                    /* Unresolved local var: f32 pulse@[???] */\n          local_3c8 = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,7);\n          local_3c4 = extraout_EDX_03;\n          while( true ) {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n            local_3c0 = (*(code *)PTR_next<i32>_01a66a50)(&local_3c8);\n            local_3bc = extraout_EDX_04;\n            if ((local_3c0 & 1) == 0) break;\n                    /* Unresolved local var: i32 i@[???] */\n            local_154 = (float)fVar6 * ((float)extraout_EDX_04 * DAT_00303400 + DAT_00303450);\n                    /* Unresolved local var: f32 rr@[???] */\n            fVar10 = local_3cc * DAT_00303268 + DAT_003031ac;\n            fVar9 = 0.0;\n            if (0.0 <= fVar10) {\n              fVar9 = fVar10;\n            }\n            fVar10 = DAT_00303754;\n            if (fVar9 <= DAT_00303754) {\n              fVar10 = fVar9;\n            }\n            local_158 = extraout_EDX_04;\n            local_14d = (u8)(int)fVar10;\n                    /* Unresolved local var: u8 a@[???] */\n            r = ecolor::color32::Color32::r(&local_3d0);\n            g = ecolor::color32::Color32::g(&local_3d0);\n            b = ecolor::color32::Color32::b(&local_3d0);\n            local_3b8 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                           (r,g,b,(u8)(int)fVar10);\n            center_01.y = 0.0;\n            center_01.x = (f32)local_3b8;\n            local_14c = local_3b8;\n            local_148 = local_3b8;\n            egui::painter::Painter::circle_filled<ecolor::color32::Color32>\n                      (&local_498,center_01,(f32)fVar12,fill_color_02);\n          }\n          local_3b4 = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,9);\n          local_3b0 = extraout_EDX_05;\n          while( true ) {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n            local_3ac = (*(code *)PTR_next<i32>_01a66a50)(&local_3b4);\n            local_3a8 = extraout_EDX_06;\n            if ((local_3ac & 1) == 0) break;\n                    /* Unresolved local var: i32 i@[???] */\n            local_164 = (float)extraout_EDX_06 / DAT_003035ec;\n            local_168 = extraout_EDX_06;\n                    /* Unresolved local var: f32 f@[???] */\n            local_3a4 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                           (0xff,0xfb,0xf5,0x1a);\n            center_00.y = 0.0;\n            center_00.x = (f32)local_3a4;\n            local_160 = local_3a4;\n            local_15c = local_3a4;\n            egui::painter::Painter::circle_filled<ecolor::color32::Color32>\n                      (&local_498,center_00,(f32)fVar12,fill_color_00);\n          }\n          local_394 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                         (0xbe,0xaf,0xa0,0x78);\n          local_1d8 = local_394;\n          local_1d4 = local_394;\n          auVar15 = (*(code *)PTR_new<f32,_ecolor::color32::Color32>_01a66840)\n                              (DAT_003031a8,local_394);\n          local_3a0 = auVar15._0_8_;\n          local_1d0 = local_3a0;\n          local_1c8 = local_3a0;\n          egui::painter::Painter::circle_stroke<epaint::stroke::Stroke>\n                    (&local_498,local_3a0,(f32)fVar12,auVar15._8_8_);\n          if (local_3e5 == Processing) {\n            local_390 = DAT_00301bb0;\n          }\n          else if (local_3e5 == Executing) {\n            local_390 = DAT_00301d68;\n          }\n          else {\n            local_390 = DAT_003012f0;\n          }\n                    /* Unresolved local var: f64 speed@[???] */\n          dVar3 = (double)local_400 * local_390;\n          local_1bc = (float)dVar3;\n                    /* Unresolved local var: f32 phase@[???] */\n          local_384 = (*(code *)PTR_into_iter<core::ops::range::Range<i32>>_01a66a40)(0,6);\n          local_380 = extraout_EDX_07;\n          while( true ) {\n                    /* Unresolved local var: Range<i32> iter@[???] */\n            local_37c = (*(code *)PTR_next<i32>_01a66a50)(&local_384);\n            local_378 = extraout_EDX_08;\n            if ((local_37c & 1) == 0) break;\n                    /* Unresolved local var: i32 k@[???] */\n            fVar9 = ((float)extraout_EDX_08 - DAT_0030320c) * (float)fVar6 * DAT_0030382c;\n                    /* Unresolved local var: f32 off@[???] */\n            local_1a0 = extraout_EDX_08;\n            local_19c = fVar9;\n            if (((self->store).reduced_motion & 1U) == 0) {\n              fVar2 = std::f64::sin((f64)((double)local_400 * _s__00301998 + (double)extraout_EDX_08\n                                         ));\n              local_374 = (float)(double)fVar2 * (float)fVar6 * DAT_00303870;\n            }\n            else {\n              local_374 = 0.0;\n            }\n                    /* Unresolved local var: f32 wob@[???] */\n            (*(code *)PTR_new<emath::pos2::Pos2>_01a66a80)(&local_370);\n                    /* Unresolved local var: Vec<emath::pos2::Pos2,_alloc::alloc::Global> pts@[???]\n                        */\n            local_23a = 1;\n            (*(code *)PTR_new<i32>_01a66a88)(local_348,0,0x30);\n            (*(code *)PTR_into_iter<core::ops::range::RangeInclusive<i32>>_01a66a90)(&local_354);\n            local_33c = local_354;\n            local_334 = local_34c;\n            while( true ) {\n                    /* Unresolved local var: RangeInclusive<i32> iter@[???] */\n              local_330 = (*(code *)PTR_next<i32>_01a66a98)(&local_33c);\n              local_32c = extraout_EDX_09;\n              if ((local_330 & 1) == 0) break;\n                    /* Unresolved local var: i32 s@[???] */\n              fVar14 = (float)extraout_EDX_09 / DAT_00303324;\n                    /* Unresolved local var: f32 f@[???] */\n              fVar11 = (fVar12 - (float)fVar6) + ((float)fVar6 + (float)fVar6) * fVar14;\n                    /* Unresolved local var: f32 x@[???] */\n              local_174 = (fVar11 - fVar12) / (float)fVar6;\n                    /* Unresolved local var: f32 dx@[???] */\n              local_180 = extraout_EDX_09;\n              local_17c = fVar14;\n              local_178 = fVar11;\n              fVar7 = core::f32::max((f32)(DAT_003031a8 - local_174 * local_174),0.0);\n              fVar7 = std::f32::sqrt(fVar7);\n                    /* Unresolved local var: f32 half@[???] */\n              fVar10 = fVar13 + fVar9 + local_374;\n              local_170 = (float)fVar7 * (float)fVar6;\n              fVar8 = std::f32::sin((f32)(fVar14 * DAT_00303874 + fVar14 * DAT_00303874 +\n                                          (float)dVar3 + (float)extraout_EDX_08));\n              fVar10 = fVar10 + (float)fVar8 * (float)fVar6 * DAT_003035f0;\n                    /* Unresolved local var: f32 y@[???] */\n              local_16c = fVar10;\n              fVar8 = core::f32::abs((f32)(fVar10 - fVar13));\n              if ((float)fVar8 <= (float)fVar7 * (float)fVar6) {\n                local_78 = fVar11;\n                local_74 = fVar10;\n                (*(code *)PTR_push<emath::pos2::Pos2,_alloc::alloc::Global>_01a66ac0)\n                          (fVar11,fVar10,&local_370);\n              }\n            }\n            uVar5 = (*(code *)PTR_len<emath::pos2::Pos2,_alloc::alloc::Global>_01a66aa0)(&local_370)\n            ;\n            if (2 < uVar5) {\n              local_23a = 0;\n              local_239 = 1;\n              local_2c8 = local_360;\n              local_2d8 = local_370;\n              uStack_2d0 = uStack_368;\n              local_2b8 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                             (0xb0,0xa0,0x92,0x78);\n              local_198 = local_2b8;\n              local_194 = local_2b8;\n              local_2c0 = (*(code *)PTR_new<f32,_ecolor::color32::Color32>_01a66840)\n                                    (DAT_00303370,local_2b8);\n              local_239 = 0;\n              local_190 = local_2c0;\n              local_188 = local_2c0;\n              (*(code *)PTR_line<epaint::stroke::Stroke>_01a66aa8)(local_328,&local_2d8,local_2c0);\n              local_239 = 0;\n              (*(code *)PTR_add<epaint::shape::Shape>_01a66ab0)(&local_498);\n            }\n            if ((local_23a & 1) != 0) {\n              (*(code *)\n                PTR_drop_glue<alloc::vec::Vec<emath::pos2::Pos2,_alloc::alloc::Global>>_01a66ab8)\n                        (&local_370);\n            }\n            local_23a = 0;\n          }\n          fVar9 = fVar12 + (float)fVar6 * DAT_003032e0;\n          local_5c = fVar13 + (float)fVar6 * DAT_00303944;\n          local_60 = fVar9;\n          local_2b4 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                         (0xff,0xff,0xfc,0x2e);\n          center.y = 0.0;\n          center.x = (f32)local_2b4;\n          local_1b8 = local_2b4;\n          local_1b4 = local_2b4;\n          egui::painter::Painter::circle_filled<ecolor::color32::Color32>\n                    (&local_498,center,(f32)fVar9,fill_color_01);\n          fVar9 = fVar13 + (float)fVar6 + DAT_003037dc;\n          local_68 = fVar12;\n          local_64 = fVar9;\n          _Var16 = SphereState::words(&local_3e5);\n          epaint::text::fonts::FontId::proportional(&local_2a0,(f32)DAT_003039d0);\n          local_1ae = 0x101;\n          local_1ac = 0xff6d7177;\n          (*(code *)PTR_text<&str>_01a66a78)\n                    (fVar12,fVar9,local_2b0,&local_498,0x101,_Var16.data_ptr,_Var16.length,\n                     &local_2a0,0xff6d7177);\n          fVar9 = fVar13 + (float)fVar6 + DAT_003036f8;\n          if ((self->server_online & 1U) == 0) {\n            local_270 = &DAT_0030444e;\n            local_268 = 0x2a;\n          }\n          else {\n            local_270 = &DAT_00304478;\n            local_268 = 0x15;\n          }\n          local_70 = fVar12;\n          local_6c = fVar9;\n          epaint::text::fonts::FontId::proportional(&local_260,DAT_003039cc);\n          local_1a6 = 0x101;\n          local_1a4 = 0xff6d7177;\n          (*(code *)PTR_text<&str>_01a66a78)\n                    (fVar12,fVar9,local_280,&local_498,0x101,local_270,local_268,&local_260,\n                     0xff6d7177);\n          (*(code *)PTR_drop_glue<egui::painter::Painter>_01a66a48)(&local_498);\n          return;\n        }\n                    /* Unresolved local var: u8 i@[???] */\n        local_130 = fVar9 + DAT_00303268 + (float)extraout_DL_00 * DAT_003039d0;\n                    /* Unresolved local var: f32 y@[???] */\n        bVar4 = (byte)((ushort)extraout_DL_00 * 5);\n        local_131 = extraout_DL_00;\n        if ((char)((ushort)((ushort)extraout_DL_00 * 5) >> 8) != '\\0') break;\n        local_9a = 0x2e;\n        local_129 = 0x2e - bVar4;\n        if (0x2e < bVar4) {\n          local_129 = 0;\n        }\n        local_28 = &local_4a8;\n                    /* Unresolved local var: u8 a@[???] */\n        local_420 = local_4a8 + DAT_00303454;\n        local_10 = &local_4a8;\n        local_418 = fStack_4a0 + DAT_00303374;\n        local_41c = local_130;\n        local_414 = local_130;\n        local_99 = bVar4;\n        local_88 = local_418;\n        local_84 = local_130;\n        local_80 = local_420;\n        local_7c = local_130;\n        local_404 = (u8  [4])ecolor::color32::Color32::from_rgba_premultiplied\n                                       (0xbe,0xaf,0xa0,local_129);\n        local_128 = local_404;\n        local_124 = local_404;\n        local_410 = (*(code *)PTR_new<f32,_ecolor::color32::Color32>_01a66840)\n                              (DAT_003031a8,local_404);\n        local_120 = local_410;\n        local_118 = local_410;\n        (*(code *)PTR_line_segment<epaint::stroke::Stroke>_01a66ad0)\n                  (&local_498,&local_420,local_410);\n      }\n      (*(code *)PTR_panic_const_mul_overflow_01a66ac8)(&PTR_s_src_main_rs_019db3c0);\nLAB_008c9009:\n                    /* WARNING: Does not return */\n      pcVar1 = (code *)invalidInstructionException();\n      (*pcVar1)();\n    }\n                    /* Unresolved local var: i32 i@[???] */\n    local_10c = (float)extraout_EDX_00 / DAT_003033c0;\n    local_38 = &local_4a8;\n    local_c0 = &local_4a8;\n    fVar9 = fStack_4a4 + (fStack_49c - fStack_4a4) * local_10c;\n    local_40 = &local_4a8;\n                    /* Unresolved local var: f32 y0@[???] */\n    local_c8 = &local_4a8;\n    local_110 = extraout_EDX_00;\n    local_108 = fVar9;\n                    /* Unresolved local var: f32 t0@[???] */\n    if (SCARRY4(extraout_EDX_00,1)) {\n      (*(code *)PTR_panic_const_add_overflow_01a66890)(&PTR_s_src_main_rs_019db3d8);\n      goto LAB_008c9009;\n    }\n    fVar10 = fStack_4a4 + (fStack_49c - fStack_4a4) * ((float)(extraout_EDX_00 + 1) / DAT_003033c0);\n                    /* Unresolved local var: f32 y1@[???] */\n    fVar11 = local_10c * DAT_003037e0 + DAT_00303908;\n    fVar12 = 0.0;\n    fVar13 = fVar12;\n    if (0.0 <= fVar11) {\n      fVar13 = fVar11;\n    }\n    fVar11 = DAT_00303754;\n    if (fVar13 <= DAT_00303754) {\n      fVar11 = fVar13;\n    }\n    fVar14 = local_10c * DAT_0030354c + DAT_003036c0;\n    fVar13 = fVar12;\n    if (0.0 <= fVar14) {\n      fVar13 = fVar14;\n    }\n    fVar14 = DAT_00303754;\n    if (fVar13 <= DAT_00303754) {\n      fVar14 = fVar13;\n    }\n    fVar13 = local_10c * DAT_003036c4 + DAT_003032e4;\n    if (0.0 <= fVar13) {\n      fVar12 = fVar13;\n    }\n    fVar13 = DAT_00303754;\n    if (fVar12 <= DAT_00303754) {\n      fVar13 = fVar12;\n    }\n    local_104 = fVar10;\n    local_44c = (u8  [4])ecolor::color32::Color32::from_rgb\n                                   ((u8)(int)fVar11,(u8)(int)fVar14,(u8)(int)fVar13);\n    local_30 = &local_4a8;\n                    /* Unresolved local var: Color32 c@[???] */\n    local_90 = local_4a8;\n    local_18 = &local_4a8;\n    local_43c = fVar10 + DAT_003031a8;\n    local_98 = fStack_4a0;\n    local_f8 = local_4a8;\n    local_f0 = fStack_4a0;\n    local_448 = local_4a8;\n    local_440 = fStack_4a0;\n    local_444 = fVar9;\n    local_100 = local_44c;\n    local_fc = local_44c;\n    local_f4 = fVar9;\n    local_ec = local_43c;\n    local_94 = local_43c;\n    local_8c = fVar9;\n    (*(code *)PTR_rect_filled<f32,_ecolor::color32::Color32>_01a66a58)\n              (0,&local_498,&local_448,local_44c);\n  } while( true );\n}\n\n",
+        "signature": "void __rustcall loom_frontend::LoomApp::paint_scene(LoomApp *self,Ui *ui);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for paint_scene from the Deep engine (686 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_9f791d844e7d753727fb772b6af2a80fc5df7b64ebe55dfc746f2be6dd8cd414",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7d9020"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "_RINvXNvCs4KEK2esws7V_13loom_frontends2_1__NtB5_5StoreNtNtCsa3hEjtUYccl_10serde_core3ser9Serialize9serializeQINtNtCsdtaZ1Afoe6M_10serde_json3ser10SerializerQINtNtCsgFX3jaOk65H_5alloc3vec3VechENtB1L_15PrettyFormatterEEB5_"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8d9020",
+        "entry": "0x7d9020",
+        "function": "serialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>",
+        "pseudo_code": "\n/* DWARF original name: serialize<&mut serde_json::ser::Serializer<&mut alloc::vec::Vec<u8,\n   alloc::alloc::Global>, serde_json::ser::PrettyFormatter>>\n   DWARF original prototype: Result<(),_serde_json::error::Error>\n   serialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>(Store\n   * self,\n   Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter> *\n   __serializer) */\n\nResult<(),_serde_json::error::Error> __rustcall\nloom_frontend::_::\nserialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>\n          (Store *self,\n          Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n          *__serializer)\n\n{\n  Result<(),_serde_json::error::Error> RVar1;\n  ControlFlow<core::result::Result<core::convert::Infallible,_serde_json::error::Error>,_serde_json::ser::Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>\n  CVar2;\n  Result<serde_json::ser::Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>,_serde_json::error::Error>\n  self_00;\n  Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter> self_01\n  ;\n  _str name;\n  _str key;\n  _str key_00;\n  _str key_01;\n  _str key_02;\n  _str key_03;\n  _str key_04;\n  _str key_05;\n  _str key_06;\n  _str key_07;\n  Result<(),_serde_json::error::Error> local_108;\n  Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  local_100;\n  Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  local_f0;\n  Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  local_e0;\n  long local_b8;\n  long local_b0;\n  long local_a8;\n  long local_a0;\n  long local_98;\n  long local_90;\n  undefined1 local_82;\n  undefined1 local_81;\n  Store *local_80;\n  Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  *local_78;\n  Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n  local_60;\n  long local_50;\n  long local_48;\n  long local_40;\n  long local_38;\n  long local_30;\n  long local_28;\n  long local_20;\n  usize local_18;\n  usize local_10;\n  undefined8 local_8;\n  \n  local_82 = 0;\n  local_81 = 0;\n  name.length = (usize)&DAT_00304efa;\n  name.data_ptr = (u8 *)__serializer;\n  local_80 = self;\n  local_78 = __serializer;\n  serde_json::ser::\n  serialize_struct<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n            (&local_e0,name,5);\n  local_81 = 0;\n  self_00._8_8_ = &local_e0;\n  self_00._0_8_ = &local_f0;\n  CVar2 = core::result::\n          branch<serde_json::ser::Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>,_serde_json::error::Error>\n                    (self_00);\n  if (local_f0._8_1_ == -1) {\n    local_8 = local_f0._0_8_;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n    local_108 = (Result<(),_serde_json::error::Error>)\n                (*(code *)\n                  PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                )(local_f0._0_8_,&PTR_s_src_main_rs_019db9c8,CVar2._8_8_);\n  }\n  else {\n    local_60._0_8_ = local_f0._0_8_;\n    local_60._8_1_ = local_f0._8_1_;\n                    /* Unresolved local var:\n                       Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n                       val@[???] */\n    local_82 = 1;\n    local_100._0_8_ = local_f0._0_8_;\n    local_100._8_1_ = local_f0._8_1_;\n                    /* Unresolved local var:\n                       Compound<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n                       __serde_state@[???] */\n    key.length = 5;\n    key.data_ptr = &DAT_00304eff;\n    RVar1 = serde_json::ser::\n            serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::vec::Vec<loom_frontend::WorkItem,_alloc::alloc::Global>>\n                      (&local_100,key,&self->works);\n    local_e0.formatter.indent.length =\n         (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n    if (local_e0.formatter.indent.length == 0) {\n      key_00.length = 0xb;\n      key_00.data_ptr = &DAT_00304f04;\n      RVar1 = serde_json::ser::\n              serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_usize>\n                        (&local_100,key_00,&self->active_work);\n      local_e0.formatter.current_indent =\n           (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n      if (local_e0.formatter.current_indent == 0) {\n        key_01.length = 4;\n        key_01.data_ptr = &DAT_003038b4;\n        RVar1 = serde_json::ser::\n                serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::vec::Vec<loom_frontend::ChatMsg,_alloc::alloc::Global>>\n                          (&local_100,key_01,&self->chat);\n        local_e0.formatter._24_8_ =\n             (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n        if (local_e0.formatter._24_8_ == 0) {\n          key_02.length = 8;\n          key_02.data_ptr = (u8 *)\"autonomy\";\n          RVar1 = serde_json::ser::\n                  serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                            (&local_100,key_02,&self->autonomy);\n          local_b8 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n          if (local_b8 == 0) {\n            key_03.length = 4;\n            key_03.data_ptr = (u8 *)\"modeBack\";\n            RVar1 = serde_json::ser::\n                    serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                              (&local_100,key_03,&self->mode);\n            local_b0 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n            if (local_b0 == 0) {\n              key_04.length = 10;\n              key_04.data_ptr = &DAT_00304f0f;\n              RVar1 = serde_json::ser::\n                      serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                                (&local_100,key_04,&self->hypothesis);\n              local_a8 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n              if (local_a8 == 0) {\n                key_05.length = 9;\n                key_05.data_ptr = &DAT_00304f19;\n                RVar1 = serde_json::ser::\n                        serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                                  (&local_100,key_05,&self->exp_notes);\n                local_a0 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n                if (local_a0 == 0) {\n                  key_06.length = 0xe;\n                  key_06.data_ptr = &DAT_00304f22;\n                  RVar1 = serde_json::ser::\n                          serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_bool>\n                                    (&local_100,key_06,&self->reduced_motion);\n                  local_98 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n                  if (local_98 == 0) {\n                    key_07.length = 10;\n                    key_07.data_ptr = &DAT_00304f30;\n                    RVar1 = serde_json::ser::\n                            serialize_field<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter,_alloc::string::String>\n                                      (&local_100,key_07,&self->code_notes);\n                    local_90 = (*(code *)PTR_branch<(),_serde_json::error::Error>_01a66708)(RVar1);\n                    if (local_90 == 0) {\n                      local_82 = 0;\n                      self_01._8_1_ = local_100._8_1_;\n                      self_01._0_8_ = local_100._0_8_;\n                      self_01._9_7_ = 0;\n                      local_108 = serde_json::ser::\n                                  end<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>\n                                            (self_01);\n                    }\n                    else {\n                      local_50 = local_90;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n                      local_108 = (Result<(),_serde_json::error::Error>)\n                                  (*(code *)\n                                    PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                                  )(local_90,&PTR_s_src_main_rs_019db9c8);\n                    }\n                  }\n                  else {\n                    local_48 = local_98;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n                    local_108 = (Result<(),_serde_json::error::Error>)\n                                (*(code *)\n                                  PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                                )(local_98,&PTR_s_src_main_rs_019db9c8);\n                  }\n                }\n                else {\n                  local_40 = local_a0;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n                  local_108 = (Result<(),_serde_json::error::Error>)\n                              (*(code *)\n                                PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                              )(local_a0,&PTR_s_src_main_rs_019db9c8);\n                }\n              }\n              else {\n                local_38 = local_a8;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n                local_108 = (Result<(),_serde_json::error::Error>)\n                            (*(code *)\n                              PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                            )(local_a8,&PTR_s_src_main_rs_019db9c8);\n              }\n            }\n            else {\n              local_30 = local_b0;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n              local_108 = (Result<(),_serde_json::error::Error>)\n                          (*(code *)\n                            PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                          )(local_b0,&PTR_s_src_main_rs_019db9c8);\n            }\n          }\n          else {\n            local_28 = local_b8;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n            local_108 = (Result<(),_serde_json::error::Error>)\n                        (*(code *)\n                          PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                        )(local_b8,&PTR_s_src_main_rs_019db9c8);\n          }\n        }\n        else {\n          local_20 = local_e0.formatter._24_8_;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n          local_108 = (Result<(),_serde_json::error::Error>)\n                      (*(code *)\n                        PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                      )(local_e0.formatter._24_8_,&PTR_s_src_main_rs_019db9c8);\n        }\n      }\n      else {\n        local_18 = local_e0.formatter.current_indent;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n        local_108 = (Result<(),_serde_json::error::Error>)\n                    (*(code *)\n                      PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                    )(local_e0.formatter.current_indent,&PTR_s_src_main_rs_019db9c8);\n      }\n    }\n    else {\n      local_10 = local_e0.formatter.indent.length;\n                    /* Unresolved local var:\n                       Result<core::convert::Infallible,_serde_json::error::Error> residual@[???] */\n      local_108 = (Result<(),_serde_json::error::Error>)\n                  (*(code *)\n                    PTR_from_residual<(),_serde_json::error::Error,_serde_json::error::Error>_01a66710\n                  )(local_e0.formatter.indent.length,&PTR_s_src_main_rs_019db9c8);\n    }\n  }\n  return local_108;\n}\n\n",
+        "signature": "Result<(),_serde_json::error::Error> __rustcall loom_frontend::_::serialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>>(Store *self,Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>*__serializer);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for serialize<&mut_serde_json::ser::Serializer<&mut_alloc::vec::Vec<u8,_alloc::alloc::Global>,_serde_json::ser::PrettyFormatter>> from the Deep engine (268 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_0ad13109bd1d545cca46bba2709f4c459cc59ac499d337c29f8eac76321d30d1",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7ca680"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "_RNvMs0_Cs4KEK2esws7V_13loom_frontendNtB5_7LoomApp12sphere_state"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8ca680",
+        "entry": "0x7ca680",
+        "function": "sphere_state",
+        "pseudo_code": "\n/* DWARF original prototype: SphereState sphere_state(LoomApp * self) */\n\nSphereState __rustcall loom_frontend::LoomApp::sphere_state(LoomApp *self)\n\n{\n  bool bVar1;\n  f64 fVar2;\n  _str _Var3;\n  undefined1 local_28 [12];\n  undefined1 local_18 [12];\n  LoomApp *local_8;\n  \n  if (((self->attention_open & 1U) != 0) || (local_8 = self, bVar1 = has_attention(self), bVar1)) {\n    return Attention;\n  }\n  local_28 = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n  fVar2 = core::time::Duration::as_secs_f64((Duration *)local_28);\n  if ((double)fVar2 < (double)self->processing_until) {\n    return Processing;\n  }\n  if (self->busy == 0) {\n    _Var3 = ::alloc::string::deref(&self->chat_input);\n    _Var3 = core::str::trim(_Var3);\n    bVar1 = core::str::is_empty(_Var3);\n    if (!bVar1) {\n      return Listening;\n    }\n    local_18 = (*(code *)PTR_elapsed_01a66a70)(&self->started);\n    fVar2 = core::time::Duration::as_secs_f64((Duration *)local_18);\n    if ((double)self->completed_until <= (double)fVar2) {\n      return Idle;\n    }\n    return Completed;\n  }\n  return Executing;\n}\n\n",
+        "signature": "SphereState __rustcall loom_frontend::LoomApp::sphere_state(LoomApp *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for sphere_state from the Deep engine (38 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_1888280443772047d4925315eb56a97677c5c8fcb4c43acc897f16eebc1c6f2f",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7ca790"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "_RNvMs0_Cs4KEK2esws7V_13loom_frontendNtB5_7LoomApp13has_attention"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8ca790",
+        "entry": "0x7ca790",
+        "function": "has_attention",
+        "pseudo_code": "\n/* DWARF original prototype: bool has_attention(LoomApp * self) */\n\nbool __rustcall loom_frontend::LoomApp::has_attention(LoomApp *self)\n\n{\n  ulong uVar1;\n  bool local_9;\n  \n  uVar1 = (*(code *)PTR_is_some<alloc::string::String>_01a66ae8)(&self->chat_failed);\n  if ((uVar1 & 1) == 0) {\n    local_9 = self->demo_step == 2;\n  }\n  else {\n    local_9 = true;\n  }\n  return local_9;\n}\n\n",
+        "signature": "bool __rustcall loom_frontend::LoomApp::has_attention(LoomApp *self);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for has_attention from the Deep engine (19 lines)."
+    },
+    {
+      "authority": "original-files",
+      "carries_target_content": true,
+      "confidence": "derived",
+      "coverage": {
+        "status": "unknown"
+      },
+      "environment": {
+        "clean_room": false,
+        "engine": "ghidra",
+        "engine_version": "12.1.4",
+        "host": "linux-x86_64"
+      },
+      "id": "ev_50842003f9622c04cf432f939f62dde73b87edd1be07ea027ff270507840efd0",
+      "limitations": [
+        {
+          "code": "deep_engine",
+          "message": "the pseudo-C comes from the external Deep engine (Ghidra), not the original source"
+        },
+        {
+          "code": "engine_rebased",
+          "message": "Ghidra loaded this program at 0x100000, not where the built-in engine reads it (0x0); entry is the built-in address, engine_entry Ghidra's, and the addresses in Ghidra's names inside the pseudo-C (FUN_…, DAT_…) are Ghidra's"
+        }
+      ],
+      "links": [],
+      "locations": [
+        {
+          "kind": "address",
+          "value": "0x7e49c0"
+        }
+      ],
+      "operation": "native_function_pseudocode",
+      "params": {
+        "function": "_RNCNCNvMs2_Cs4KEK2esws7V_13loom_frontendNtB9_7LoomApp15experiment_mode0s_0B9_"
+      },
+      "result": {
+        "engine": "ghidra",
+        "engine_entry": "0x8e49c0",
+        "entry": "0x7e49c0",
+        "function": "{closure#1}",
+        "pseudo_code": "\n/* DWARF original prototype: void {closure#1}(Ui * ui) */\n\nvoid __rustcall loom_frontend::experiment_mode::{closure#0}::_closure_1_(Ui *ui)\n\n{\n  Option<&mut_loom_frontend::WorkItem> OVar1;\n  u64 uVar2;\n  undefined8 in_RSI;\n  _mut__loom_frontend__WorkItem_ _Var3;\n  Response local_340;\n  undefined8 local_2d8;\n  undefined8 local_2d0;\n  undefined8 local_2c8;\n  Response local_2c0;\n  undefined8 local_258;\n  undefined8 local_250;\n  undefined8 local_248;\n  Response local_240;\n  undefined8 local_1d8;\n  undefined8 local_1d0;\n  undefined8 local_1c8;\n  Option<&mut_loom_frontend::WorkItem> local_1c0;\n  undefined1 local_1b8 [24];\n  Response local_1a0;\n  undefined8 local_138;\n  undefined8 local_130;\n  undefined8 local_128;\n  Option<&mut_loom_frontend::WorkItem> local_120;\n  undefined1 local_118 [24];\n  Response local_100;\n  String local_98;\n  Ui *local_80;\n  Option<&mut_loom_frontend::WorkItem> local_60;\n  Option<&mut_loom_frontend::WorkItem> local_58;\n  bool local_49;\n  Response *local_48;\n  bool local_39;\n  Response *local_38;\n  bool local_29;\n  Response *local_28;\n  bool local_19;\n  Response *local_18;\n  bool local_9;\n  Response *local_8;\n  \n                    /* Unresolved local var: LoomApp self@[???] */\n  local_80 = ui;\n  if (ui[1].placer.region.max_rect.min == (Pos2)0x0) {\n    (*(code *)PTR_button<&str>_01a66d70)(&local_340,in_RSI,&DAT_00305209,0x1f);\n    local_8 = &local_340;\n    if ((local_340.fake_primary_click & 1U) == 0) {\n      local_9 = egui::response::Response::clicked_by(&local_340,Primary);\n    }\n    else {\n      local_9 = true;\n    }\n    if (local_9 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_340);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_340);\n      ui[1].placer.region.max_rect.min.x = 1.4013e-45;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_2d8,&DAT_00305228,0x42,&PTR_s_src_main_rs_019dbd30);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(undefined8 *)&ui[1].placer.grid.field_0x90 = local_2d8;\n      *(undefined8 *)&ui[1].placer.grid.field_0x98 = local_2d0;\n      *(undefined8 *)&ui[1].placer.grid.field_0xa0 = local_2c8;\n    }\n  }\n  if (ui[1].placer.region.max_rect.min == (Pos2)0x1) {\n    (*(code *)PTR_button<&str>_01a66d70)(&local_2c0,in_RSI,&DAT_0030526a,0x12);\n    local_18 = &local_2c0;\n    if ((local_2c0.fake_primary_click & 1U) == 0) {\n      local_19 = egui::response::Response::clicked_by(&local_2c0,Primary);\n    }\n    else {\n      local_19 = true;\n    }\n    if (local_19 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_2c0);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_2c0);\n      ui[1].placer.region.max_rect.min.x = 2.8026e-45;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                (&local_258,&DAT_0030527c,0x44,&PTR_s_src_main_rs_019dbd48);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(undefined8 *)&ui[1].placer.grid.field_0x90 = local_258;\n      *(undefined8 *)&ui[1].placer.grid.field_0x98 = local_250;\n      *(undefined8 *)&ui[1].placer.grid.field_0xa0 = local_248;\n    }\n  }\n  if (ui[1].placer.region.max_rect.min == (Pos2)0x2) {\n    (*(code *)PTR_button<&str>_01a66d70)(&local_240,in_RSI,&DAT_003052c0,0x1d);\n    local_28 = &local_240;\n    if ((local_240.fake_primary_click & 1U) == 0) {\n      local_29 = egui::response::Response::clicked_by(&local_240,Primary);\n    }\n    else {\n      local_29 = true;\n    }\n    if (local_29 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_240);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_240);\n      ui[1].placer.region.max_rect.min.x = 4.2039e-45;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)(&local_1d8,&DAT_003052dd,0x7d);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(undefined8 *)&ui[1].placer.grid.field_0x90 = local_1d8;\n      *(undefined8 *)&ui[1].placer.grid.field_0x98 = local_1d0;\n      *(undefined8 *)&ui[1].placer.grid.field_0xa0 = local_1c8;\n                    /* Unresolved local var: WorkItem * w@[???] */\n      _Var3 = ::alloc::vec::deref_mut<loom_frontend::WorkItem,_alloc::alloc::Global>\n                        ((Vec<loom_frontend::WorkItem,_alloc::alloc::Global> *)\n                         &(ui->placer).grid.field_0x20);\n      OVar1 = core::slice::get_mut<loom_frontend::WorkItem,_usize>\n                        (_Var3,*(usize *)&(ui->placer).grid.field_0xc8);\n      local_1c0 = OVar1;\n      if (OVar1 != (Option<&mut_loom_frontend::WorkItem>)0x0) {\n        local_60 = OVar1;\n        (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                  (local_1b8,&DAT_0030535a,0x3c,&PTR_s_src_main_rs_019dbd78);\n        (*(code *)PTR_push<alloc::string::String,_alloc::alloc::Global>_01a66478)\n                  ((long)OVar1 + 0x60,local_1b8);\n        uVar2 = now_secs();\n        *(u64 *)((long)OVar1 + 0x98) = uVar2;\n      }\n      LoomApp::persist((LoomApp *)ui);\n    }\n    (*(code *)PTR_button<&str>_01a66d70)(&local_1a0,in_RSI,&DAT_00305396,0x1d);\n    local_38 = &local_1a0;\n    if ((local_1a0.fake_primary_click & 1U) == 0) {\n      local_39 = egui::response::Response::clicked_by(&local_1a0,Primary);\n    }\n    else {\n      local_39 = true;\n    }\n    if (local_39 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_1a0);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_1a0);\n      ui[1].placer.region.max_rect.min.x = 4.2039e-45;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)(&local_138,&DAT_003053b3,0x7d);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(undefined8 *)&ui[1].placer.grid.field_0x90 = local_138;\n      *(undefined8 *)&ui[1].placer.grid.field_0x98 = local_130;\n      *(undefined8 *)&ui[1].placer.grid.field_0xa0 = local_128;\n                    /* Unresolved local var: WorkItem * w@[???] */\n      _Var3 = ::alloc::vec::deref_mut<loom_frontend::WorkItem,_alloc::alloc::Global>\n                        ((Vec<loom_frontend::WorkItem,_alloc::alloc::Global> *)\n                         &(ui->placer).grid.field_0x20);\n      OVar1 = core::slice::get_mut<loom_frontend::WorkItem,_usize>\n                        (_Var3,*(usize *)&(ui->placer).grid.field_0xc8);\n      local_120 = OVar1;\n      if (OVar1 != (Option<&mut_loom_frontend::WorkItem>)0x0) {\n        local_58 = OVar1;\n        (*(code *)PTR_into<&str,_alloc::string::String>_01a66508)\n                  (local_118,&DAT_00305430,0x3c,&PTR_s_src_main_rs_019dbda8);\n        (*(code *)PTR_push<alloc::string::String,_alloc::alloc::Global>_01a66478)\n                  ((long)OVar1 + 0x60,local_118);\n        uVar2 = now_secs();\n        *(u64 *)((long)OVar1 + 0x98) = uVar2;\n      }\n      LoomApp::persist((LoomApp *)ui);\n    }\n  }\n  if (ui[1].placer.region.max_rect.min == (Pos2)0x3) {\n    (*(code *)PTR_button<&str>_01a66d70)(&local_100,in_RSI,&DAT_0030546c,0xb);\n    local_48 = &local_100;\n    if ((local_100.fake_primary_click & 1U) == 0) {\n      local_49 = egui::response::Response::clicked_by(&local_100,Primary);\n    }\n    else {\n      local_49 = true;\n    }\n    if (local_49 == false) {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_100);\n    }\n    else {\n      (*(code *)PTR_drop_glue<egui::response::Response>_01a66340)(&local_100);\n      ui[1].placer.region.max_rect.min.x = 0.0;\n      ui[1].placer.region.max_rect.min.y = 0.0;\n      ::alloc::string::String::new(&local_98);\n      (*(code *)PTR_drop_glue<alloc::string::String>_01a66450)(&ui[1].placer.grid.field_0x90);\n      *(usize *)&ui[1].placer.grid.field_0x90 = local_98.vec.buf.inner.cap.__0;\n      *(NonNull<u8> *)&ui[1].placer.grid.field_0x98 = local_98.vec.buf.inner.ptr.pointer.pointer;\n      *(usize *)&ui[1].placer.grid.field_0xa0 = local_98.vec.len;\n    }\n  }\n  return;\n}\n\n",
+        "signature": "void __rustcall loom_frontend::experiment_mode::{closure#0}::{closure#1}(Ui *ui);"
+      },
+      "subject": {
+        "kind": "elf",
+        "name": "loom-frontend",
+        "sha256": "a53a7a2d91bc338b24c17757a19dc6408f9a3c43d306e40dd8f56fa848e938f1"
+      },
+      "summary": "Pseudo-C for {closure#1} from the Deep engine (200 lines)."
+    }
+  ]
+}

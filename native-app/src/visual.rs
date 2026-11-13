@@ -1,0 +1,447 @@
+use eframe::egui::*;
+pub const TEXT: Color32 = Color32::from_rgb(245, 245, 250);
+pub const SECOND: Color32 = Color32::from_rgb(185, 190, 212);
+pub const MUTED: Color32 = Color32::from_rgb(146, 153, 182);
+pub const PURPLE: Color32 = Color32::from_rgb(165, 139, 255);
+pub const BLUE: Color32 = Color32::from_rgb(142, 200, 255);
+pub const GREEN: Color32 = Color32::from_rgb(117, 215, 164);
+pub const AMBER: Color32 = Color32::from_rgb(241, 206, 117);
+pub const RED: Color32 = Color32::from_rgb(237, 143, 154);
+pub const DEEP: Color32 = Color32::from_rgb(16, 18, 31);
+/// Semantic colors shared by native widgets and the custom painted workspace.
+#[derive(Clone, Copy)]
+pub struct Palette {
+    pub light: bool,
+    pub text: Color32,
+    pub second: Color32,
+    pub muted: Color32,
+    pub purple: Color32,
+    pub blue: Color32,
+    pub green: Color32,
+    pub amber: Color32,
+    pub red: Color32,
+    pub deep: Color32,
+}
+impl Palette {
+    pub fn new(light: bool) -> Self {
+        if light {
+            Self { light, text: Color32::from_rgb(35, 38, 58),
+                second: Color32::from_rgb(74, 79, 104), muted: Color32::from_rgb(98, 104, 129),
+                purple: Color32::from_rgb(106, 71, 190), blue: Color32::from_rgb(39, 104, 175),
+                green: Color32::from_rgb(28, 116, 74), amber: Color32::from_rgb(142, 95, 18),
+                red: Color32::from_rgb(174, 53, 76), deep: Color32::from_rgb(245, 246, 251) }
+        } else {
+            Self { light, text: TEXT, second: SECOND, muted: MUTED, purple: PURPLE,
+                blue: BLUE, green: GREEN, amber: AMBER, red: RED, deep: DEEP }
+        }
+    }
+    pub fn overlay(self, alpha: u8) -> Color32 {
+        if self.light { Color32::from_rgba_unmultiplied(61, 53, 95, alpha) }
+        else { Color32::from_white_alpha(alpha) }
+    }
+    pub fn surface(self, dark: Color32) -> Color32 {
+        if self.light { Color32::from_rgb(252, 252, 255) } else { dark }
+    }
+    pub fn accent(self, alpha: u8) -> Color32 {
+        Color32::from_rgba_unmultiplied(self.purple.r(), self.purple.g(), self.purple.b(), alpha)
+    }
+}
+fn palette(ctx: &Context) -> Palette {
+    ctx.data(|d| d.get_temp::<Palette>(Id::new("appearance"))).unwrap_or(Palette::new(false))
+}
+pub fn apply_appearance(ctx: &Context, colors: Palette) {
+    ctx.data_mut(|d| d.insert_temp(Id::new("appearance"), colors));
+    let mut style = Style::default();
+    style.visuals = if colors.light { Visuals::light() } else { Visuals::dark() };
+    style.visuals.override_text_color = Some(colors.text);
+    style.visuals.panel_fill = colors.deep;
+    style.visuals.window_fill = colors.surface(Color32::from_rgb(25, 29, 48));
+    style.visuals.window_rounding = Rounding::same(20.);
+    style.visuals.window_stroke = Stroke::new(1_f32, colors.overlay(33));
+    style.visuals.window_shadow = Shadow { offset: vec2(0., 12.), blur: 40., spread: 0.,
+        color: Color32::from_black_alpha(if colors.light { 22 } else { 55 }) };
+    style.visuals.selection.bg_fill = if colors.light { Color32::from_rgb(219, 208, 248) }
+        else { Color32::from_rgb(72, 59, 111) };
+    style.visuals.selection.stroke = Stroke::new(1_f32, colors.text);
+    style.visuals.widgets.inactive.bg_fill = if colors.light { Color32::from_rgb(238, 237, 247) }
+        else { Color32::from_rgb(40, 44, 66) };
+    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1_f32, colors.overlay(25));
+    style.visuals.widgets.inactive.rounding = Rounding::same(10.);
+    style.visuals.widgets.hovered.bg_fill = if colors.light { Color32::from_rgb(225, 219, 243) }
+        else { Color32::from_rgb(57, 55, 83) };
+    style.visuals.widgets.hovered.rounding = Rounding::same(10.);
+    style.spacing.item_spacing = vec2(10., 10.);
+    style.spacing.button_padding = vec2(14., 8.);
+    for (kind, size) in [(TextStyle::Body, 14.), (TextStyle::Button, 14.), (TextStyle::Small, 12.)] {
+        style.text_styles.insert(kind, FontId::proportional(size));
+    }
+    style.animation_time = 0.15;
+    ctx.set_style(style);
+}
+pub fn color_status(s: &str, colors: Palette) -> Color32 {
+    match s {
+        "approved" => colors.green,
+        "proposed" => colors.amber,
+        "rejected" => colors.red,
+        "recorded" => colors.blue,
+        _ => colors.purple,
+    }
+}
+pub fn txt(p: &Painter, x: f32, y: f32, text: impl Into<String>, size: f32, color: Color32) {
+    p.text(
+        pos2(x, y),
+        Align2::LEFT_TOP,
+        text.into(),
+        FontId::proportional(size),
+        color,
+    );
+}
+pub fn wrapped(p: &Painter, r: Rect, text: impl Into<String>, size: f32, color: Color32) {
+    let g = p.layout(text.into(), FontId::proportional(size), color, r.width());
+    p.galley(r.min, g, color);
+}
+pub fn glass(p: &Painter, r: Rect, radius: f32) {
+    let colors = palette(p.ctx());
+    for i in (1..=14).rev() {
+        let spread = i as f32 * 1.2;
+        p.rect_filled(
+            r.expand(spread).translate(vec2(0., 5.)),
+            radius + spread,
+            Color32::from_black_alpha(1),
+        );
+    }
+    p.rect_filled(r, radius, if colors.light { Color32::from_rgba_unmultiplied(255, 255, 255, 205) } else { Color32::from_rgba_unmultiplied(25, 30, 55, 145) });
+    p.rect_stroke(r, radius, Stroke::new(1.0_f32, colors.overlay(33)));
+    p.line_segment(
+        [
+            r.min + vec2(radius, 1.),
+            pos2(r.right() - radius, r.top() + 1.),
+        ],
+        Stroke::new(0.7f32, colors.overlay(18)),
+    );
+}
+pub fn pill(ui: &mut Ui, r: Rect, label: &str, active: bool) -> Response {
+    let colors = palette(ui.ctx());
+    let res = ui.interact(
+        r,
+        ui.id().with((label, r.min.x.to_bits(), r.min.y.to_bits())),
+        Sense::click(),
+    );
+    let col = if active {
+        colors.accent(38)
+    } else if res.hovered() {
+        colors.overlay(13)
+    } else {
+        Color32::TRANSPARENT
+    };
+    ui.painter().rect_filled(r, 12., col);
+    if active {
+        ui.painter().rect_stroke(
+            r,
+            12.,
+            Stroke::new(1.0_f32, colors.accent(60)),
+        );
+    }
+    ui.painter().text(
+        r.center(),
+        Align2::CENTER_CENTER,
+        label,
+        FontId::proportional(13.),
+        if active { colors.text } else { colors.second },
+    );
+    res.on_hover_cursor(CursorIcon::PointingHand)
+}
+pub fn icon(p: &Painter, name: &str, c: Pos2, s: f32, col: Color32) {
+    let k = s / 24.;
+    let st = Stroke::new(1.75 * k, col);
+    let pt = |x: f32, y: f32| c + vec2((x - 12.) * k, (y - 12.) * k);
+    let line = |coords: &[(f32, f32)]| {
+        p.add(Shape::line(
+            coords.iter().map(|&(x, y)| pt(x, y)).collect(),
+            st,
+        ));
+    };
+    match name {
+        "search" => {
+            p.circle_stroke(pt(10.5, 10.5), 6.5 * k, st);
+            line(&[(15.5, 15.5), (21., 21.)]);
+        }
+        "bell" => {
+            line(&[
+                (5., 17.),
+                (7., 14.),
+                (7., 9.),
+                (8., 5.),
+                (12., 3.),
+                (16., 5.),
+                (17., 9.),
+                (17., 14.),
+                (19., 17.),
+                (5., 17.),
+            ]);
+            line(&[(10., 21.), (14., 21.)]);
+        }
+        "chat" => {
+            p.rect_stroke(Rect::from_min_max(pt(3., 4.), pt(21., 18.)), 4. * k, st);
+            line(&[(8., 18.), (4., 22.), (4., 16.)]);
+        }
+        "down" => line(&[(7., 9.), (12., 14.), (17., 9.)]),
+        "chevron" => line(&[(9., 6.), (15., 12.), (9., 18.)]),
+        "close" => {
+            line(&[(6., 6.), (18., 18.)]);
+            line(&[(18., 6.), (6., 18.)]);
+        }
+        "nodes" => {
+            line(&[(12., 4.), (4., 18.), (20., 18.), (12., 4.)]);
+            for (x, y) in [(12., 4.), (4., 18.), (20., 18.)] {
+                p.circle_filled(pt(x, y), 3. * k, DEEP);
+                p.circle_stroke(pt(x, y), 3. * k, st);
+            }
+        }
+        "layers" => {
+            line(&[(2., 8.), (12., 2.), (22., 8.), (12., 14.), (2., 8.)]);
+            line(&[(2., 12.), (12., 18.), (22., 12.)]);
+            line(&[(2., 16.), (12., 22.), (22., 16.)]);
+        }
+        "flask" => {
+            line(&[(9., 3.), (15., 3.)]);
+            line(&[
+                (10., 3.),
+                (10., 10.),
+                (4., 20.),
+                (5., 22.),
+                (19., 22.),
+                (20., 20.),
+                (14., 10.),
+                (14., 3.),
+            ]);
+            line(&[(7., 16.), (17., 16.)]);
+        }
+        "history" => {
+            p.circle_stroke(c, 9. * k, st);
+            line(&[(12., 6.), (12., 12.), (16., 15.)]);
+            line(&[(2., 3.), (2., 8.), (7., 8.)]);
+        }
+        "activity" => line(&[
+            (1., 12.),
+            (6., 12.),
+            (9., 4.),
+            (13., 21.),
+            (16., 9.),
+            (19., 12.),
+            (23., 12.),
+        ]),
+        "grid" => {
+            for x in [3., 14.] {
+                for y in [3., 14.] {
+                    p.rect_stroke(
+                        Rect::from_min_size(pt(x, y), vec2(7. * k, 7. * k)),
+                        1. * k,
+                        st,
+                    );
+                }
+            }
+        }
+        "file" => {
+            line(&[
+                (5., 2.),
+                (14., 2.),
+                (20., 8.),
+                (20., 22.),
+                (5., 22.),
+                (5., 2.),
+            ]);
+            line(&[(14., 2.), (14., 8.), (20., 8.)]);
+            line(&[(9., 13.), (16., 13.)]);
+            line(&[(9., 17.), (16., 17.)]);
+        }
+        "chart" => {
+            line(&[(4., 21.), (4., 13.), (8., 13.), (8., 21.)]);
+            line(&[(10., 21.), (10., 8.), (14., 8.), (14., 21.)]);
+            line(&[(16., 21.), (16., 3.), (20., 3.), (20., 21.)]);
+        }
+        "send" => {
+            line(&[(3., 3.), (22., 12.), (3., 21.), (7., 12.), (3., 3.)]);
+            line(&[(7., 12.), (17., 12.)]);
+        }
+        "plus" => {
+            line(&[(12., 4.), (12., 20.)]);
+            line(&[(4., 12.), (20., 12.)]);
+        }
+        "folder" => line(&[
+            (3., 6.),
+            (3., 21.),
+            (21., 21.),
+            (21., 7.),
+            (12., 7.),
+            (10., 3.),
+            (3., 3.),
+            (3., 6.),
+        ]),
+        "check" => line(&[(4., 12.), (9., 17.), (20., 6.)]),
+        "arrow" => {
+            line(&[(4., 12.), (20., 12.)]);
+            line(&[(14., 6.), (20., 12.), (14., 18.)]);
+        }
+        "back" => {
+            line(&[(20., 12.), (4., 12.)]);
+            line(&[(10., 6.), (4., 12.), (10., 18.)]);
+        }
+        "link" => {
+            line(&[
+                (9., 8.),
+                (13., 4.),
+                (17., 4.),
+                (20., 7.),
+                (20., 11.),
+                (16., 15.),
+            ]);
+            line(&[
+                (15., 16.),
+                (11., 20.),
+                (7., 20.),
+                (4., 17.),
+                (4., 13.),
+                (8., 9.),
+            ]);
+            line(&[(8., 16.), (16., 8.)]);
+        }
+        "shield" => {
+            line(&[
+                (12., 2.),
+                (21., 6.),
+                (20., 15.),
+                (17., 19.),
+                (12., 22.),
+                (7., 19.),
+                (4., 15.),
+                (3., 6.),
+                (12., 2.),
+            ]);
+            line(&[(8., 12.), (11., 15.), (16., 9.)]);
+        }
+        "user" => {
+            p.circle_stroke(pt(12., 8.), 4. * k, st);
+            line(&[
+                (4., 22.),
+                (4., 18.),
+                (8., 15.),
+                (16., 15.),
+                (20., 18.),
+                (20., 22.),
+            ]);
+        }
+        _ => {
+            p.circle_stroke(c, 8. * k, st);
+            line(&[(12., 7.), (12., 13.)]);
+            p.circle_filled(pt(12., 17.), 0.8 * k, col);
+        }
+    }
+}
+pub fn icon_button(ui: &mut Ui, r: Rect, name: &str, label: &str) -> Response {
+    let colors = palette(ui.ctx());
+    let res = ui.interact(r, ui.id().with(label), Sense::click());
+    if res.hovered() || res.has_focus() {
+        ui.painter()
+            .rect_filled(r, 12., colors.overlay(12));
+    }
+    icon(ui.painter(), name, r.center(), 20., colors.second);
+    res.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, label));
+    res.on_hover_text(label)
+        .on_hover_cursor(CursorIcon::PointingHand)
+}
+fn pixel(c: [f32; 3]) -> Color32 {
+    Color32::from_rgb(
+        c[0].clamp(0., 255.) as u8,
+        c[1].clamp(0., 255.) as u8,
+        c[2].clamp(0., 255.) as u8,
+    )
+}
+pub fn atmosphere(colors: Palette) -> ColorImage {
+    let (w, h) = (1600, 900);
+    let mut img = ColorImage::new([w, h], DEEP);
+    for y in 0..h {
+        let fy = y as f32 / h as f32;
+        for x in 0..w {
+            let fx = x as f32 / w as f32;
+            let glow = (-((fx - 0.39) / 0.39).powi(2) - ((fy - 0.56) / 0.37).powi(2)).exp();
+            let mut c = [
+                37. + fy * 34. + glow * 19.,
+                44. + fy * 33. + glow * 19.,
+                75. + fy * 43. + glow * 28.,
+            ];
+            if fy > 0.655 {
+                let d = (fy - 0.655) / 0.345;
+                let streak = (d * 155. + (fx * 12.).sin() * 2.).sin() * 0.5
+                    + (d * 360. + fx * 5.).sin() * 0.25;
+                let reflection =
+                    (-((fx - 0.39375) / (0.06 + 0.07 * d)).powi(2)).exp() * (1. - d).powf(1.4);
+                let ripples = (d * 195. + (fx * 65.).sin() * 0.8).sin();
+                let reflected_light = reflection * (-((d - 0.23) / 0.24).powi(2)).exp()
+                    * (0.6 + 0.4 * (d * 260. + fx * 8.).sin());
+                let water_light = (-((fx - 0.39375) / 0.32).powi(2)).exp();
+                for (i, v) in c.iter_mut().enumerate() {
+                    *v += streak * (0.7 + water_light * 0.9)
+                        + (reflection * (9. + ripples * 5.)) * [1.05, 1., 1.8][i];
+                    *v += reflected_light * [19., 22., 36.][i];
+                    *v -= d * 8.;
+                }
+            }
+            if colors.light {
+                c = [249. - (c[0] - 37.) * 0.22,
+                     250. - (c[1] - 44.) * 0.20,
+                     255. - (c[2] - 75.) * 0.12];
+            }
+            img.pixels[y * w + x] = pixel(c);
+        }
+    }
+    img
+}
+pub fn sphere() -> ColorImage {
+    let size = 720;
+    let mut img = ColorImage::new([size, size], Color32::TRANSPARENT);
+    for y in 0..size {
+        for x in 0..size {
+            let u = (x as f32 - size as f32 / 2.) / (size as f32 * 0.38);
+            let v = (y as f32 - size as f32 / 2.) / (size as f32 * 0.38);
+            let r = (u * u + v * v).sqrt();
+            if r > 1.31 {
+                continue;
+            }
+            if r > 1. {
+                let glow = (-((r - 1.) / 0.14).powi(2)).exp() * 0.065;
+                img.pixels[y * size + x] =
+                    Color32::from_rgba_unmultiplied(180, 165, 255, (glow * 255.) as u8);
+                continue;
+            }
+            let z = (1. - r * r).max(0.).sqrt();
+            let angle = v.atan2(u);
+            let fres = (1. - z).powf(3.);
+            let rim = (-((r - 0.988) / 0.015).powi(2)).exp();
+            let upper = (-((u + 0.5) / 0.6).powi(2) - ((v + 0.6) / 0.45).powi(2)).exp();
+            let violet = (-((u + 0.4) / 0.65).powi(2) - ((v - 0.72) / 0.25).powi(2)).exp();
+            let right = (-((u - 0.8) / 0.25).powi(2) - ((v + 0.1) / 0.6).powi(2)).exp();
+            let cyan = (-((u - 0.48) / 0.6).powi(2) - ((v - 0.78) / 0.34).powi(2)).exp();
+            let drift = (u * 2.7 + v * 4.6 + z * 3.).sin();
+            let wisps = (v * 71. + u * 19. + ((u * 2.5 + v * 3.8).sin()) * 17. + z * 22.).sin();
+            let threads = wisps.max(0.).powf(8.) * (0.5 + 0.5 * drift) * 3.;
+            let light = fres * 56. + rim * 92. + upper * 68.;
+            let wave = (v * 10. + u * 6. + z * 7.).sin() * 3. + threads;
+            let c = [
+                65. + light + violet * 48. + right * 32. + cyan * 10. + wave,
+                77. + light + upper * 4. + violet * 19. + cyan * 49. + wave,
+                122. + light + violet * 76. + right * 47. + cyan * 61. + wave,
+            ];
+            let edge = if r > 0.998 { (1. - r) / 0.002 } else { 1. };
+            let al = (235. + 20. * fres) * edge;
+            let _ = angle;
+            img.pixels[y * size + x] = Color32::from_rgba_unmultiplied(
+                c[0].clamp(0., 255.) as u8,
+                c[1].clamp(0., 255.) as u8,
+                c[2].clamp(0., 255.) as u8,
+                al.clamp(0., 255.) as u8,
+            );
+        }
+    }
+    img
+}
