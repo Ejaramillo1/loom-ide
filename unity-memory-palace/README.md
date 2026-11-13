@@ -19,7 +19,9 @@ unity command script eval --file Tools/BuildWeb.cs \
 npm run tauri dev
 ```
 
-Choose **Spatial → Enter workbench**. WebGL files are generated into ignored `public/spatial/`; build them before packaging Tauri. Use the Vite URL or Tauri application, rather than opening source `index.html` with `file://`.
+Loom opens **Spatial** and loads Unity automatically. WebGL files are generated into ignored `public/spatial/`; build them before packaging Tauri. Use the Vite URL or Tauri application, rather than opening source `index.html` with `file://`.
+
+The tracked `../public/spatial-player.html`, `.css`, and `.js` host the generated player. This host fills the panel and shows a pulsing sphere until `createUnityInstance` resolves, independently of download progress reaching 100%. Loading errors are sent to Loom's Retry control. Reduced motion disables the pulse. The generated Unity `index.html` remains build output and is not used as Loom's embedded page.
 
 Embedded object memories are read from the default repository vault’s `10 Fleeting Notes` folder. **Keep at bench** creates a new note; previous saves remain intact. Reopening an object reads its newest spatial note, including body edits made in Living Workbench. Use **Knowledge → Refresh files from disk** there to discover saves. Custom vaults and moved/renamed spatial files are not tracked.
 

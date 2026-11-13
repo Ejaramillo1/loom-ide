@@ -4,33 +4,24 @@ export function installSpatialWorkbench() {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame")!;
   const status = document.querySelector<HTMLElement>("#spatial-status")!;
   const loadError = document.querySelector<HTMLElement>("#spatial-load-error")!;
-  frame.addEventListener("load", () => {
-    const doc = frame.contentDocument;
-    if (!doc?.querySelector("#unity-canvas")) return;
-    const style = doc.createElement("style");
-    style.textContent = "html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10121f}#unity-container{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;transform:none!important}#unity-canvas{width:100%!important;height:100%!important}#unity-footer{display:none}";
-    doc.head.append(style);
-  });
-  let loaded = false;
   const loadButton = document.querySelector<HTMLButtonElement>("#spatial-load")!;
-  async function load() {
-    if (loaded) return;
-    loaded = true;
+  function load() {
     loadError.hidden = true;
-    try {
-      const response = await fetch("/spatial/index.html");
-      if (!response.ok || !(await response.text()).includes("createUnityInstance")) throw new Error("Build the Unity WebGL player first (see the Unity README).");
-      frame.src = "/spatial/index.html";
-    } catch (error) {
-      loaded = false;
-      status.textContent = String(error);
-      loadError.hidden = false;
-    }
+    frame.src = "/spatial-player.html";
   }
   loadButton.addEventListener("click", load);
   let saving = false;
   window.addEventListener("message", async (event) => {
     if (event.source !== frame.contentWindow || event.origin !== location.origin) return;
+    if (event.data?.type === "loom-spatial-ready") {
+      loadError.hidden = true;
+      return;
+    }
+    if (event.data?.type === "loom-spatial-error" && typeof event.data.message === "string") {
+      status.textContent = event.data.message;
+      loadError.hidden = false;
+      return;
+    }
     if (event.data?.type !== "loom-memory") return;
     if (saving) return;
     saving = true;

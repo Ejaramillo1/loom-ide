@@ -20,7 +20,8 @@ agent runtime.
 
 ## Latest additions and modifications
 
-- **Simpler controls:** Spatial uses Unity's own title and loading display. Work creation lives in the Work view, and Experiment has one New experiment button. Conversation opens the shared pane; Context remains a tab and a View menu action. The decorative Experiment sphere is removed; local activity is described in the Loom status tooltip.
+- **Unity startup:** Spatial shows a pulsing sphere while the WebGL player loads, with reduced-motion support. The loading screen disappears only when Unity finishes initializing; a failure offers Retry. The canvas fills its available space without the generated player's fixed 960 × 600 container.
+- **Simpler controls:** Spatial uses Unity's own title. Work creation lives in the Work view, and Experiment has one New experiment button. Conversation opens the shared pane; Context remains a tab and a View menu action. The decorative Experiment sphere is removed; local activity is described in the Loom status tooltip.
 - **Living Workbench access:** **View → Living Workbench** activates the existing native window or starts it when closed. This action requires the desktop Tauri app.
 - **Spatial landing view:** Loom opens directly into Spatial and loads Unity automatically. Code and other tools remain available in the bottom navigation.
 - **Embedded Spatial tab:** builds Unity WebGL into `public/spatial/`, then loads it inside the existing Tauri window. Object memories append notes to the native vault and read the latest saved version. Generated player files stay outside Git.
