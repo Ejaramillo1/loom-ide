@@ -12,7 +12,7 @@
            (Experiment overview only), translucent panels above it.
            The window is opaque; depth comes from layering, not from
            seeing the desktop through the app. -->
-      <div class="scene" data-mode="experiment">
+      <div class="scene" data-mode="code">
         <div class="scene-light" aria-hidden="true"></div>
 
         <!-- ======================= Header (row 1) ======================= -->
@@ -103,7 +103,7 @@
 
           <!-- Center: workspace -->
           <section class="center" aria-label="Workspace">
-            <div id="view-experiment" class="view view-experiment">
+            <div id="view-experiment" class="view view-experiment" hidden>
               <div class="mode-head">
                 <h2>Experiment</h2>
                 <p>Design experiments, run their arms through Loom, and choose from real evidence.</p>
@@ -125,7 +125,7 @@
               <div id="work-detail" class="work-detail"></div>
             </div>
 
-            <div id="view-code" class="view view-code" hidden>
+            <div id="view-code" class="view view-code">
               <div class="mode-head">
                 <h2>Code</h2>
                 <p>Workspace files on the left, notes on the right. Notes save locally; workspace files open read-only.</p>
@@ -277,13 +277,13 @@
         <!-- ======================= Footer (row 3) ======================= -->
         <footer class="app-footer">
           <nav class="mode-nav" aria-label="Mode">
-            <button class="mode-btn" data-mode="code" type="button">
+            <button class="mode-btn active" data-mode="code" type="button">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M8 6L3 12l5 6" /><path d="M16 6l5 6-5 6" />
               </svg>
               Code
             </button>
-            <button class="mode-btn active" data-mode="experiment" type="button">
+            <button class="mode-btn" data-mode="experiment" type="button">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M9 3h6" /><path d="M10 3v5.5L4.5 18a2.4 2.4 0 0 0 2.1 3.5h10.8a2.4 2.4 0 0 0 2.1-3.5L14 8.5V3" /><path d="M7.5 14h9" />
               </svg>

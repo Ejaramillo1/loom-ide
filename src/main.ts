@@ -130,7 +130,7 @@ let intents: Intent[] = [];
 let activeIntentId: string | null = null;
 /** The intent editor open in the pinned header; null when closed. */
 let intentEditor: { mode: "create" } | { mode: "edit"; id: string } | null = null;
-let mode: Mode = "experiment";
+let mode: Mode = "code";
 let sphereState: SphereState = "idle";
 let currentNote: NoteKind = "design";
 let artifactTab: "artifacts" | "documents" = "artifacts";
@@ -186,7 +186,6 @@ const $ = <T extends HTMLElement>(sel: string): T =>
 // ---------------------------------------------------------------------------
 
 const sphere = new Sphere($("#sphere") as HTMLCanvasElement);
-sphere.startAnimation();
 
 function setSphereState(state: SphereState) {
   sphereState = state;
@@ -3466,6 +3465,32 @@ async function loadWorkspaceTree() {
   renderFileTree();
 }
 
+function initWorkspaceExplorer() {
+  // Workspace explorer (local filesystem; independent of the server).
+  $("#file-new-file").addEventListener("click", () => beginFileCreation("file"));
+  $("#file-new-folder").addEventListener("click", () => beginFileCreation("folder"));
+  $("#file-create-form").addEventListener("submit", (event) => {
+    void submitFileCreation(event as SubmitEvent);
+  });
+  $("#file-create-cancel").addEventListener("click", cancelFileCreation);
+  $("#file-create-name").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelFileCreation();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element) || event.target.closest(".tree-actions")) return;
+    for (const menu of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) menu.open = false;
+  });
+  $("#file-tree-refresh").addEventListener("click", () => {
+    dirCache.clear();
+    expandedDirs.clear();
+    void loadWorkspaceTree();
+  });
+  void loadWorkspaceTree();
+}
+
 // ---------------------------------------------------------------------------
 // Experiments — the human's experimental designs, run through Loom.
 // Arms run as real weave calls in the current work session; an arm's result
@@ -4199,6 +4224,9 @@ async function init() {
   loadLayers();
   applyLayerClasses();
   initAppMenu();
+  // The initial Code view is usable before any Loom requests finish.
+  initCodeEditor();
+  initWorkspaceExplorer();
   // Modes
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
@@ -4526,30 +4554,6 @@ async function init() {
     }
   });
 
-  // Workspace explorer (local filesystem; independent of the server).
-  $("#file-new-file").addEventListener("click", () => beginFileCreation("file"));
-  $("#file-new-folder").addEventListener("click", () => beginFileCreation("folder"));
-  $("#file-create-form").addEventListener("submit", (event) => {
-    void submitFileCreation(event as SubmitEvent);
-  });
-  $("#file-create-cancel").addEventListener("click", cancelFileCreation);
-  $("#file-create-name").addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      cancelFileCreation();
-    }
-  });
-  document.addEventListener("click", (event) => {
-    if (!(event.target instanceof Element) || event.target.closest(".tree-actions")) return;
-    for (const menu of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) menu.open = false;
-  });
-  $("#file-tree-refresh").addEventListener("click", () => {
-    dirCache.clear();
-    expandedDirs.clear();
-    loadWorkspaceTree();
-  });
-  loadWorkspaceTree();
-
   // Chat starts empty, with a short hint. A draft typed earlier is
   // restored, so closing the panel never loses an unsent message.
   showChatHint();
@@ -4563,9 +4567,6 @@ async function init() {
     localStorage.removeItem(CHAT_DRAFT_KEY);
     await sendChat(text);
   });
-
-  // Code editor
-  initCodeEditor();
 
   // Sphere sizing (after first layout)
   requestAnimationFrame(fitSphere);
