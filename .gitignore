@@ -40,3 +40,21 @@ pinned/
 *.sln
 *.sw?
 target/
+
+# Unity Memory Palace: keep source and settings, ignore generated state/builds.
+unity-memory-palace/[Ll]ibrary/
+unity-memory-palace/[Tt]emp/
+unity-memory-palace/[Oo]bj/
+unity-memory-palace/[Bb]uild/
+unity-memory-palace/[Bb]uilds/
+unity-memory-palace/[Ll]ogs/
+unity-memory-palace/[Uu]ser[Ss]ettings/
+unity-memory-palace/[Mm]emoryCaptures/
+unity-memory-palace/Recordings/
+
+# Unity template walkthrough content is local-only; ResoluteWorkbench is active.
+unity-memory-palace/Assets/Readme.asset*
+unity-memory-palace/Assets/TutorialInfo.meta
+unity-memory-palace/Assets/TutorialInfo/
+unity-memory-palace/Assets/Scenes/SampleScene.unity*
+docs/unity-resolute-workbench-selected.png

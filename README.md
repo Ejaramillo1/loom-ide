@@ -1,22 +1,33 @@
 # Loom — Living Workbench + Human-Centered Development Environment
 
-A hobby project merging two concepts around Loom: **Living Workbench's visual
-workspace** and the **Human-Centered Development Environment's work and file
-tools**. The goal is to preserve what we like about both and bring them together
-into one evolving experience.
+A hobby project merging **Living Workbench's visual workspace**, the
+**Human-Centered Development Environment's work and file tools**, and a new
+**Unity spatial workbench**. The goal is to preserve what we like about each and
+bring them together into one evolving experience.
 
-Both projects are active and live in this repository:
+All three surfaces are active and live in this repository:
 
 | Interface | Source | What it contributes |
 |---|---|---|
 | Living Workbench | `native-app/` — Rust, eframe/egui | Sphere, Dark/White appearance, conversation, knowledge graph, local notes, review bell, Canvas and bottom navigation |
 | Human-Centered Development Environment | `src/` + `src-tauri/` — TypeScript/CSS, Rust, Tauri 2 | File/Edit/View/Help menus, workspace files and editing, structured work/intents, sessions, agents, workflows and artifacts |
+| Resolute Spatial Workbench | `unity-memory-palace/` — Unity 6, URP, C# | A game-like workbench with ambient movement, spatial tools/workpieces and memories stored on objects |
 
-**The merge is ongoing.** There are currently two application windows, separate
-vault/work data models and some partial Loom integrations. Shared appearance and
-navigation do not imply a unified database or agent runtime.
+**The merge is ongoing.** Tauri and Living Workbench have normal application
+windows; the Unity surface is a source-driven prototype with a verified local
+Linux player build. The three surfaces still have separate local state and some partial Loom integrations. Shared
+appearance and read-only record discovery do not imply a unified database or
+agent runtime.
 
 ## Latest additions and modifications
+
+- **Resolute Spatial Workbench:** a Unity 6 URP project now lives inside this
+  repository. Its first scene treats Loom as a carpenter's bench for making
+  knowledge: a central sphere, orbiting tools/workpieces for Work, Code,
+  Experiments, Evidence, Agents and Notes, pointer parallax, scroll travel,
+  hover/selection feedback and an ambient/reduced-motion switch. Selected
+  objects can retain a short local memory. Work and Experiment objects read the
+  current saved Tauri record counts without changing those files.
 
 - **Shared Dark/White appearance:** both interfaces read `design-tokens.json`.
   Lavender/blue accents, semantic colors, 12px control radii and 20px panel radii
@@ -62,6 +73,8 @@ subsequently removed and preserved.
 
 ![Tauri — shared White appearance](docs/cleanup-tauri-white-code-1299.png)
 
+![Unity — Resolute Spatial Workbench](docs/unity-resolute-workbench.png)
+
 Other screenshots in `docs/` include historical designs and isolated test states.
 They do not all represent the current application. The render-check JSON files
 record actual viewport dimensions, which take precedence over filenames.
@@ -84,12 +97,31 @@ record actual viewport dimensions, which take precedence over filenames.
   executions or cost/latency metrics.
 - **Files and Work:** file tools and the shared-file work overview described above.
 - **More → Scene preview:** local sphere transform/playback controls and saved
-  presets. This does not connect to a Unity project or runtime.
+  presets. This native preview remains independent from the Unity scene.
 - **Loom chat and Sync from Loom:** chat submits a real query; sync imports new
   sessions, agents and artifact metadata as local notes. Existing imported IDs
   are skipped; this is not bidirectional synchronization.
 
 See [the Workbench README](native-app/README.md) for vault and preview details.
+
+### Resolute Spatial Workbench (Unity)
+
+- **ResoluteWorkbench scene:** a spatial interpretation of the workbench, not a
+  separate source of truth. Runtime geometry is deliberately generated from one
+  controller while the interaction language is still evolving.
+- **Meaningful movement:** the sphere breathes, workpieces float/rotate and the
+  camera responds gently to the pointer. Reduced motion stops travel, floating
+  and rotation rather than merely shortening them.
+- **Interactive objects:** clicking a workpiece opens its role and a local text
+  area. **Keep at bench** persists that note through Unity PlayerPrefs.
+- **Existing Loom records:** the Work and Experiments descriptions report counts
+  from Tauri's existing JSON stores. Unity reads them defensively and never
+  writes, migrates or repairs them.
+- **Palette:** the scene uses the current dark values from
+  `design-tokens.json`; a Unity-side self-check verifies its key colors.
+
+See [the Unity workbench README](unity-memory-palace/README.md) for controls and
+verification commands.
 
 ### Tauri environment
 
@@ -122,7 +154,7 @@ Below 1100px the work catalogue also becomes a drawer. Drawers support Escape,
 keyboard focus management and return focus to their opener. The sphere and water
 atmosphere remain in Experiment, with reduced-motion support.
 
-## Run both applications
+## Run the workbench surfaces
 
 Run commands from this repository's root, the directory containing `package.json`.
 There is no root Cargo project; use the appropriate `--manifest-path`.
@@ -162,6 +194,25 @@ and **43762** (Workbench), separately from Loom. Starting another instance focus
 the registered window. After updating an executable, close and reopen that
 application once to load its new code.
 
+Open the spatial workbench with the installed Unity CLI and press Play in the
+Editor:
+
+```bash
+unity open "$PWD/unity-memory-palace"
+unity status --until-ready --project-path "$PWD/unity-memory-palace"
+```
+
+Build a local Linux player when needed:
+
+```bash
+unity build "$PWD/unity-memory-palace" --target StandaloneLinux64 \
+  --output "$PWD/unity-memory-palace/Builds/Linux/LoomResoluteWorkbench.x86_64"
+```
+
+The first launch may show Unity's software terms, which must be accepted by the
+person using the Editor. Unity-generated `Library/`, `Temp/`, logs, builds and
+user settings are ignored by Git.
+
 ### Connect to Loom
 
 Both adapters currently target `http://localhost:5006`. Start your configured
@@ -189,6 +240,7 @@ including real filesystem access, require Tauri.
 | Workbench Work overview | Reads Tauri's JSON records on load/Refresh. It does not duplicate or migrate them. |
 | Tauri chat cache/drafts and appearance | WebView/browser storage; separate from the native vault's preferences and chat state. |
 | Loom sessions, agents, workflows and artifacts | Owned by the Loom server; native imports are local snapshots of selected metadata. |
+| Unity spatial memories | Unity PlayerPrefs, keyed by workpiece. Unity also reads Tauri's work/experiment JSON counts and never writes those stores. |
 
 Build output, local vaults, test data and tooling caches are ignored by Git.
 The published screenshots and audit documents are tracked intentionally.
@@ -207,6 +259,13 @@ Latest local verification on November 13, 2026:
   Collaboration-panel counts were zero; no horizontal page overflow was reported.
 - Repeated cross-window activation was checked without changing the registered
   process IDs. Live Loom integration remains unverified while the server is offline.
+- Unity 6000.6.9f1 compiled the spatial workbench without warnings. Play Mode
+  advanced beyond 400 frames, pointer selection opened a workpiece panel, the
+  palette self-check passed, and the read-only bridge found 4 Work records and
+  1 Experiment in the current local Tauri store.
+- The standalone Linux player built successfully, remained running with the
+  scene loaded, and created its stable PlayerPrefs location under
+  `Loom/Resolute Workbench`. Generated player files remain ignored.
 
 Run the checks from the root:
 
@@ -263,6 +322,9 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib \
   pause/resume/cancel controls are not connected through these interfaces.
 - The two data models remain separate. Theme/window integration is not a data
   migration, and a shared local folder is not automatic model context.
+- Unity is not yet embedded into the Tauri window or packaged as a player. It
+  reads only Work/Experiment counts; object memories are still Unity-local, and
+  there is no bidirectional spatial editing bridge.
 
 ## Project layout
 
@@ -276,6 +338,10 @@ loom-ide-tauri/
 ├── native-app/                  # active Rust/eframe Living Workbench
 │   ├── src/                     # vault, graph, Canvas, files, work overview, chat
 │   └── README.md
+├── unity-memory-palace/         # Unity 6 URP Resolute Spatial Workbench
+│   ├── Assets/Loom/             # runtime interaction and palette logic
+│   ├── Assets/Scenes/           # ResoluteWorkbench scene
+│   └── README.md
 ├── shared/navigation.rs         # single-instance activation for both apps
 ├── docs/                        # design history, connection audit, cleanup, captures
 └── .github/workflows/ci.yml
@@ -283,7 +349,7 @@ loom-ide-tauri/
 
 The older Obsidian-style build prompt is retained as
 [historical design material](docs/05-craft-anything-build-prompt.md). It does not
-replace the active two-project architecture described here.
+replace the active three-surface architecture described here.
 
 ## License
 
