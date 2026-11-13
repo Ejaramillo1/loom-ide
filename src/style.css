@@ -2049,11 +2049,76 @@ body.chat-open .left-col .left-chat {
   opacity: 0.75;
 }
 
-/* ---------- Code view: workspace file tree + notes ---------- */
+/* ---------- Code view: user files and a quiet canvas ---------- */
+
+.scene[data-mode="code"] .main {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.scene[data-mode="code"] .objective,
+.scene[data-mode="code"] .vdiv,
+.scene[data-mode="code"] #loom-status {
+  display: none;
+}
+
+.scene[data-mode="code"] .left-col,
+.scene[data-mode="code"] .right-col {
+  display: none;
+  position: fixed;
+  top: 56px;
+  bottom: 56px;
+  z-index: 40;
+  width: min(340px, 92vw);
+  padding: 12px 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-overlay);
+}
+
+.scene[data-mode="code"] .left-col { left: 0; }
+.scene[data-mode="code"] .right-col { right: 0; }
+
+body.left-open .scene[data-mode="code"] .left-col,
+body.inspector-open .scene[data-mode="code"] .right-col {
+  display: flex;
+  transform: none;
+}
+
+.scene[data-mode="code"] .drawer-close,
+.scene[data-mode="code"] #work-toggle,
+.scene[data-mode="code"] #context-toggle {
+  display: inline-flex;
+}
+
+.canvas-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+
+.canvas-start-actions {
+  display: flex;
+  gap: 12px;
+  opacity: 0.65;
+}
+
+.canvas-start-actions:hover,
+.canvas-start-actions:focus-within { opacity: 1; }
+
+#open-folder-path {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  background: var(--reading);
+  font: inherit;
+}
 
 /* A two-pane split needs more room than the other reading surfaces. */
 .view-code {
-  max-width: 1080px;
+  max-width: none;
 }
 
 .code-split {

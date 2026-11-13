@@ -114,3 +114,160 @@ fn symlinks_cannot_redirect_creations_outside_or_overwrite_targets() {
     assert!(create_workspace_entry_at(&workspace.0, "", "link", false).is_err());
     assert_eq!(std::fs::read_to_string(&target).unwrap(), "preserved");
 }
+
+#[test]
+fn default_workspace_is_empty_and_separate_from_server_and_settings() {
+    let fixture = WorkspaceFixture::new();
+    let server = fixture.0.join(".loom");
+    std::fs::create_dir(&server).unwrap();
+    let internal = server.join("server.yaml");
+    std::fs::write(&internal, "server configuration").unwrap();
+    let root = fixture.0.join("Documents/Loom");
+    let settings = fixture.0.join("app-data/workspace.json");
+    let store = WorkspaceStore::load(settings.clone(), root.clone()).unwrap();
+    assert_eq!(store.root(), root.canonicalize().unwrap());
+    assert_eq!(store.info().name, "Loom");
+    assert!(list_dir_entries(store.root()).unwrap().is_empty());
+    assert!(settings.is_file());
+    assert!(!settings.starts_with(store.root()));
+    assert!(workspace::read_text(store.root(), internal.to_str().unwrap()).is_err());
+    create_workspace_entry_at(store.root(), "", "my-note.md", false).unwrap();
+    assert!(root.join("my-note.md").is_file());
+    assert!(!server.join("my-note.md").exists());
+    assert_eq!(
+        std::fs::read_to_string(internal).unwrap(),
+        "server configuration"
+    );
+}
+
+#[test]
+fn selected_folder_is_remembered_without_seeding_or_changing_its_files() {
+    let fixture = WorkspaceFixture::new();
+    let settings = fixture.0.join("settings/workspace.json");
+    let mut store =
+        WorkspaceStore::load(settings.clone(), fixture.0.join("Documents/Loom")).unwrap();
+    let project = fixture.0.join("My project");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::write(project.join("existing.md"), "my work").unwrap();
+    store.open(project.to_str().unwrap()).unwrap();
+    let unused_default = fixture.0.join("unused-default");
+    let reloaded = WorkspaceStore::load(settings, unused_default.clone()).unwrap();
+    assert_eq!(reloaded.root(), project.canonicalize().unwrap());
+    assert_eq!(reloaded.info().name, "My project");
+    assert!(!unused_default.exists());
+    assert_eq!(list_dir_entries(reloaded.root()).unwrap().len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(project.join("existing.md")).unwrap(),
+        "my work"
+    );
+}
+
+#[test]
+fn invalid_folder_selection_keeps_the_current_workspace() {
+    let fixture = WorkspaceFixture::new();
+    let settings = fixture.0.join("settings.json");
+    let mut store = WorkspaceStore::load(settings.clone(), fixture.0.join("Loom")).unwrap();
+    let before = std::fs::read(&settings).unwrap();
+    let old_root = store.root().to_path_buf();
+    let file = fixture.0.join("file.txt");
+    std::fs::write(&file, "content").unwrap();
+    let missing = fixture.0.join("missing");
+    for path in [
+        "",
+        "relative",
+        file.to_str().unwrap(),
+        missing.to_str().unwrap(),
+    ] {
+        assert!(store.open(path).is_err());
+        assert_eq!(store.root(), old_root);
+        assert_eq!(std::fs::read(&settings).unwrap(), before);
+    }
+}
+
+#[test]
+fn invalid_settings_do_not_create_a_replacement_workspace() {
+    let fixture = WorkspaceFixture::new();
+    let settings = fixture.0.join("settings.json");
+    let default = fixture.0.join("Documents/Loom");
+    for invalid in ["bad json", r#"{"root":"relative/path"}"#] {
+        std::fs::write(&settings, invalid).unwrap();
+        assert!(WorkspaceStore::load(settings.clone(), default.clone()).is_err());
+        assert!(!default.exists());
+        assert_eq!(std::fs::read_to_string(&settings).unwrap(), invalid);
+    }
+}
+
+#[test]
+fn missing_selected_folder_is_not_recreated_or_replaced() {
+    let fixture = WorkspaceFixture::new();
+    let settings = fixture.0.join("settings.json");
+    let missing = fixture.0.join("missing-project");
+    std::fs::write(&settings, serde_json::json!({"root": missing}).to_string()).unwrap();
+    let default = fixture.0.join("Documents/Loom");
+    let store = WorkspaceStore::load(settings, default.clone()).unwrap();
+    assert_eq!(store.root(), missing);
+    assert!(!missing.exists());
+    assert!(!default.exists());
+}
+
+#[test]
+fn edits_save_real_text_and_do_not_leave_temporary_files() {
+    let fixture = WorkspaceFixture::new();
+    create_workspace_entry_at(&fixture.0, "", "note.md", false).unwrap();
+    workspace::write_text(&fixture.0, "note.md", "My first note — hello", "").unwrap();
+    assert_eq!(
+        workspace::read_text(&fixture.0, "note.md").unwrap(),
+        "My first note — hello"
+    );
+    workspace::write_text(&fixture.0, "note.md", "Updated", "My first note — hello").unwrap();
+    assert_eq!(
+        std::fs::read_to_string(fixture.0.join("note.md")).unwrap(),
+        "Updated"
+    );
+    assert_eq!(std::fs::read_dir(&fixture.0).unwrap().count(), 1);
+}
+
+#[test]
+fn saving_refuses_external_changes_deleted_files_and_outside_paths() {
+    let fixture = WorkspaceFixture::new();
+    let outside = WorkspaceFixture::new();
+    let file = fixture.0.join("note.md");
+    std::fs::write(&file, "changed elsewhere").unwrap();
+    let error = workspace::write_text(&fixture.0, "note.md", "my draft", "original").unwrap_err();
+    assert!(error.contains("changed on disk"));
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "changed elsewhere");
+    assert!(workspace::write_text(&fixture.0, "missing.md", "draft", "").is_err());
+    assert!(!fixture.0.join("missing.md").exists());
+    let external = outside.0.join("external.md");
+    std::fs::write(&external, "keep me").unwrap();
+    assert!(
+        workspace::write_text(
+            &fixture.0,
+            external.to_str().unwrap(),
+            "overwrite",
+            "keep me"
+        )
+        .is_err()
+    );
+    assert_eq!(std::fs::read_to_string(external).unwrap(), "keep me");
+}
+
+#[cfg(unix)]
+#[test]
+fn saves_preserve_permissions_and_reject_readonly_files_and_external_symlinks() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = WorkspaceFixture::new();
+    let outside = WorkspaceFixture::new();
+    let file = fixture.0.join("script.sh");
+    std::fs::write(&file, "original").unwrap();
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o750)).unwrap();
+    workspace::write_text(&fixture.0, "script.sh", "updated", "original").unwrap();
+    assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o750);
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o440)).unwrap();
+    assert!(workspace::write_text(&fixture.0, "script.sh", "new", "updated").is_err());
+    let external = outside.0.join("note.md");
+    std::fs::write(&external, "keep").unwrap();
+    std::os::unix::fs::symlink(&external, fixture.0.join("link.md")).unwrap();
+    assert!(workspace::write_text(&fixture.0, "link.md", "overwrite", "keep").is_err());
+    assert_eq!(std::fs::read_to_string(external).unwrap(), "keep");
+}

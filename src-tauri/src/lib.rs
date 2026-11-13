@@ -3,7 +3,7 @@
 //! Two data sources, kept strictly separate:
 //!
 //! 1. Local, structured work items (`<app-data>/loom-ide/work.json`) and a
-//!    read-only explorer over the Loom workspace directory (`~/.loom`).
+//!    user files in a separate workspace folder (Documents/Loom by default).
 //! 2. The Loom server on localhost:5006: sessions and agents, and chat via
 //!    `POST /v1/weave` with the selected session/agent.
 //!
@@ -23,10 +23,12 @@ use tauri::{AppHandle, Manager, State};
 mod experiment;
 use experiment::{Experiment, ExperimentStore};
 mod store;
+mod workspace;
 use store::{
     AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem, WorkStore,
     autonomy_rank,
 };
+use workspace::{WorkspaceInfo, WorkspaceStore};
 
 #[cfg(test)]
 mod gateway_tests;
@@ -77,6 +79,13 @@ fn percent_encode(s: &str) -> String {
     out
 }
 
+fn workspace_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("loom-ide/workspace.json"))
+        .map_err(|e| format!("Could not locate workspace settings: {e}"))
+}
+
 /// Where work items live on disk: <app-data>/loom-ide/work.json
 fn work_file_path(app: &AppHandle) -> std::path::PathBuf {
     app.path()
@@ -108,6 +117,7 @@ pub struct AppState {
     work: Mutex<WorkStore>,
     experiments: Mutex<ExperimentStore>,
     intents: Mutex<IntentStore>,
+    workspace: Mutex<WorkspaceStore>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1638,18 +1648,22 @@ async fn ask_loom(
 // Workspace explorer (local filesystem; independent of the Loom server)
 // ---------------------------------------------------------------------------
 
-/// The Loom data/workspace directory: $LOOM_DATA_DIR, else ~/.loom.
-fn loom_data_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("LOOM_DATA_DIR") {
-        let p = PathBuf::from(dir);
-        if p.is_dir() {
-            return p;
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".loom");
-    }
-    PathBuf::from(".loom")
+#[tauri::command]
+fn get_workspace(state: State<AppState>) -> WorkspaceInfo {
+    state
+        .workspace
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .info()
+}
+
+#[tauri::command]
+fn open_workspace(path: String, state: State<AppState>) -> Result<WorkspaceInfo, String> {
+    state
+        .workspace
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .open(&path)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1682,13 +1696,20 @@ fn list_dir_entries(dir: &Path) -> Result<Vec<DirEntry>, String> {
 }
 
 #[tauri::command]
-fn list_workspace() -> Result<Vec<DirEntry>, String> {
-    list_dir_entries(&loom_data_dir())
+fn list_workspace(state: State<AppState>) -> Result<Vec<DirEntry>, String> {
+    list_dir_entries(
+        state
+            .workspace
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .root(),
+    )
 }
 
 #[tauri::command]
-fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
-    let target = workspace_path(&path)?;
+fn list_directory(path: String, state: State<AppState>) -> Result<Vec<DirEntry>, String> {
+    let workspace = state.workspace.lock().unwrap_or_else(|e| e.into_inner());
+    let target = workspace::resolve(workspace.root(), &path)?;
     if !target.is_dir() {
         return Err(format!("Not a directory: {}", target.display()));
     }
@@ -1756,64 +1777,56 @@ fn create_workspace_entry_at(
 }
 
 #[tauri::command]
-fn create_workspace_file(parent: String, name: String) -> Result<DirEntry, String> {
-    create_workspace_entry_at(&loom_data_dir(), &parent, &name, false)
+fn create_workspace_file(
+    parent: String,
+    name: String,
+    state: State<AppState>,
+) -> Result<DirEntry, String> {
+    create_workspace_entry_at(
+        state
+            .workspace
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .root(),
+        &parent,
+        &name,
+        false,
+    )
 }
 
 #[tauri::command]
-fn create_workspace_directory(parent: String, name: String) -> Result<DirEntry, String> {
-    create_workspace_entry_at(&loom_data_dir(), &parent, &name, true)
+fn create_workspace_directory(
+    parent: String,
+    name: String,
+    state: State<AppState>,
+) -> Result<DirEntry, String> {
+    create_workspace_entry_at(
+        state
+            .workspace
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .root(),
+        &parent,
+        &name,
+        true,
+    )
 }
 
-/// Read a text file from within the workspace, bounded and UTF-8 only.
 #[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    const MAX_BYTES: u64 = 1024 * 1024;
-    let target = workspace_path(&path)?;
-    if !target.is_file() {
-        return Err(format!("Not a file: {}", target.display()));
-    }
-    let meta = target.metadata().map_err(|e| e.to_string())?;
-    if meta.len() > MAX_BYTES {
-        return Err(format!(
-            "File is larger than 1 MB and was not opened: {}",
-            target.display()
-        ));
-    }
-    let bytes = std::fs::read(&target).map_err(|e| e.to_string())?;
-    if bytes.contains(&0) {
-        return Err(format!("Binary file: {}", target.display()));
-    }
-    String::from_utf8(bytes).map_err(|_| format!("File is not UTF-8 text: {}", target.display()))
+fn read_file(path: String, state: State<AppState>) -> Result<String, String> {
+    let workspace = state.workspace.lock().unwrap_or_else(|e| e.into_inner());
+    workspace::read_text(workspace.root(), &path)
 }
 
-/// Resolve an absolute or workspace-relative path and require it to stay
-/// inside the workspace directory (following symlinks for the comparison).
-fn workspace_path(path: &str) -> Result<PathBuf, String> {
-    let root = loom_data_dir();
-    // Workspace-relative paths resolve against the workspace root, not the
-    // process working directory.
-    let requested = {
-        let p = PathBuf::from(path);
-        if p.is_relative() { root.join(p) } else { p }
-    };
-
-    let (canon_root, canon_target) = if requested == root {
-        (root.clone(), root.clone())
-    } else {
-        let canon_root = root
-            .canonicalize()
-            .map_err(|e| format!("Workspace not found: {e}"))?;
-        let canon_target = requested
-            .canonicalize()
-            .map_err(|e| format!("Cannot read {}: {e}", requested.display()))?;
-        (canon_root, canon_target)
-    };
-
-    if !canon_target.starts_with(&canon_root) {
-        return Err("Path is outside the workspace.".to_string());
-    }
-    Ok(canon_target)
+#[tauri::command]
+fn write_file(
+    path: String,
+    content: String,
+    original: String,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let workspace = state.workspace.lock().unwrap_or_else(|e| e.into_inner());
+    workspace::write_text(workspace.root(), &path, &content, &original)
 }
 
 // ---------------------------------------------------------------------------
@@ -1838,10 +1851,15 @@ pub fn run() {
             let exp_store = ExperimentStore::load(exp_path)?;
             let int_path = intents_file_path(app.handle());
             let int_store = IntentStore::load(int_path)?;
+            let workspace_settings = workspace_settings_path(app.handle())?;
+            let documents = app.handle().path().document_dir()
+                .map_err(|e| format!("Could not locate your Documents folder: {e}"))?;
+            let workspace_store = WorkspaceStore::load(workspace_settings, documents.join("Loom"))?;
             app.manage(AppState {
                 work: Mutex::new(store),
                 experiments: Mutex::new(exp_store),
                 intents: Mutex::new(int_store),
+                workspace: Mutex::new(workspace_store),
             });
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -1899,11 +1917,14 @@ pub fn run() {
             set_experiment_arm_result,
             choose_experiment_arm,
             clear_experiment_decision,
+            get_workspace,
+            open_workspace,
             list_workspace,
             list_directory,
             create_workspace_file,
             create_workspace_directory,
-            read_file
+            read_file,
+            write_file
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

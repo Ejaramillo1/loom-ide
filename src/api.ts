@@ -162,6 +162,11 @@ export interface DirEntry {
   is_dir: boolean;
 }
 
+export interface WorkspaceInfo {
+  name: string;
+  path: string;
+}
+
 export interface HistoryMessage {
   role: string;
   content: string;
@@ -831,6 +836,15 @@ export async function getSessionHistory(sessionId: string): Promise<HistoryMessa
 
 // ---- Workspace explorer (local filesystem; works without the server) ----
 
+export async function getWorkspace(): Promise<WorkspaceInfo | null> {
+  if (!IN_TAURI) return null;
+  return invokeCmd<WorkspaceInfo>("get_workspace");
+}
+
+export async function openWorkspace(path: string): Promise<WorkspaceInfo> {
+  return invokeCmd<WorkspaceInfo>("open_workspace", { path });
+}
+
 export async function listWorkspace(): Promise<DirEntry[]> {
   return invokeCmd<DirEntry[]>("list_workspace");
 }
@@ -849,6 +863,10 @@ export async function createWorkspaceDirectory(parent: string, name: string): Pr
 
 export async function readFile(path: string): Promise<string> {
   return invokeCmd<string>("read_file", { path });
+}
+
+export async function writeFile(path: string, content: string, original: string): Promise<void> {
+  return invokeCmd<void>("write_file", { path, content, original });
 }
 
 // ---- Experiments (local definitions; arms run through real Loom calls) ----

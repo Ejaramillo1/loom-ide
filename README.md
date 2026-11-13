@@ -69,12 +69,15 @@ transparent; that was a misunderstanding and was reverted.)
   editable success criteria (add/remove, persisted), a Workflows
   section (list + Run + recent executions), artifacts with
   Attach/Detach, and evidence from experiment decisions.
-- **Code** — a plain notes editor (design philosophy note + scratch
-  notes, saved locally, both starting empty) plus the workspace
-  explorer: a read-only tree over the Loom workspace directory
-  (`~/.loom`), click a text file to open it. "Ask about this note"
-  sends the note to Loom through the Conversation (opening it first
-  if it is closed).
+- **Code** — the default workspace is a blank canvas backed by a separate
+  `Loom` folder in Documents. It lists only files in that folder, with no
+  document opened automatically. Create files/folders or use **File → Open
+  folder** to enter another folder's path; the selection is remembered.
+  Files can be edited and saved. Changing files or closing the current file
+  saves it first; an external modification stops the save and preserves the
+  draft. **Reload file** explicitly discards a draft after confirmation.
+  Saved notes from older versions remain available from File when present.
+  Work, Context and Conversation open on demand in Code.
 - **Agents** — the agents from `GET /v1/agents`: name, status dot,
   uptime, active sessions, message count. Empty ("No agents running")
   only when the server reports none.
@@ -82,15 +85,11 @@ transparent; that was a misunderstanding and was reverted.)
   this workspace. Empty ("No evidence yet") until a decision is made.
   The Loom server exposes no findings/traces API, so there is nothing
   else to show yet.
-- **Layers** — toggles for the scene layers: light beam, water
-  reflection, glass panels, sphere.
-- **Artifacts** (footer mode, and the rail's ··· menu) — two tabs:
-  **Artifacts** (the artifacts fetched from the Loom server, with the
-  work's session filter in Work detail) and **Documents** (the two
-  local notes; clicking one opens it in Code mode).
-
-Both navigation mechanisms — the icon rail and the footer mode
-switcher — show the same current destination.
+- **Application menus** — File, Edit, View and Help are in the top bar.
+  View includes the scene's light, water, glass and sphere controls.
+- **Artifacts** — available through work and conversation cards. It is not
+  a bottom navigation section. Its Documents tab lists earlier saved notes
+  only when those notes contain user text.
 
 ## What it is
 
@@ -143,10 +142,14 @@ switcher — show the same current destination.
     runs are blocking; the execute response's `result` is surfaced as
     evidence. Executions carry no work id on the server, so the list
     is workspace-global.
-  - Workspace explorer: `list_workspace` / `list_directory` /
-    `read_file` — read-only over the Loom workspace directory
-    (`~/.loom`), canonicalized and contained; dotfiles skipped,
-    1 MB read cap.
+  - Workspace files: `get_workspace` / `open_workspace` /
+    `list_workspace` / `list_directory` / `create_workspace_file` /
+    `create_workspace_directory` / `read_file` / `write_file`. The default
+    is Documents/Loom, independent of `~/.loom` and `LOOM_DATA_DIR`.
+    Folder selection metadata is stored in app data, outside the content
+    folder. Paths are canonicalized and contained; text reads/writes are
+    limited to 1 MB. Writes preserve file permissions and reject changes
+    made since the file was opened. No files are seeded or migrated.
 - **Frontend (Vite + TypeScript, `src/`)** — no framework: plain
   TypeScript + CSS, chosen deliberately because the UI is a static,
   design-driven layout and hand-written DOM/CSS gives the closest

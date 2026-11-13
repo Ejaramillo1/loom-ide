@@ -25,6 +25,10 @@ import {
   getStorageStatus,
   getWorkflowExecution,
   getWorkItems,
+  getWorkspace,
+  openWorkspace,
+  writeFile,
+  isTauri,
   listAgents,
   listArtifacts,
   listDirectory,
@@ -69,6 +73,7 @@ import {
   type WorkflowExecution,
   type WorkflowResult,
   type WorkItem,
+  type WorkspaceInfo,
   type EvidenceKind,
   evidenceKindLabel,
   type AutonomyChange,
@@ -116,11 +121,10 @@ const CAPTIONS: Record<SphereState, string> = {
   completed: "Done — back at rest.",
 };
 
-/** The two real local documents. They are the user's own notes, not
-    seeded content: both start empty and persist in localStorage. */
+/** Compatibility access to earlier user notes, shown only when saved text exists. */
 const NOTE_DOCS: { id: string; title: string; detail: string; kind: NoteKind }[] = [
-  { id: "doc-design", title: "Design philosophy", detail: "Your design notes", kind: "design" },
-  { id: "doc-scratch", title: "Scratch notes", detail: "Your scratch pad", kind: "scratch" },
+  { id: "doc-design", title: "Previous design note", detail: "Saved locally", kind: "design" },
+  { id: "doc-scratch", title: "Previous scratch note", detail: "Saved locally", kind: "scratch" },
 ];
 
 let workItems: WorkItem[] = [];
@@ -132,7 +136,7 @@ let activeIntentId: string | null = null;
 let intentEditor: { mode: "create" } | { mode: "edit"; id: string } | null = null;
 let mode: Mode = "code";
 let sphereState: SphereState = "idle";
-let currentNote: NoteKind = "design";
+let currentNote: NoteKind | null = null;
 let artifactTab: "artifacts" | "documents" = "artifacts";
 let loomReachable = false;
 let loomVerified = false;
@@ -2189,11 +2193,11 @@ async function refreshAttention() {
 // ---------------------------------------------------------------------------
 
 function isInspectorDrawer(): boolean {
-  return window.matchMedia("(max-width: 1439px)").matches;
+  return mode === "code" || window.matchMedia("(max-width: 1439px)").matches;
 }
 
 function isLeftDrawer(): boolean {
-  return window.matchMedia("(max-width: 1099px)").matches;
+  return mode === "code" || window.matchMedia("(max-width: 1099px)").matches;
 }
 
 function updateScrim() {
@@ -2589,7 +2593,7 @@ function renderArtifacts() {
   if (artifactTab === "documents") {
     // The two real local documents. They start empty; clicking one
     // opens it in Code mode.
-    for (const doc of NOTE_DOCS) {
+    for (const doc of NOTE_DOCS.filter((doc) => hasPreviousNote(doc.kind))) {
       const wrap = document.createElement("div");
       wrap.className = "flat-row";
       const card = document.createElement("button");
@@ -3238,24 +3242,34 @@ function syncSessionToWork() {
 }
 
 // ---------------------------------------------------------------------------
-// Workspace explorer over the Loom workspace (~/.loom). Files and folders
-// can be created; text files open read-only. Independent of the Loom server.
+// User workspace files, separate from Loom server and application storage.
 // ---------------------------------------------------------------------------
 
 const dirCache = new Map<string, DirEntry[]>();
 const expandedDirs = new Set<string>();
 let openFilePath: string | null = null;
+let openFileOriginal: string | null = null;
+let workspaceInfo: WorkspaceInfo | null = null;
+let documentRequest = 0;
+let saveInFlight: Promise<boolean> | null = null;
+let folderOpening = false;
+
+function workspaceLabel(path: string) {
+  const value = path.replaceAll("\\", "/");
+  const root = workspaceInfo?.path.replaceAll("\\", "/").replace(/\/$/, "");
+  return root && value.startsWith(`${root}/`) ? value.slice(root.length + 1) : value.split("/").at(-1) ?? value;
+}
 let fileCreation: { kind: "file" | "folder"; parent: string } | null = null;
 let fileCreationPending = false;
 
 function beginFileCreation(kind: "file" | "folder", parent = "") {
-  if (fileCreationPending) return;
+  if (fileCreationPending || !workspaceInfo) return;
   fileCreation = { kind, parent };
   for (const menu of document.querySelectorAll<HTMLDetailsElement>(".tree-actions")) menu.open = false;
   $("#file-create-form").hidden = false;
   $("#file-create-label").textContent = kind === "file" ? "File name" : "Folder name";
   $("#file-create-submit").textContent = kind === "file" ? "Create file" : "Create folder";
-  $("#file-create-destination").textContent = parent ? `In: ${parent}` : "In: workspace root";
+  $("#file-create-destination").textContent = `In: ${parent ? workspaceLabel(parent) : workspaceInfo.name}`;
   $("#file-create-error").hidden = true;
   $("#file-tree-status").hidden = true;
   const input = $("#file-create-name") as HTMLInputElement;
@@ -3276,6 +3290,7 @@ async function submitFileCreation(event: SubmitEvent) {
   event.preventDefault();
   if (!fileCreation || fileCreationPending) return;
   const { kind, parent } = fileCreation;
+  const previousDocumentRequest = documentRequest;
   const input = $("#file-create-name") as HTMLInputElement;
   const name = input.value.trim();
   const error = $("#file-create-error");
@@ -3322,7 +3337,7 @@ async function submitFileCreation(event: SubmitEvent) {
   } catch (err) {
     status.textContent = `Created ${kind}: ${created.name}. Could not refresh the folder: ${err instanceof Error ? err.message : String(err)}. Use Refresh to reload it.`;
   }
-  if (!created.is_dir) await openFile(created.path);
+  if (!created.is_dir && documentRequest === previousDocumentRequest) await openFile(created.path);
   else $("#file-new-folder").focus();
 }
 
@@ -3333,7 +3348,7 @@ function renderFileTree() {
   if (root.length === 0) {
     const empty = document.createElement("p");
     empty.className = "tree-empty";
-    empty.textContent = "No files found in the workspace.";
+    empty.textContent = workspaceInfo ? "No files yet." : "";
     tree.append(empty);
     return;
   }
@@ -3427,46 +3442,93 @@ async function toggleDir(path: string) {
 }
 
 async function openFile(path: string) {
-  const editor = $("#code-editor") as HTMLTextAreaElement;
-  const pathEl = $("#code-path");
+  const request = ++documentRequest;
+  if (!await saveNote() || request !== documentRequest) return;
   try {
     const text = await readFile(path);
-    editor.value = text;
-    editor.readOnly = true;
+    if (request !== documentRequest) return;
     openFilePath = path;
-    pathEl.textContent = path;
-    pathEl.classList.remove("error");
-    pathEl.hidden = false;
-    ($("#code-save") as HTMLButtonElement).disabled = true;
-    for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
-      tab.classList.remove("active");
-    }
+    openFileOriginal = text;
+    currentNote = null;
+    ($("#code-editor") as HTMLTextAreaElement).value = text;
+    $("#code-error").hidden = true;
+    renderEditor();
     renderFileTree();
-  } catch (err) {
-    pathEl.textContent = `Could not open: ${err instanceof Error ? err.message : String(err)}`;
-    pathEl.classList.add("error");
-    pathEl.hidden = false;
+  } catch (error) {
+    if (request !== documentRequest) return;
+    showEditorError(error);
   }
 }
 
 async function loadWorkspaceTree() {
   const tree = $("#file-tree");
   try {
-    dirCache.set("", await listWorkspace());
-  } catch (err) {
-    dirCache.set("", []);
-    tree.innerHTML = "";
-    const empty = document.createElement("p");
-    empty.className = "tree-empty";
-    empty.textContent = `Could not read the workspace: ${err instanceof Error ? err.message : String(err)}`;
-    tree.append(empty);
-    return;
+    workspaceInfo = await getWorkspace();
+    $("#workspace-name").textContent = workspaceInfo?.name ?? "Files";
+    for (const id of ["file-new-file", "file-new-folder", "canvas-new-file"]) {
+      ($("#" + id) as HTMLButtonElement).disabled = !workspaceInfo;
+    }
+    dirCache.set("", workspaceInfo ? await listWorkspace() : []);
+    renderFileTree();
+  } catch {
+    tree.replaceChildren();
+    const error = document.createElement("p");
+    error.className = "tree-empty";
+    error.textContent = "Could not open this folder. Use File → Open folder to choose it again.";
+    tree.append(error);
   }
-  renderFileTree();
+}
+
+function showFolderDialog() {
+  const dialog = $("#open-folder-dialog") as HTMLDialogElement;
+  ($("#open-folder-path") as HTMLInputElement).value = workspaceInfo?.path ?? "";
+  $("#open-folder-error").hidden = true;
+  dialog.showModal();
+  ($("#open-folder-path") as HTMLInputElement).select();
+}
+
+async function submitFolder(event: SubmitEvent) {
+  event.preventDefault();
+  if (folderOpening || fileCreationPending) return;
+  folderOpening = true;
+  const button = $("#open-folder-submit") as HTMLButtonElement;
+  button.disabled = true;
+  try {
+    if (!await saveNote()) throw new Error("Save or reload your current file before opening another folder.");
+    const info = await openWorkspace(($("#open-folder-path") as HTMLInputElement).value);
+    ++documentRequest;
+    workspaceInfo = info;
+    dirCache.clear();
+    expandedDirs.clear();
+    clearEditor();
+    fileCreation = null;
+    $("#file-create-form").hidden = true;
+    $("#file-tree-status").hidden = true;
+    ($("#open-folder-dialog") as HTMLDialogElement).close();
+    setMode("code");
+    await loadWorkspaceTree();
+  } catch (error) {
+    const message = $("#open-folder-error");
+    message.textContent = error instanceof Error ? error.message : String(error);
+    message.hidden = false;
+  } finally {
+    button.disabled = false;
+    folderOpening = false;
+  }
 }
 
 function initWorkspaceExplorer() {
-  // Workspace explorer (local filesystem; independent of the server).
+  // The user chooses the content folder; app/server files never become the default tree.
+  $("#canvas-new-file").addEventListener("click", () => beginFileCreation("file"));
+  $("#canvas-open-folder").addEventListener("click", showFolderDialog);
+  ($("#canvas-open-folder") as HTMLButtonElement).disabled = !isTauri;
+  $("#open-folder-form").addEventListener("submit", (event) => { void submitFolder(event as SubmitEvent); });
+  $("#open-folder-dialog").addEventListener("cancel", (event) => {
+    if (folderOpening) event.preventDefault();
+  });
+  $("#open-folder-cancel").addEventListener("click", () => {
+    if (!folderOpening) ($("#open-folder-dialog") as HTMLDialogElement).close();
+  });
   $("#file-new-file").addEventListener("click", () => beginFileCreation("file"));
   $("#file-new-folder").addEventListener("click", () => beginFileCreation("folder"));
   $("#file-create-form").addEventListener("submit", (event) => {
@@ -4026,15 +4088,17 @@ function initAppMenu() {
     {
       label: "File",
       items: [
-        { label: "New file…", disabled: () => fileCreationPending,
+        { label: "New file…", disabled: () => fileCreationPending || folderOpening || !workspaceInfo,
           run: () => { setMode("code"); beginFileCreation("file"); } },
-        { label: "New folder…", disabled: () => fileCreationPending,
+        { label: "New folder…", disabled: () => fileCreationPending || folderOpening || !workspaceInfo,
           run: () => { setMode("code"); beginFileCreation("folder"); } },
         "separator",
-        { label: "Design notes", run: () => openNote("design") },
-        { label: "Scratch notes", run: () => openNote("scratch") },
-        { label: "Save note", disabled: () => mode !== "code" || openFilePath !== null,
-          run: () => { $("#code-save").click(); } },
+        { label: "Open folder…", disabled: () => !isTauri || folderOpening || fileCreationPending, run: showFolderDialog },
+        { label: "Save", disabled: () => mode !== "code" || (!openFilePath && !currentNote),
+          run: async () => { await saveNote(); } },
+        { label: "Reload file", disabled: () => !openFilePath || Boolean(saveInFlight), run: reloadFile },
+        { label: "Close file", disabled: () => !openFilePath && !currentNote, run: closeFile },
+        ...NOTE_DOCS.filter((note) => hasPreviousNote(note.kind)).map((note) => ({ label: note.title, run: () => openNote(note.kind) })),
       ],
     },
     {
@@ -4130,6 +4194,8 @@ function setMode(next: Mode) {
     return;
   }
   const wasExperiment = mode === "experiment";
+  if (mode === "code" || next === "code") closeDrawers();
+  if (next === "code") setChatOpen(false);
   mode = next;
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.classList.toggle("active", btn.dataset.mode === next);
@@ -4151,7 +4217,7 @@ function setMode(next: Mode) {
 }
 
 // ---------------------------------------------------------------------------
-// Code editor (prototype: notes persist in localStorage, start empty)
+// File canvas. Legacy local notes are available only when they contain saved text.
 // ---------------------------------------------------------------------------
 
 const NOTE_KEY_DESIGN = "loom-ide-tauri:design-note";
@@ -4161,56 +4227,143 @@ function noteKey(kind: NoteKind): string {
   return kind === "design" ? NOTE_KEY_DESIGN : NOTE_KEY_SCRATCH;
 }
 
-function loadNote() {
-  const editor = $("#code-editor") as HTMLTextAreaElement;
-  editor.value = localStorage.getItem(noteKey(currentNote)) ?? "";
-  editor.readOnly = false;
-  openFilePath = null;
-  const pathEl = $("#code-path");
-  pathEl.hidden = true;
-  pathEl.classList.remove("error");
-  ($("#code-save") as HTMLButtonElement).disabled = false;
+function hasPreviousNote(kind: NoteKind) {
+  try { return Boolean(localStorage.getItem(noteKey(kind))?.trim()); }
+  catch { return false; }
 }
 
-function saveNote() {
-  // A workspace file is open in the editor, not a note: saving here would
-  // overwrite the current note with the file's text.
-  if (openFilePath) return;
-  const editor = $("#code-editor") as HTMLTextAreaElement;
-  localStorage.setItem(noteKey(currentNote), editor.value);
+function showEditorError(error: unknown) {
+  const element = $("#code-error");
+  element.textContent = error instanceof Error ? error.message : String(error);
+  element.hidden = false;
 }
 
-/** Open Code mode showing one of the two notes. */
-function openNote(kind: NoteKind) {
-  saveNote();
-  currentNote = kind;
-  loadNote();
-  for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
-    tab.classList.toggle("active", tab.dataset.note === kind);
+function renderEditor() {
+  const opened = openFilePath !== null || currentNote !== null;
+  $("#canvas-empty").hidden = opened;
+  $("#code-editor").hidden = !opened;
+  $("#code-foot").hidden = !opened;
+  const tabs = $("#code-tabs");
+  tabs.hidden = !opened;
+  tabs.replaceChildren();
+  if (opened) {
+    const title = document.createElement("span");
+    title.id = "open-file-title";
+    title.className = "code-tab active";
+    title.textContent = openFilePath ? workspaceLabel(openFilePath) : NOTE_DOCS.find((note) => note.kind === currentNote)!.title;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "icon-btn small";
+    close.textContent = "×";
+    close.setAttribute("aria-label", "Close file");
+    close.addEventListener("click", () => { void closeFile(); });
+    tabs.append(title, close);
   }
+  $("#code-path").hidden = true;
+}
+
+function markEditorDirty() {
+  const title = document.getElementById("open-file-title");
+  if (title) {
+    const name = openFilePath ? workspaceLabel(openFilePath) : NOTE_DOCS.find((note) => note.kind === currentNote)?.title;
+    const dirty = openFilePath !== null && ($("#code-editor") as HTMLTextAreaElement).value !== openFileOriginal;
+    title.textContent = `${name ?? ""}${dirty ? " •" : ""}`;
+  }
+}
+
+function clearEditor() {
+  openFilePath = null;
+  openFileOriginal = null;
+  currentNote = null;
+  ($("#code-editor") as HTMLTextAreaElement).value = "";
+  $("#code-error").hidden = true;
+  $("#code-saved").hidden = true;
+  renderEditor();
+  renderFileTree();
+}
+
+async function closeFile() {
+  if (await saveNote()) { ++documentRequest; clearEditor(); }
+}
+
+function saveNote(): Promise<boolean> {
+  if (saveInFlight) return saveInFlight;
+  const editor = $("#code-editor") as HTMLTextAreaElement;
+  if (!openFilePath && !currentNote) return Promise.resolve(true);
+  if (openFilePath && editor.value === openFileOriginal) return Promise.resolve(true);
+  const path = openFilePath;
+  const content = editor.value;
+  const original = openFileOriginal;
+  const kind = currentNote;
+  const button = $("#code-save") as HTMLButtonElement;
+  editor.readOnly = true;
+  button.disabled = true;
+  button.textContent = "Saving…";
+  saveInFlight = (async () => {
+    try {
+      if (path && original !== null) {
+        await writeFile(path, content, original);
+        openFileOriginal = content;
+        markEditorDirty();
+      } else if (kind) localStorage.setItem(noteKey(kind), content);
+      $("#code-error").hidden = true;
+      $("#code-saved").hidden = false;
+      return true;
+    } catch (error) {
+      showEditorError(error);
+      return false;
+    } finally {
+      editor.readOnly = false;
+      button.disabled = false;
+      button.textContent = "Save";
+    }
+  })();
+  return saveInFlight.finally(() => { saveInFlight = null; });
+}
+
+async function openNote(kind: NoteKind) {
+  if (!await saveNote()) return;
+  ++documentRequest;
+  currentNote = kind;
+  openFilePath = null;
+  openFileOriginal = null;
+  ($("#code-editor") as HTMLTextAreaElement).value = localStorage.getItem(noteKey(kind)) ?? "";
+  renderEditor();
   setMode("code");
 }
 
-function initCodeEditor() {
+async function reloadFile() {
+  if (!openFilePath || saveInFlight) return;
+  const path = openFilePath;
   const editor = $("#code-editor") as HTMLTextAreaElement;
-  loadNote();
-  for (const tab of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
-    tab.addEventListener("click", () => {
-      saveNote();
-      currentNote = tab.dataset.note as NoteKind;
-      loadNote();
-      for (const t of document.querySelectorAll<HTMLButtonElement>(".code-tab")) {
-        t.classList.toggle("active", t === tab);
-      }
-    });
-  }
-  $("#code-save").addEventListener("click", () => {
-    saveNote();
-    const note = $("#code-saved");
-    note.hidden = false;
-    window.setTimeout(() => (note.hidden = true), 2000);
+  if (editor.value !== openFileOriginal && !window.confirm("Discard your unsaved changes and reload this file?")) return;
+  const request = ++documentRequest;
+  try {
+    const content = await readFile(path);
+    if (request !== documentRequest || openFilePath !== path) return;
+    editor.value = content;
+    openFileOriginal = content;
+    markEditorDirty();
+    $("#code-error").hidden = true;
+    $("#code-saved").hidden = true;
+  } catch (error) { showEditorError(error); }
+}
+
+function initCodeEditor() {
+  clearEditor();
+  $("#code-editor").addEventListener("input", () => {
+    $("#code-saved").hidden = true;
+    markEditorDirty();
   });
+  window.addEventListener("beforeunload", (event) => {
+    if (openFilePath && ($("#code-editor") as HTMLTextAreaElement).value !== openFileOriginal) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+  $("#code-save").addEventListener("click", () => { void saveNote(); });
   $("#code-ask").addEventListener("click", async () => {
+    const editor = $("#code-editor") as HTMLTextAreaElement;
     focusChat();
     await sendChat(`About this text: ${editor.value.slice(0, 280)}`);
   });
@@ -4223,6 +4376,9 @@ function initCodeEditor() {
 async function init() {
   loadLayers();
   applyLayerClasses();
+  loadChatOpen();
+  if (mode === "code") chatOpen = false;
+  applyChatOpen();
   initAppMenu();
   // The initial Code view is usable before any Loom requests finish.
   initCodeEditor();
@@ -4425,8 +4581,6 @@ async function init() {
   }
 
   // Workspace views.
-  loadChatOpen();
-  applyChatOpen();
   renderAgents();
   renderEvidence();
   renderArtifacts();
