@@ -1076,3 +1076,31 @@ export async function openLivingWorkbench(): Promise<void> {
   if (!IN_TAURI) throw new Error("Open the desktop Tauri application to launch Living Workbench.");
   await invoke("open_living_workbench");
 }
+
+// Markdown knowledge is desktop-only; never substitute a browser JSON store.
+export interface KnowledgeMeta {
+  id: string; kind: string; title: string; created: number; modified: number;
+  author: string; source: string; status: string; version: number;
+}
+export interface KnowledgeNote { meta: KnowledgeMeta; body: string; path: string; original: string }
+export interface KnowledgeEdge { from: string; to: string; kind: string }
+export interface KnowledgeAudit { at: number; action: string; object: string; actor: string; detail: string }
+export interface KnowledgeListing {
+  notes: KnowledgeNote[]; edges: KnowledgeEdge[]; activity: KnowledgeAudit[];
+  pending: number; revision: string; root: string; kinds: string[]; folders: string[]; relations: string[];
+}
+export interface KnowledgeDetail { note: KnowledgeNote; versions: KnowledgeNote[]; backlinks: KnowledgeEdge[]; audit: KnowledgeAudit[]; revision: string }
+function vaultInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (!IN_TAURI) return Promise.reject(new Error("Open Loom in Tauri to use your markdown vault."));
+  return invoke<T>(command, args);
+}
+export const listKnowledge = (query = "") => vaultInvoke<KnowledgeListing>("knowledge_list", { query });
+export const readKnowledge = (id: string) => vaultInvoke<KnowledgeDetail>("knowledge_read", { id });
+export const createKnowledge = (title: string, body: string, kind: string, folder: string, revision: string) =>
+  vaultInvoke<string>("knowledge_create", { title, body, kind, folder, revision, actor: "human" });
+export const saveKnowledge = (note: KnowledgeNote, revision: string) => vaultInvoke<void>("knowledge_save", { note, revision });
+export const relateKnowledge = (edge: KnowledgeEdge, unlink: boolean, revision: string) => vaultInvoke<void>("knowledge_relate", { edge, unlink, revision });
+export const reviewKnowledge = (id: string, approved: boolean, reason: string, original: string, revision: string) =>
+  vaultInvoke<void>("knowledge_review", { id, approved, reason, original, revision });
+export const exportKnowledgeCanvas = () => vaultInvoke<string>("knowledge_export_canvas");
+export const syncKnowledge = () => vaultInvoke<number>("knowledge_sync_from_loom");

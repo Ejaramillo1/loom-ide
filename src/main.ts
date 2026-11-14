@@ -1,3 +1,4 @@
+import { installKnowledge } from "./knowledge";
 import { getAppearance, setAppearance } from "./theme";
 import { openLivingWorkbench } from "./api";
 import { installSpatialWorkbench, notifySpatialVaultChanged } from "./spatial";
@@ -88,7 +89,7 @@ import { installAppMenu, textEditingActions } from "./app-menu";
 // State
 // ---------------------------------------------------------------------------
 
-type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "artifacts" | "spatial";
+type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "artifacts" | "spatial" | "knowledge";
 
 type NoteKind = "design" | "scratch";
 type RightTab = "context" | "conversation";
@@ -141,6 +142,8 @@ let pendingCreatedIntent: { id: string; statement: string } | null = null;
 let intentsLoadError: string | null = null;
 let mode: Mode = "spatial";
 let sphereState: SphereState = "idle";
+let knowledge: ReturnType<typeof installKnowledge> | null = null;
+let pendingKnowledge = 0;
 let currentNote: NoteKind | null = null;
 let artifactTab: "artifacts" | "documents" = "artifacts";
 let loomReachable = false;
@@ -3166,6 +3169,12 @@ function renderArtifacts() {
 // Search (filters the work catalogue by title)
 // ---------------------------------------------------------------------------
 
+function openGlobalSearch() {
+  setMode("work");
+  if (isLeftDrawer()) openLeftDrawer();
+  setSearchOpen(true);
+}
+
 function setSearchOpen(open: boolean) {
   const input = $("#search-input") as HTMLInputElement;
   const btn = $("#search-btn");
@@ -3190,6 +3199,17 @@ function applySearchFilter(query: string) {
     if (show) visible++;
   }
   $("#work-empty").hidden = visible > 0 || workItems.length === 0;
+  knowledge?.search(query);
+  const results = $("#knowledge-search-results");
+  results.replaceChildren();
+  if (q) {
+    const matches = knowledge?.searchResults(q) ?? [];
+    const heading = document.createElement("p"); heading.textContent = matches.length ? "Knowledge" : "No notes match this search."; results.append(heading);
+    for (const note of matches) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "knowledge-search-result";
+      b.textContent = note.meta.title; b.addEventListener("click", () => { void knowledge?.openNote(note.meta.id); }); results.append(b);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -4590,6 +4610,7 @@ const ALL_VIEWS: Mode[] = [
   "agents",
   "evidence",
   "artifacts",
+  "knowledge",
 ];
 
 let appMenu: ReturnType<typeof installAppMenu> | null = null;
@@ -4619,7 +4640,7 @@ function initAppMenu() {
       items: [
         ...textEditingActions(),
         "separator",
-        { label: "Find work…", run: () => { setMode("work"); if (isLeftDrawer()) openLeftDrawer(); setSearchOpen(true); } },
+        { label: "Find work and notes…", run: openGlobalSearch },
       ],
     },
     {
@@ -4627,7 +4648,7 @@ function initAppMenu() {
       items: [
         { label: "Living Workbench — knowledge, canvas & sphere", disabled: () => !isTauri, run: openLivingWorkbench },
         "separator",
-        ...(["code", "experiment", "work", "agents", "evidence"] as const).map((view) => ({
+        ...(["code", "experiment", "work", "agents", "evidence", "knowledge"] as const).map((view) => ({
           label: view[0].toUpperCase() + view.slice(1),
           radio: true,
           checked: () => mode === view,
@@ -4722,7 +4743,7 @@ function renderStatusPill() {
     pill.title =
       "The Loom server is not reachable at localhost:5006. Start the server to connect.";
   }
-  pill.title += ` ${CAPTIONS[sphereState]}`;
+  pill.title += ` ${CAPTIONS[pendingKnowledge > 0 ? "attention" : sphereState]}`;
 }
 
 function setMode(next: Mode) {
@@ -4732,6 +4753,9 @@ function setMode(next: Mode) {
   }
   if (document.body.classList.contains("left-open")) closeLeftDrawer(false);
   mode = next;
+  const search = document.querySelector<HTMLElement>(".search-wrap");
+  if (search) $(next === "knowledge" ? "#knowledge-search-slot" : "#work-search-slot").append(search);
+  if (next === "knowledge") { void knowledge?.refresh(); }
   // Keep the footer destination and its accessible state synchronized.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     const active = btn.dataset.mode === next;
@@ -4743,7 +4767,7 @@ function setMode(next: Mode) {
     const el = document.getElementById(`view-${id}`);
     if (el) el.hidden = id !== next;
   }
-  for (const cls of ["code", "experiment", "work", "agents", "evidence", "artifacts"]) {
+  for (const cls of ["code", "experiment", "work", "agents", "evidence", "artifacts", "knowledge"]) {
     document.body.classList.toggle(`mode-${cls}`, cls === next);
   }
   // The scene follows the mode: water + full atmosphere only in Experiment.
@@ -4919,6 +4943,7 @@ async function init() {
   // Initialize local views before any Loom requests finish.
   initCodeEditor();
   initWorkspaceExplorer();
+  knowledge = installKnowledge(() => setMode("knowledge"), count => { pendingKnowledge = count; renderStatusPill(); });
   installSpatialWorkbench((object) => {
     switch (object) {
       case "Work": setMode("work"); break;
@@ -4926,7 +4951,7 @@ async function init() {
       case "Experiments": setMode("experiment"); break;
       case "Evidence": setMode("evidence"); break;
       case "Agents": setMode("agents"); break;
-      case "Notes": setArtifactTab("documents"); setMode("artifacts"); break;
+      case "Notes": setMode("knowledge"); break;
       default: break;
     }
   }, () => ({ work: workItems.length, experiments: experiments.length }));
@@ -4973,6 +4998,9 @@ async function init() {
     }
   });
   document.addEventListener("keydown", (e) => {
+    if (knowledge?.isDialogOpen()) return;
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") { e.preventDefault(); openGlobalSearch(); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "n") { e.preventDefault(); void knowledge?.newNote(); return; }
     if (e.key === "Escape") {
       if (document.getElementById("decision-dialog-overlay")) return; // handled by its trap
       if (
