@@ -212,6 +212,24 @@ impl IntentStore {
                             changed = true;
                         }
                     }
+                    // A bogus level or status fails loudly: the fields
+                    // default only when *missing*. A present-but-unknown
+                    // value previously flowed through and was treated as
+                    // rank 0 / an unrenderable status.
+                    for i in &file.intents {
+                        if autonomy_rank(&i.autonomy).is_none() {
+                            return Err(format!(
+                                "intents.json: intent {} has unknown autonomy level \"{}\" (expected one of manual, assisted, collaborative, delegated). Fix the file, then restart.",
+                                i.id, i.autonomy
+                            ));
+                        }
+                        if i.status != "active" && i.status != "done" {
+                            return Err(format!(
+                                "intents.json: intent {} has unknown status \"{}\" (expected active or done). Fix the file, then restart.",
+                                i.id, i.status
+                            ));
+                        }
+                    }
                     let store = Self {
                         path,
                         active_intent_id: file.active_intent_id,
@@ -571,6 +589,23 @@ impl WorkStore {
                     let mut seen = std::collections::HashSet::new();
                     let before = items.len();
                     items.retain(|w| seen.insert(w.id.clone()));
+                    // A bogus level or status fails loudly, like intents:
+                    // a present-but-unknown value previously flowed
+                    // through and was treated as rank 0 / unrenderable.
+                    for w in &items {
+                        if autonomy_rank(&w.autonomy).is_none() {
+                            return Err(format!(
+                                "work.json: work item {} has unknown autonomy level \"{}\" (expected one of manual, assisted, collaborative, delegated). Fix the file, then restart.",
+                                w.id, w.autonomy
+                            ));
+                        }
+                        if w.status != "active" && w.status != "paused" {
+                            return Err(format!(
+                                "work.json: work item {} has unknown status \"{}\" (expected active or paused). Fix the file, then restart.",
+                                w.id, w.status
+                            ));
+                        }
+                    }
                     let store = Self { path, items };
                     if store.items.len() != before {
                         store.save()?;
@@ -1088,6 +1123,28 @@ mod tests {
         assert!(item.autonomy_history.is_empty());
     }
 
+    #[test]
+    fn work_load_rejects_unknown_autonomy_and_status() {
+        let dir = TempDir::new("work-load-bad-values");
+        let path = dir.file("work.json");
+        let bad_level = serde_json::json!([{
+            "id": "w-1", "title": "T", "status": "active",
+            "autonomy": "superuser", "updated_label": "Now"
+        }]);
+        fs::write(&path, serde_json::to_string(&bad_level).unwrap()).unwrap();
+        let err = WorkStore::load(path.clone()).unwrap_err();
+        assert!(err.contains("w-1"), "{err}");
+        assert!(err.contains("superuser"), "{err}");
+        let bad_status = serde_json::json!([{
+            "id": "w-2", "title": "T", "status": "archived",
+            "autonomy": "manual", "updated_label": "Now"
+        }]);
+        fs::write(&path, serde_json::to_string(&bad_status).unwrap()).unwrap();
+        let err = WorkStore::load(path).unwrap_err();
+        assert!(err.contains("w-2"), "{err}");
+        assert!(err.contains("archived"), "{err}");
+    }
+
     // ------------------------------------------------------------------
     // IntentStore
     // ------------------------------------------------------------------
@@ -1469,6 +1526,32 @@ mod tests {
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .find(|n| n.starts_with("intents.json.corrupt-"));
         assert!(backup.is_some(), "no .corrupt- backup found");
+    }
+
+    #[test]
+    fn intent_load_rejects_unknown_autonomy_and_status() {
+        let dir = TempDir::new("intent-load-bad-values");
+        let path = intent_path(&dir);
+        let bad_level = serde_json::json!({
+            "active_intent_id": null,
+            "intents": [
+                {"id": "i-1", "statement": "One", "autonomy": "superuser", "status": "active", "version": 1}
+            ]
+        });
+        fs::write(&path, serde_json::to_string(&bad_level).unwrap()).unwrap();
+        let err = IntentStore::load(path.clone()).unwrap_err();
+        assert!(err.contains("i-1"), "{err}");
+        assert!(err.contains("superuser"), "{err}");
+        let bad_status = serde_json::json!({
+            "active_intent_id": null,
+            "intents": [
+                {"id": "i-2", "statement": "Two", "autonomy": "manual", "status": "archived", "version": 1}
+            ]
+        });
+        fs::write(&path, serde_json::to_string(&bad_status).unwrap()).unwrap();
+        let err = IntentStore::load(path).unwrap_err();
+        assert!(err.contains("i-2"), "{err}");
+        assert!(err.contains("archived"), "{err}");
     }
 
     #[test]

@@ -165,6 +165,15 @@ let experiments: Experiment[] = [];
 let selectedExperimentId: string | null = null;
 let workflows: Workflow[] = [];
 let executions: WorkflowExecution[] = [];
+/** Server list caps: when a list returns exactly this many rows, the
+    server may hold more. The UI says so instead of pretending the list
+    is complete. */
+const SESSIONS_LIMIT = 500;
+const ARTIFACTS_LIMIT = 200;
+const EXECUTIONS_LIMIT = 500;
+/** Executions are shown 10 at a time, with a Show more button. */
+const EXECUTIONS_PAGE = 10;
+let executionsShown = EXECUTIONS_PAGE;
 let artifacts: Artifact[] = [];
 /** Artifacts for the selected work ("what this work produced"): scoped to
     the work's session when it has one, otherwise the global list. */
@@ -423,7 +432,7 @@ const AUTONOMY_LEVELS: Record<IntentAutonomy, { level: number; label: string }> 
 
 function autonomyLabel(a: IntentAutonomy): string {
   const entry = AUTONOMY_LEVELS[a];
-  return `L${entry.level} · ${entry.label}`;
+  return entry ? `L${entry.level} · ${entry.label}` : String(a);
 }
 
 function activeIntent(): Intent | null {
@@ -739,7 +748,10 @@ function buildAutonomyDial(
   currentLabel.textContent = "Autonomy";
   const currentValue = document.createElement("span");
   currentValue.className = `autonomy-current-value level-${current}`;
-  currentValue.textContent = `L${AUTONOMY_LEVELS[current].level} · ${AUTONOMY_LEVELS[current].label}`;
+  const currentEntry = AUTONOMY_LEVELS[current];
+  currentValue.textContent = currentEntry
+    ? `L${currentEntry.level} · ${currentEntry.label}`
+    : String(current);
   currentBadge.append(currentLabel, currentValue);
   root.append(currentBadge);
 
@@ -756,7 +768,7 @@ function buildAutonomyDial(
     btn.textContent = `L${entry.level}`;
     btn.title = entry.label;
     const rank = entry.level - 1;
-    const currentRank = AUTONOMY_LEVELS[current].level - 1;
+    const currentRank = (AUTONOMY_LEVELS[current]?.level ?? 3) - 1;
     btn.addEventListener("click", () => {
       if (rank === currentRank) return; // no change
       if (rank < currentRank) {
@@ -793,7 +805,12 @@ function buildAutonomyDial(
       li.className = "autonomy-hist-item";
       const fromTo = document.createElement("span");
       fromTo.className = "autonomy-hist-from-to";
-      fromTo.textContent = `L${AUTONOMY_LEVELS[change.from as IntentAutonomy].level} → L${AUTONOMY_LEVELS[change.to as IntentAutonomy].level}`;
+      const fromEntry = AUTONOMY_LEVELS[change.from as IntentAutonomy];
+      const toEntry = AUTONOMY_LEVELS[change.to as IntentAutonomy];
+      fromTo.textContent =
+        fromEntry && toEntry
+          ? `L${fromEntry.level} → L${toEntry.level}`
+          : `${change.from} → ${change.to}`;
       const when = document.createElement("span");
       when.className = "autonomy-hist-when";
       when.textContent = change.at > 0 ? new Date(change.at * 1000).toLocaleString() : "—";
@@ -824,8 +841,8 @@ function openAutonomyDialog(d: {
   const overlay = document.createElement("div");
   overlay.id = "autonomy-dialog-overlay";
   overlay.className = "autonomy-dialog-overlay";
-  const currentEntry = AUTONOMY_LEVELS[d.current];
-  const targetEntry = AUTONOMY_LEVELS[d.target];
+  const currentEntry = AUTONOMY_LEVELS[d.current] ?? AUTONOMY_LEVELS.collaborative;
+  const targetEntry = AUTONOMY_LEVELS[d.target] ?? AUTONOMY_LEVELS.collaborative;
   overlay.innerHTML = `
     <div class="autonomy-dialog">
       <h3>Increase autonomy?</h3>
@@ -960,28 +977,39 @@ function buildIntentEditor(
 
   const row = document.createElement("div");
   row.className = "intent-editor-row";
-  const autonomyField = buildAutonomyField(
-    existing?.autonomy ?? "collaborative",
-    existing?.autonomy_history ?? [],
-    async (next, justification) => {
-      try {
-        await updateIntent({
-          id: existing!.id,
-          statement: statementInput.value.trim() || existing!.statement,
-          why: whyInput.value.trim() || null,
-          autonomy: next,
-          status: statusSelect.value as "active" | "done",
-          justification,
-        });
-        // Re-render with updated history.
-        intentEditor = { mode: "edit", id: existing!.id };
-        renderIntentHeader();
-      } catch (err) {
-        showFieldError(error, err instanceof Error ? err.message : String(err));
-      }
-    },
-  );
-  row.append(autonomyField);
+  // The dial changes a live intent: a not-yet-created intent has no id
+  // for updateIntent, so in create mode the dial is not shown at all.
+  if (editor.mode === "edit" && existing) {
+    const target = existing;
+    const autonomyField = buildAutonomyField(
+      target.autonomy,
+      target.autonomy_history ?? [],
+      async (next, justification) => {
+        try {
+          await updateIntent({
+            id: target.id,
+            statement: statementInput.value.trim() || target.statement,
+            why: whyInput.value.trim() || null,
+            autonomy: next,
+            status: statusSelect.value as "active" | "done",
+            justification,
+          });
+          // Re-render with updated history.
+          intentEditor = { mode: "edit", id: target.id };
+          renderIntentHeader();
+        } catch (err) {
+          showFieldError(error, err instanceof Error ? err.message : String(err));
+        }
+      },
+    );
+    row.append(autonomyField);
+  } else {
+    const autonomyNote = document.createElement("p");
+    autonomyNote.className = "wd-sub-label";
+    autonomyNote.textContent =
+      "Autonomy starts at Collaborative; change it after creating the intent.";
+    row.append(autonomyNote);
+  }
   const statusField = document.createElement("label");
   statusField.className = "intent-field inline";
   const statusLabelEl = document.createElement("span");
@@ -998,7 +1026,7 @@ function buildIntentEditor(
     statusSelect.append(opt);
   }
   statusField.append(statusLabelEl, statusSelect);
-  row.append(autonomyField, statusField);
+  row.append(statusField);
   form.append(row);
 
   if (existing && existing.history.length > 0) {
@@ -1581,7 +1609,7 @@ function buildWorkflowsSection(): HTMLElement {
   } else {
     const ul = document.createElement("ul");
     ul.className = "execution-list";
-    for (const ex of executions.slice(0, 10)) {
+    for (const ex of executions.slice(0, executionsShown)) {
       const li = document.createElement("li");
       const status = document.createElement("span");
       status.className = `exp-status ${ex.status}`;
@@ -1606,6 +1634,24 @@ function buildWorkflowsSection(): HTMLElement {
       ul.append(li);
     }
     section.append(ul);
+    if (executionsShown < executions.length) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "btn ghost";
+      more.textContent = `Show more (${executions.length - executionsShown} remaining)`;
+      more.addEventListener("click", () => {
+        executionsShown += EXECUTIONS_PAGE;
+        renderWorkDetail();
+      });
+      section.append(more);
+    }
+    if (executions.length === EXECUTIONS_LIMIT) {
+      const note = document.createElement("p");
+      note.className = "wd-sub-label";
+      note.textContent =
+        "Showing 500 executions — the list is capped at 500, there may be more.";
+      section.append(note);
+    }
   }
   return section;
 }
@@ -1613,6 +1659,7 @@ function buildWorkflowsSection(): HTMLElement {
 async function refreshExecutionsList() {
   try {
     executions = await listWorkflowExecutions();
+    executionsShown = EXECUTIONS_PAGE;
     setLoomReachable(true);
   } catch (err) {
     if (isLoomConnectionError(err)) setLoomReachable(false);
@@ -1806,6 +1853,13 @@ function buildArtifactsSection(item: WorkItem): HTMLElement {
     ul.append(li);
   }
   section.append(ul);
+  if (workArtifacts.length === ARTIFACTS_LIMIT) {
+    const note = document.createElement("p");
+    note.className = "wd-sub-label";
+    note.textContent =
+      "Showing 200 artifacts for this session — there may be more.";
+    section.append(note);
+  }
   return section;
 }
 
@@ -3094,6 +3148,13 @@ function renderArtifacts() {
     }
     list.append(row);
   }
+  if (artifacts.length === ARTIFACTS_LIMIT) {
+    const note = document.createElement("p");
+    note.className = "wd-sub-label";
+    note.textContent =
+      "Showing 200 artifacts — there may be more. Narrow the search to see the rest.";
+    list.append(note);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -3353,6 +3414,12 @@ function renderSessionBar() {
     opt.textContent = sessionLabel(s);
     sel.append(opt);
   }
+  if (sessions.length === SESSIONS_LIMIT) {
+    const more = document.createElement("option");
+    more.disabled = true;
+    more.textContent = "— there may be more sessions —";
+    sel.append(more);
+  }
   // Render only: never drop the selection here. If the adopted session is
   // not in the list yet, the dropdown shows "No session" until the next
   // refresh brings it — the selection itself survives.
@@ -3363,7 +3430,9 @@ function renderSessionBar() {
       ? loomReachable
         ? "No sessions yet"
         : "The Loom server is offline — sessions are unavailable"
-      : "Conversation session";
+      : sessions.length === SESSIONS_LIMIT
+        ? "Showing 500 sessions — there may be more"
+        : "Conversation session";
   const newSession = document.getElementById("session-new") as HTMLButtonElement | null;
   if (newSession) {
     newSession.disabled = !loomReachable;

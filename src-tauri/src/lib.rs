@@ -196,6 +196,9 @@ fn add_work_item(
     }
     // Lock order is ALWAYS intents first, then work (never the reverse).
     let mut intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+    // The intent this call auto-created, if any: deleted again if the
+    // work save below fails, so a failed add leaves no orphan intent.
+    let mut auto_created: Option<String> = None;
     let resolved: Intent = match intent_id {
         Some(id) => intents
             .get(&id)
@@ -212,20 +215,41 @@ fn add_work_item(
                     Vec::new(),
                     Some("collaborative".to_string()),
                 )?;
+                auto_created = Some(intent.id.clone());
                 if intents.active_id().as_deref() != Some(intent.id.as_str()) {
-                    intent = intents.set_active(&intent.id)?;
+                    intent = match intents.set_active(&intent.id) {
+                        Ok(intent) => intent,
+                        Err(e) => {
+                            let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+                            let _ = intents.delete(&intent.id, &work);
+                            return Err(e);
+                        }
+                    };
                 }
                 intent
             }
         },
     };
     let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-    let mut item = work.add(title, Some(resolved.id.clone()))?;
-    // Inheritance (rule 3): the work starts at the intent's autonomy.
-    if resolved.autonomy != "collaborative" {
-        item = work.set_autonomy(&item.id, &resolved.autonomy)?;
+    let created = (|| -> Result<WorkItem, String> {
+        let mut item = work.add(title, Some(resolved.id.clone()))?;
+        // Inheritance (rule 3): the work starts at the intent's autonomy.
+        if resolved.autonomy != "collaborative" {
+            item = work.set_autonomy(&item.id, &resolved.autonomy)?;
+        }
+        Ok(item)
+    })();
+    match created {
+        Ok(item) => Ok(item),
+        Err(e) => {
+            if let Some(id) = auto_created {
+                // The work save failed (and no work references the intent
+                // yet, so delete refuses nothing): remove it again.
+                let _ = intents.delete(&id, &work);
+            }
+            Err(e)
+        }
     }
-    Ok(item)
 }
 
 #[tauri::command]
@@ -279,11 +303,11 @@ fn set_work_autonomy(
                 item.autonomy, autonomy
             ));
         }
-        let _ = work.autonomy_history_push(
+        work.autonomy_history_push(
             &id,
             &autonomy,
             justification.as_deref().map(|s| s.trim().to_string()),
-        );
+        )?;
     }
     work.set_autonomy(&id, &autonomy)
 }
@@ -388,13 +412,38 @@ fn update_intent(
     if let Some(a) = &autonomy {
         let new_rank = autonomy_rank(a).unwrap_or(0);
         let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        // The intent itself already updated above; a failure to tighten
+        // a work item must not hide behind a success, so collect the
+        // failures and report them instead of swallowing them.
+        let mut failures: Vec<String> = Vec::new();
         for item in work.items() {
             if item.intent_id.as_deref() == Some(&id) {
                 let item_rank = autonomy_rank(&item.autonomy).unwrap_or(0);
                 if item_rank > new_rank {
-                    let _ = work.set_autonomy(&item.id, a);
+                    // Record the automatic tightening in the work item's
+                    // history, so the change is visible, not silent.
+                    if let Err(e) = work.autonomy_history_push(
+                        &item.id,
+                        a,
+                        Some(
+                            "Tightened automatically: the intent's autonomy was lowered."
+                                .to_string(),
+                        ),
+                    ) {
+                        failures.push(format!("{}: {e}", item.id));
+                        continue;
+                    }
+                    if let Err(e) = work.set_autonomy(&item.id, a) {
+                        failures.push(format!("{}: {e}", item.id));
+                    }
                 }
             }
+        }
+        if !failures.is_empty() {
+            return Err(format!(
+                "Intent updated, but some work items could not be tightened: {}",
+                failures.join("; ")
+            ));
         }
     }
     Ok(updated)
@@ -1165,6 +1214,20 @@ async fn get_loom_status() -> LoomStatus {
     }
 }
 
+// Parse a `Content-Length` value out of an HTTP response head, if one is
+// present and numeric. Returns None when the header is absent or invalid,
+// in which case callers fall back to reading until EOF.
+fn parse_content_length(head: &str) -> Option<usize> {
+    head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if name.trim().eq_ignore_ascii_case("content-length") {
+            value.trim().parse().ok()
+        } else {
+            None
+        }
+    })
+}
+
 /// Raw HTTP request over a plain TCP connection, including chunked
 /// responses from gRPC-gateway. Returns (status, body). The read has a
 /// *total* deadline (not per-read) and a 16 MB size cap, so a server that
@@ -1211,6 +1274,23 @@ fn loom_http_raw(
                 raw.extend_from_slice(&buf[..n]);
                 if raw.len() > MAX_RESPONSE_BYTES {
                     return Err("Loom response exceeded 16 MB.".to_string());
+                }
+                // Stop as soon as the whole body is here: with a
+                // Content-Length the server need not close the
+                // connection first. Chunked bodies have no usable
+                // length, so they still read to EOF.
+                if let Some(end) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&raw[..end]);
+                    if !head
+                        .to_ascii_lowercase()
+                        .contains("transfer-encoding: chunked")
+                    {
+                        if let Some(len) = parse_content_length(&head) {
+                            if raw.len() >= end + 4 + len {
+                                break;
+                            }
+                        }
+                    }
                 }
             }
             Err(e)
@@ -1409,7 +1489,7 @@ async fn get_workflow_execution(execution_id: String) -> Result<WorkflowExecutio
 #[tauri::command]
 async fn list_workflow_executions() -> Result<Vec<WorkflowExecution>, String> {
     let value = tauri::async_runtime::spawn_blocking(|| {
-        loom_request("GET", "/v1/workflows/executions", None)
+        loom_request("GET", "/v1/workflows/executions?limit=500", None)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -1533,16 +1613,21 @@ async fn switch_model(
     if session_id.trim().is_empty() {
         return Err("No session selected.".to_string());
     }
+    let provider = provider
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty());
+    let model = model
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty());
+    if provider.is_none() && model.is_none() {
+        return Err("Choose a provider, a model, or both before switching.".to_string());
+    }
     let mut obj = serde_json::Map::new();
     if let Some(p) = provider {
-        if !p.trim().is_empty() {
-            obj.insert("provider".into(), p.into());
-        }
+        obj.insert("provider".into(), p.into());
     }
     if let Some(m) = model {
-        if !m.trim().is_empty() {
-            obj.insert("model".into(), m.into());
-        }
+        obj.insert("model".into(), m.into());
     }
     let body = serde_json::Value::Object(obj).to_string();
     let value = tauri::async_runtime::spawn_blocking(move || {
@@ -1607,7 +1692,7 @@ async fn search_artifacts(query: String) -> Result<Vec<Artifact>, String> {
         return Err("No search query provided.".to_string());
     }
     let path = format!(
-        "/v1/artifacts:search?query={}",
+        "/v1/artifacts:search?query={}&limit=200",
         percent_encode(&query.trim())
     );
     let value = tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
@@ -2049,6 +2134,23 @@ mod tests {
     #[test]
     fn de_i64_missing_key_defaults_to_zero() {
         assert_eq!(parse_i64(r#"{}"#).unwrap(), 0);
+    }
+
+    // ------------------------------------------------------------------
+    // parse_content_length (loom_http_raw stops reading once the body
+    // is complete instead of waiting for EOF)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn parse_content_length_finds_the_header_and_ignores_the_rest() {
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 42";
+        assert_eq!(parse_content_length(head), Some(42));
+        let head = "HTTP/1.1 200 OK\r\ncontent-length: 0";
+        assert_eq!(parse_content_length(head), Some(0));
+        let head = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked";
+        assert_eq!(parse_content_length(head), None);
+        let head = "HTTP/1.1 200 OK\r\nContent-Length: not-a-number";
+        assert_eq!(parse_content_length(head), None);
     }
 
     // ------------------------------------------------------------------
