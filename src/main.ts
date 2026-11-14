@@ -133,6 +133,12 @@ let intents: Intent[] = [];
 let activeIntentId: string | null = null;
 /** The intent editor open in the pinned header; null when closed. */
 let intentEditor: { mode: "create" } | { mode: "edit"; id: string } | null = null;
+/** An intent created by a submit whose activation failed: a retry reuses
+    this id (same statement only) instead of creating a duplicate. */
+let pendingCreatedIntent: { id: string; statement: string } | null = null;
+/** Last intents-load failure, kept so the header can say so instead of
+    showing the empty state. Never clears the previously loaded intents. */
+let intentsLoadError: string | null = null;
 let mode: Mode = "spatial";
 let sphereState: SphereState = "idle";
 let currentNote: NoteKind | null = null;
@@ -184,6 +190,11 @@ const experimentWorkIds = new Map<string, string>();
     endpoint), but the UI stops tracking it — honest about the limit
     instead of pretending control that doesn't exist (P2 Human Agency). */
 let cancelWorkflow = false;
+/** Run token: each runWorkflow call takes the next number, and only the
+    run holding the current token may touch running state on completion.
+    A dismissed run's late completion must not clear a newer run. */
+let runSeq = 0;
+let currentRunSeq = 0;
 /** Workflow names for executions started in this session (the server does
     not report a workflow name on executions). */
 const executionWorkflowNames = new Map<string, string>();
@@ -426,11 +437,14 @@ async function refreshIntents(): Promise<void> {
     const list = await getIntents();
     intents = list.intents;
     activeIntentId = list.active_intent_id;
-  } catch {
-    intents = [];
-    activeIntentId = null;
+    intentsLoadError = null;
+  } catch (err) {
+    intentsLoadError = `Could not load intents: ${err instanceof Error ? err.message : String(err)}`;
   }
-  renderIntentHeader();
+  // Never rebuild an open editor: it is built from the stored intent and
+  // a re-render would drop the user's unsaved typing. The save/cancel
+  // paths re-render once the editor closes.
+  if (!intentEditor) renderIntentHeader();
 }
 
 function renderIntentHeader() {
@@ -438,6 +452,12 @@ function renderIntentHeader() {
     const header = document.querySelector<HTMLElement>("#intent-header");
     if (!header) return;
     header.innerHTML = "";
+    if (intentsLoadError) {
+      const err = document.createElement("p");
+      err.className = "field-error";
+      err.textContent = intentsLoadError;
+      header.append(err);
+    }
     if (intentEditor) {
       header.append(buildIntentEditor(intentEditor));
       return;
@@ -484,14 +504,24 @@ function buildIntentEmptyState(): HTMLElement {
     const statement = input.value.trim();
     if (!statement) return;
     clearFieldError(error);
+    let createdId: string | null = null;
+    let activated = false;
     try {
-      const created = await createIntent({ statement });
-      await setActiveIntent(created.id);
+      createdId = pendingCreatedIntent?.statement === statement
+        ? pendingCreatedIntent.id
+        : (await createIntent({ statement })).id;
+      pendingCreatedIntent = { id: createdId, statement };
+      await setActiveIntent(createdId);
+      activated = true;
+      pendingCreatedIntent = null;
       await refreshIntents();
     } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       showFieldError(
         error,
-        `Could not create the intent: ${err instanceof Error ? err.message : String(err)}`,
+        createdId && !activated
+          ? `Intent created, but it could not be made active: ${detail}`
+          : `Could not create the intent: ${detail}`,
       );
     }
   });
@@ -1005,6 +1035,7 @@ function buildIntentEditor(
   cancel.textContent = "Cancel";
   cancel.addEventListener("click", () => {
     intentEditor = null;
+    pendingCreatedIntent = null;
     renderIntentHeader();
   });
   actions.append(save, cancel);
@@ -1046,12 +1077,20 @@ function buildIntentEditor(
     // For new intents, autonomy defaults to "collaborative" (set by the
     // backend). For edits, autonomy is changed via the dial directly.
     const autonomy = editor.mode === "create" ? "collaborative" : existing!.autonomy;
+    let createdId: string | null = null;
+    let activated = false;
+    let intentSaved = false;
     try {
       if (editor.mode === "create") {
-        const created = await createIntent({ statement, why, acceptance: criteria, autonomy });
-        await setActiveIntent(created.id);
+        createdId = pendingCreatedIntent?.statement === statement
+          ? pendingCreatedIntent.id
+          : (await createIntent({ statement, why, acceptance: criteria, autonomy })).id;
+        pendingCreatedIntent = { id: createdId, statement };
+        await setActiveIntent(createdId);
+        activated = true;
+        pendingCreatedIntent = null;
         if (status === "done") {
-          await updateIntent({ id: created.id, status: "done" });
+          await updateIntent({ id: createdId, status: "done" });
         }
         intentEditor = null;
         await refreshIntents();
@@ -1062,7 +1101,10 @@ function buildIntentEditor(
           why,
           status,
         });
-        // Acceptance is a separate call and never bumps the version.
+        intentSaved = true;
+        // Acceptance is a separate call and never bumps the version, and
+        // the backend no-ops an update whose content did not change, so
+        // retrying after a partial save creates no spurious version.
         const criteriaChanged =
           JSON.stringify(updated.acceptance) !== JSON.stringify(criteria);
         if (criteriaChanged) {
@@ -1073,9 +1115,16 @@ function buildIntentEditor(
       }
     } catch (err) {
       save.disabled = false;
+      const detail = err instanceof Error ? err.message : String(err);
       showFieldError(
         error,
-        `Could not save the intent: ${err instanceof Error ? err.message : String(err)}`,
+        createdId && !activated
+          ? `Intent created, but it could not be made active: ${detail}`
+          : createdId && activated
+            ? `Intent created and activated, but the status could not be set to Done: ${detail}`
+            : intentSaved
+              ? `Intent saved, but the acceptance criteria failed to save: ${detail}`
+              : `Could not save the intent: ${detail}`,
       );
     }
   });
@@ -1501,7 +1550,7 @@ function buildWorkflowsSection(): HTMLElement {
       // Cancel/dismiss: stops polling and clears the running state.
       // The server-side execution continues (no cancel endpoint exists),
       // so this is honest about the limit instead of pretending control.
-      if (runningWorkflow !== null) {
+      if (runningWorkflow === wf.name) {
         const cancel = document.createElement("button");
         cancel.type = "button";
         cancel.className = "btn ghost danger";
@@ -1509,6 +1558,7 @@ function buildWorkflowsSection(): HTMLElement {
         cancel.title = "Stop tracking this run. The server-side execution continues.";
         cancel.addEventListener("click", () => {
           cancelWorkflow = true;
+          currentRunSeq = ++runSeq;
           runningWorkflow = null;
           renderWorkDetail();
           setSphereState("idle");
@@ -1608,6 +1658,8 @@ async function pollWorkflowExecution(executionId: string) {
 
 async function runWorkflow(name: string) {
   if (runningWorkflow) return;
+  const token = ++runSeq;
+  currentRunSeq = token;
   runningWorkflow = name;
   cancelWorkflow = false;
   workflowError = null;
@@ -1618,6 +1670,7 @@ async function runWorkflow(name: string) {
     // execute_workflow returns the run's own result, so the UI can show
     // the run's actual output instead of only re-listing executions.
     const res = await executeWorkflow(name);
+    if (token !== currentRunSeq) return;
     if (cancelWorkflow) {
       runningWorkflow = null;
       cancelWorkflow = false;
@@ -1634,6 +1687,14 @@ async function runWorkflow(name: string) {
     } else {
       await refreshExecutionsList();
     }
+    if (token !== currentRunSeq) return;
+    if (cancelWorkflow) {
+      runningWorkflow = null;
+      cancelWorkflow = false;
+      renderWorkDetail();
+      setSphereState("idle");
+      return;
+    }
     runningWorkflow = null;
     cancelWorkflow = false;
     renderWorkDetail();
@@ -1643,6 +1704,7 @@ async function runWorkflow(name: string) {
       if (sphereState === "completed") setSphereState("idle");
     }, 3000);
   } catch (err) {
+    if (token !== currentRunSeq) return;
     await refreshExecutionsList();
     runningWorkflow = null;
     cancelWorkflow = false;
@@ -2735,6 +2797,7 @@ function renderAgentDetail(): HTMLElement {
     ["ID", selectedAgentDetail.id],
     ["Name", selectedAgentDetail.name],
     ["Status", selectedAgentDetail.status],
+    ...(selectedAgentDetail.error ? [["Error", selectedAgentDetail.error] as [string, string]] : []),
     ["Uptime", selectedAgentDetail.uptime_seconds > 0
       ? `${Math.floor(selectedAgentDetail.uptime_seconds / 3600)}h ${Math.floor((selectedAgentDetail.uptime_seconds % 3600) / 60)}m`
       : "—"],
@@ -3165,6 +3228,7 @@ function addChatMessage(
 
 /** A connection error is shown in the chat itself, not as a reply. */
 function addChatError(text: string) {
+  openRight("conversation");
   hideChatHint();
   const log = $("#chat-log");
   const msg = document.createElement("div");
@@ -3370,6 +3434,7 @@ async function refreshSessionDetail(sessionId: string) {
     sessionDetail = null;
     if (isLoomConnectionError(err)) setLoomReachable(false);
   }
+  renderInspectorContext();
 }
 
 async function refreshTools() {
@@ -3390,6 +3455,7 @@ async function refreshAgentDetail(agentId: string) {
     selectedAgentDetail = null;
     if (isLoomConnectionError(err)) setLoomReachable(false);
   }
+  renderInspectorContext();
 }
 
 async function refreshModels() {
@@ -3605,8 +3671,10 @@ function syncSessionToWork() {
     selectedSessionId = null;
     selectedAgentId = null;
     selectedAgentDetail = null;
+    sessionDetail = null;
     renderAgentBar();
     renderSessionBar();
+    renderInspectorContext();
     loadChatForWork(selectedWorkId, null);
   }
 }
@@ -4160,6 +4228,7 @@ function buildArmComparison(arms: ExperimentArm[]): HTMLElement {
 
   const grid = document.createElement("div");
   grid.className = "arm-comparison";
+  grid.style.setProperty("--comp-cols", String(arms.length));
 
   // Header row: arm labels.
   const header = document.createElement("div");
@@ -4193,24 +4262,26 @@ function buildArmComparison(arms: ExperimentArm[]): HTMLElement {
   }
   grid.append(cfgRow);
 
-  // Result rows: each arm's result, with a diff hint when two results
-  // differ. Results are shown verbatim — the human judges, not the UI.
+  // Result row: one cell per arm, so the results sit side by side under
+  // their arm labels. Results are shown verbatim — the human judges,
+  // not the UI. (The "diff hint" note in the old comment was never
+  // implemented; it stays out.)
+  const resultRow = document.createElement("div");
+  resultRow.className = "comp-row";
+  const resultLabel = document.createElement("span");
+  resultLabel.className = "comp-cell comp-label";
+  resultLabel.textContent = "Result";
+  resultRow.append(resultLabel);
   for (const arm of arms) {
-    const row = document.createElement("div");
-    row.className = "comp-row";
-    const label = document.createElement("span");
-    label.className = "comp-cell comp-label";
-    label.textContent = `Result — ${arm.label}`;
-    row.append(label);
     const cell = document.createElement("span");
     cell.className = "comp-cell";
     const pre = document.createElement("pre");
     pre.className = "arm-result comp-result";
     pre.textContent = arm.result || "(no result recorded)";
     cell.append(pre);
-    row.append(cell);
-    grid.append(row);
+    resultRow.append(cell);
   }
+  grid.append(resultRow);
 
   section.append(grid);
   return section;
@@ -4765,7 +4836,17 @@ async function init() {
   // Initialize local views before any Loom requests finish.
   initCodeEditor();
   initWorkspaceExplorer();
-  installSpatialWorkbench();
+  installSpatialWorkbench((object) => {
+    switch (object) {
+      case "Work": setMode("work"); break;
+      case "Code": setMode("code"); break;
+      case "Experiments": setMode("experiment"); break;
+      case "Evidence": setMode("evidence"); break;
+      case "Agents": setMode("agents"); break;
+      case "Notes": setArtifactTab("documents"); setMode("artifacts"); break;
+      default: break;
+    }
+  });
   // The footer provides the primary mode navigation.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
@@ -5083,6 +5164,7 @@ async function init() {
     } else {
       clearChat();
       sessionDetail = null;
+      renderInspectorContext();
     }
   });
   $("#agent-select").addEventListener("change", async (e) => {
@@ -5091,7 +5173,10 @@ async function init() {
     if (v) localStorage.setItem(AGENT_KEY, v);
     else localStorage.removeItem(AGENT_KEY);
     if (v) void refreshAgentDetail(v);
-    else selectedAgentDetail = null;
+    else {
+      selectedAgentDetail = null;
+      renderInspectorContext();
+    }
   });
   $("#session-new").addEventListener("click", async () => {
     try {

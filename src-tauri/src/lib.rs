@@ -593,6 +593,8 @@ pub struct Agent {
     pub name: String,
     #[serde(default)]
     pub status: String,
+    #[serde(default)]
+    pub error: String,
     #[serde(default, alias = "uptimeSeconds", deserialize_with = "de_i64")]
     pub uptime_seconds: i64,
     #[serde(default, alias = "activeSessions")]

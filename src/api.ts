@@ -142,6 +142,7 @@ export interface Agent {
   id: string;
   name: string;
   status: string;
+  error: string;
   uptime_seconds: number;
   active_sessions: number;
   total_messages: number;
