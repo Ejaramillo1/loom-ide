@@ -6,8 +6,8 @@ and an object can remember the thought left with it.
 
 This project does not replace the Tauri environment or the Rust/egui Living
 Workbench. It remains a prototype, but both Editor Play Mode and a standalone
-Linux player have been verified. It uses the same dark palette as
-`../design-tokens.json`.
+Linux player have been verified. Its visual constants mirror the warm White palette in
+`../design-tokens.json`; the scene does not yet follow the shell’s Dark/White selector.
 
 ## Embedded in Tauri
 
@@ -51,6 +51,12 @@ unreadable or unrecognized files appear as zero records. Unity never changes or
 repairs those files.
 
 Editor and standalone object memories use Unity PlayerPrefs. The embedded WebGL player uses the native vault bridge instead; these PlayerPrefs are not migrated. The WebGL player does not read local Tauri record counts or connect to the Loom server.
+
+## Visual refinement
+
+The existing bench, objects, camera controls and IMGUI note panel remain. Materials are now warm and mostly matte; the sphere uses ivory/pearl tones with low emission. Neutral lighting replaces the violet point-light treatment. Object movement and parallax are gentler, while the existing reduced-motion switch still stops them. Rounded IMGUI textures change appearance without replacing the controls.
+
+The sphere remains an opaque URP Lit approximation of pearl. No refraction, volumetric waves, new water system or rendering pipeline was introduced. See [the refinement report](../docs/QUIET_COMPLEXITY_REFINEMENT.md).
 
 ## Source and verification
 

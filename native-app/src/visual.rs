@@ -1,5 +1,5 @@
 use eframe::egui::*;
-pub const DEEP: Color32 = Color32::from_rgb(16, 18, 31);
+pub const DEEP: Color32 = Color32::from_rgb(29, 27, 26);
 fn shared_theme() -> &'static serde_json::Value {
     static THEME: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
     THEME.get_or_init(|| serde_json::from_str(include_str!("../../design-tokens.json")).expect("Valid shared design tokens"))
@@ -30,16 +30,16 @@ impl Palette {
         let values = &theme[if light { "white" } else { "dark" }];
         let color = |name: &str| token_color(values, name);
         Self { light, text: color("text"), second: color("second"), muted: color("muted"),
-            purple: color("purple"), blue: color("blue"), green: color("green"),
-            amber: color("amber"), red: color("red"), deep: color("deep") }
+            purple: color("second"), blue: color("activity-ink"), green: color("success-ink"),
+            amber: color("attention-ink"), red: color("error-ink"), deep: color("deep") }
     }
 
     pub fn overlay(self, alpha: u8) -> Color32 {
-        if self.light { Color32::from_rgba_unmultiplied(61, 53, 95, alpha) }
-        else { Color32::from_white_alpha(alpha) }
+        let color = token_color(&shared_theme()[if self.light { "white" } else { "dark" }], "overlay");
+        Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
     }
-    pub fn surface(self, dark: Color32) -> Color32 {
-        if self.light { Color32::from_rgb(252, 252, 255) } else { dark }
+    pub fn surface(self, _dark: Color32) -> Color32 {
+        token_color(&shared_theme()[if self.light { "white" } else { "dark" }], "surface")
     }
     pub fn accent(self, alpha: u8) -> Color32 {
         Color32::from_rgba_unmultiplied(self.purple.r(), self.purple.g(), self.purple.b(), alpha)
@@ -60,8 +60,8 @@ pub fn apply_appearance(ctx: &Context, colors: Palette) {
     style.visuals.window_fill = colors.surface(Color32::from_rgb(25, 29, 48));
     style.visuals.window_rounding = Rounding::same(panel_radius());
     style.visuals.window_stroke = Stroke::new(1_f32, colors.overlay(33));
-    style.visuals.window_shadow = Shadow { offset: vec2(0., 12.), blur: 40., spread: 0.,
-        color: Color32::from_black_alpha(if colors.light { 22 } else { 55 }) };
+    style.visuals.window_shadow = Shadow { offset: vec2(0., 18.), blur: 48., spread: 0.,
+        color: Color32::from_rgba_unmultiplied(65, 48, 38, if colors.light { 26 } else { 45 }) };
     style.visuals.selection.bg_fill = token_color(values, "selection");
     style.visuals.selection.stroke = Stroke::new(1_f32, colors.text);
     style.visuals.widgets.inactive.bg_fill = token_color(values, "control");
@@ -81,7 +81,7 @@ pub fn apply_appearance(ctx: &Context, colors: Palette) {
     style.visuals.widgets.open.weak_bg_fill = token_color(values, "selection");
     style.visuals.widgets.active.bg_fill = colors.accent(60);
     style.visuals.widgets.open.bg_fill = colors.accent(38);
-    style.visuals.extreme_bg_color = colors.surface(Color32::from_rgb(19,21,35));
+    style.visuals.extreme_bg_color = token_color(values, "reading");
     style.spacing.item_spacing = vec2(10., 10.);
     style.spacing.button_padding = vec2(14., 8.);
     for (kind, size) in [(TextStyle::Body, 14.), (TextStyle::Button, 14.), (TextStyle::Small, 12.)] {
@@ -114,15 +114,15 @@ pub fn wrapped(p: &Painter, r: Rect, text: impl Into<String>, size: f32, color: 
 }
 pub fn glass(p: &Painter, r: Rect, radius: f32) {
     let colors = palette(p.ctx());
-    for i in (1..=14).rev() {
+    for i in (1..=10).rev() {
         let spread = i as f32 * 1.2;
         p.rect_filled(
             r.expand(spread).translate(vec2(0., 5.)),
             radius + spread,
-            Color32::from_black_alpha(1),
+            Color32::from_rgba_unmultiplied(65, 48, 38, 1),
         );
     }
-    p.rect_filled(r, radius, if colors.light { Color32::from_rgba_unmultiplied(255, 255, 255, 205) } else { Color32::from_rgba_unmultiplied(25, 30, 55, 145) });
+    p.rect_filled(r, radius, { let c = colors.surface(DEEP); Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), 242) });
     p.rect_stroke(r, radius, Stroke::new(1.0_f32, colors.overlay(33)));
     p.line_segment(
         [
@@ -206,7 +206,7 @@ pub fn icon(p: &Painter, name: &str, c: Pos2, s: f32, col: Color32) {
         "nodes" => {
             line(&[(12., 4.), (4., 18.), (20., 18.), (12., 4.)]);
             for (x, y) in [(12., 4.), (4., 18.), (20., 18.)] {
-                p.circle_filled(pt(x, y), 3. * k, DEEP);
+                p.circle_filled(pt(x, y), 3. * k, palette(p.ctx()).deep);
                 p.circle_stroke(pt(x, y), 3. * k, st);
             }
         }
@@ -371,17 +371,17 @@ fn pixel(c: [f32; 3]) -> Color32 {
 }
 pub fn atmosphere(colors: Palette) -> ColorImage {
     let (w, h) = (1600, 900);
-    let mut img = ColorImage::new([w, h], DEEP);
+    let mut img = ColorImage::new([w, h], colors.deep);
+    let base = colors.deep;
+    let surface = colors.surface(DEEP);
     for y in 0..h {
         let fy = y as f32 / h as f32;
         for x in 0..w {
             let fx = x as f32 / w as f32;
             let glow = (-((fx - 0.39) / 0.39).powi(2) - ((fy - 0.56) / 0.37).powi(2)).exp();
-            let mut c = [
-                37. + fy * 34. + glow * 19.,
-                44. + fy * 33. + glow * 19.,
-                75. + fy * 43. + glow * 28.,
-            ];
+            let lift = fy * 0.25 + glow * 0.25;
+            let mut c = [0.; 3];
+            for i in 0..3 { c[i] = base[i] as f32 + (surface[i] as f32 - base[i] as f32) * lift; }
             if fy > 0.655 {
                 let d = (fy - 0.655) / 0.345;
                 let streak = (d * 155. + (fx * 12.).sin() * 2.).sin() * 0.5
@@ -393,16 +393,11 @@ pub fn atmosphere(colors: Palette) -> ColorImage {
                     * (0.6 + 0.4 * (d * 260. + fx * 8.).sin());
                 let water_light = (-((fx - 0.39375) / 0.32).powi(2)).exp();
                 for (i, v) in c.iter_mut().enumerate() {
-                    *v += streak * (0.7 + water_light * 0.9)
-                        + (reflection * (9. + ripples * 5.)) * [1.05, 1., 1.8][i];
-                    *v += reflected_light * [19., 22., 36.][i];
-                    *v -= d * 8.;
+                    *v += streak * (0.2 + water_light * 0.3)
+                        + (reflection * (9. + ripples * 5.)) * [0.35, 0.32, 0.28][i];
+                    *v += reflected_light * [6., 5., 4.][i];
+                    *v -= d * 2.;
                 }
-            }
-            if colors.light {
-                c = [249. - (c[0] - 37.) * 0.22,
-                     250. - (c[1] - 44.) * 0.20,
-                     255. - (c[2] - 75.) * 0.12];
             }
             img.pixels[y * w + x] = pixel(c);
         }
@@ -411,6 +406,9 @@ pub fn atmosphere(colors: Palette) -> ColorImage {
 }
 pub fn sphere() -> ColorImage {
     let size = 720;
+    let pearl = token_color(&shared_theme()["white"], "orb-pearl");
+    let highlight = token_color(&shared_theme()["white"], "orb-highlight");
+    let thread = token_color(&shared_theme()["white"], "orb-line");
     let mut img = ColorImage::new([size, size], Color32::TRANSPARENT);
     for y in 0..size {
         for x in 0..size {
@@ -423,7 +421,7 @@ pub fn sphere() -> ColorImage {
             if r > 1. {
                 let glow = (-((r - 1.) / 0.14).powi(2)).exp() * 0.065;
                 img.pixels[y * size + x] =
-                    Color32::from_rgba_unmultiplied(180, 165, 255, (glow * 255.) as u8);
+                    Color32::from_rgba_unmultiplied(pearl.r(), pearl.g(), pearl.b(), (glow * 180.) as u8);
                 continue;
             }
             let z = (1. - r * r).max(0.).sqrt();
@@ -437,13 +435,14 @@ pub fn sphere() -> ColorImage {
             let drift = (u * 2.7 + v * 4.6 + z * 3.).sin();
             let wisps = (v * 71. + u * 19. + ((u * 2.5 + v * 3.8).sin()) * 17. + z * 22.).sin();
             let threads = wisps.max(0.).powf(8.) * (0.5 + 0.5 * drift) * 3.;
-            let light = fres * 56. + rim * 92. + upper * 68.;
+            let light = (z * 0.18 + rim * 0.12 + upper * 0.5).clamp(0., 1.);
             let wave = (v * 10. + u * 6. + z * 7.).sin() * 3. + threads;
-            let c = [
-                65. + light + violet * 48. + right * 32. + cyan * 10. + wave,
-                77. + light + upper * 4. + violet * 19. + cyan * 49. + wave,
-                122. + light + violet * 76. + right * 47. + cyan * 61. + wave,
-            ];
+            let mut c = [0.; 3];
+            for i in 0..3 {
+                c[i] = pearl[i] as f32 + (highlight[i] as f32 - pearl[i] as f32) * light
+                    - (pearl[i] as f32 - thread[i] as f32) * fres * 0.5
+                    + wave * 0.25 + (violet + right + cyan) * 1.5;
+            }
             let edge = if r > 0.998 { (1. - r) / 0.002 } else { 1. };
             let al = (235. + 20. * fres) * edge;
             let _ = angle;
@@ -470,7 +469,7 @@ mod theme_tests {
             assert_eq!(colors.deep,token_color(tokens,"deep"));
             assert_ne!(colors.text,colors.deep);
         }
-        assert_eq!(control_radius(),12.);
-        assert_eq!(panel_radius(),20.);
+        assert_eq!(control_radius(),10.);
+        assert_eq!(panel_radius(),22.);
     }
 }

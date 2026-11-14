@@ -3,8 +3,8 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #10121f;
-  color: #f5f5fa;
+  background: #f5f0eb;
+  color: #292725;
   font: 14px/1.5 system-ui, sans-serif;
 }
 
@@ -17,18 +17,18 @@ html, body {
   place-content: center;
   justify-items: center;
   gap: 16px;
-  background: #10121f;
+  background: #f5f0eb;
 }
 .loading-sphere {
   width: 54px;
   height: 54px;
   border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #f5f5fa, #8ec8ff 28%, #a58bff 60%, #191d30);
-  box-shadow: 0 0 36px #a58bff55;
-  animation: breathe 1.8s ease-in-out infinite alternate;
+  background: radial-gradient(circle at 32% 28%, #fff9f3, #f8eee6 28%, #ebdcd3 68%, #d8bfb4);
+  box-shadow: 0 8px 28px rgb(65 48 38 / 0.08);
+  animation: breathe 3.2s ease-in-out infinite alternate;
 }
 @keyframes breathe {
-  to { transform: scale(1.08); box-shadow: 0 0 50px #a58bff88; }
+  to { transform: scale(1.03); box-shadow: 0 10px 32px rgb(65 48 38 / 0.10); }
 }
 @media (prefers-reduced-motion: reduce) {
   .loading-sphere { animation: none; }

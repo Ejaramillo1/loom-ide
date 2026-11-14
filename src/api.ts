@@ -1001,6 +1001,27 @@ export async function listProviders(): Promise<ProviderEntry[]> {
 }
 
 
+/// An execution trace (GET /v1/traces/{trace_id}). Mirrors the Rust
+/// Trace / TraceSpan structs in src-tauri/src/lib.rs.
+export interface TraceSpan {
+  id: string;
+  parent_id: string;
+  name: string;
+  start_time_us: number;
+  end_time_us: number;
+  duration_us: number;
+  status: string;
+  attributes: Record<string, string>;
+}
+
+export interface Trace {
+  id: string;
+  session_id: string;
+  root_span?: TraceSpan | null;
+  spans: TraceSpan[];
+  total_duration_ms: number;
+}
+
 // ---- Artifact detail and statistics (real Loom server) ----
 
 export async function getArtifact(artifactId: string): Promise<Artifact> {
@@ -1009,6 +1030,34 @@ export async function getArtifact(artifactId: string): Promise<Artifact> {
 
 export async function getArtifactStats(): Promise<ArtifactStats> {
   return invokeCmd<ArtifactStats>("get_artifact_stats");
+}
+
+// ---- Trace, model switch, artifact content + search (real Loom server) ----
+// These backend commands existed in src-tauri/src/lib.rs but had no
+// frontend wrapper, so no view could call them. They fail honestly
+// outside the Tauri app, like every other invokeCmd wrapper.
+
+export async function getTrace(traceId: string): Promise<Trace> {
+  return invokeCmd<Trace>("get_trace", { traceId });
+}
+
+export async function switchModel(
+  sessionId: string,
+  provider?: string,
+  model?: string,
+): Promise<unknown> {
+  return invokeCmd<unknown>("switch_model", { sessionId, provider, model });
+}
+
+export async function getArtifactContent(
+  artifactId: string,
+  encoding?: string,
+): Promise<string> {
+  return invokeCmd<string>("get_artifact_content", { artifactId, encoding });
+}
+
+export async function searchArtifacts(query: string): Promise<Artifact[]> {
+  return invokeCmd<Artifact[]>("search_artifacts", { query });
 }
 
 // ---- Server info (real Loom server) ----

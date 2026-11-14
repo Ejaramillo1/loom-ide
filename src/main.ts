@@ -16,6 +16,7 @@ import {
   deleteIntent,
   executeWorkflow,
   getAgent,
+  getArtifactContent,
   getArtifactStats,
   getAttention,
   getExperiments,
@@ -42,6 +43,7 @@ import {
   listWorkflows,
   listWorkspace,
   readFile,
+  searchArtifacts,
   setActiveIntent,
   setExperimentArmResult,
   setExperimentArmStatus,
@@ -165,6 +167,11 @@ let runningWorkflow: string | null = null;
 /** Mutation errors shown next to the section they belong to, never only
     in a conversation that may be closed. */
 let workArtifactsError: string | null = null;
+/** Artifact contents loaded on demand in the Artifacts view, keyed by
+    artifact id. The backend decodes base64 (see get_artifact_content);
+    the frontend only displays the returned text. */
+const artifactContents = new Map<string, string>();
+const artifactContentLoading = new Set<string>();
 let workflowError: string | null = null;
 /** Work that started a workflow run or experiment arm in this app session.
     The Loom server does not attribute executions or experiments to work,
@@ -2832,6 +2839,11 @@ function applyLayerClasses() {
 
 function setArtifactTab(tab: "artifacts" | "documents") {
   artifactTab = tab;
+  // A search belongs to the artifacts list, not the documents tab.
+  const searchInput = document.querySelector<HTMLInputElement>("#artifact-search");
+  if (searchInput) searchInput.value = "";
+  const searchError = document.querySelector<HTMLElement>("#artifact-search-error");
+  if (searchError) searchError.hidden = true;
   for (const btn of document.querySelectorAll<HTMLButtonElement>("#artifact-tabs .tab")) {
     btn.classList.toggle("active", btn.dataset.atab === tab);
   }
@@ -2840,6 +2852,32 @@ function setArtifactTab(tab: "artifacts" | "documents") {
     // Keep the global list fresh when the view is opened.
     void refreshGlobalArtifacts();
   }
+}
+
+/** Search artifacts on the server; a query under 2 characters restores
+    the full list. Failures keep the previous list and say so. */
+let artifactSearchTimer: ReturnType<typeof setTimeout> | undefined;
+async function searchArtifactsView(query: string) {
+  const errorEl = document.querySelector<HTMLElement>("#artifact-search-error");
+  const q = query.trim();
+  if (q.length < 2) {
+    if (errorEl) errorEl.hidden = true;
+    await refreshGlobalArtifacts();
+    return;
+  }
+  try {
+    artifacts = await searchArtifacts(q);
+    setLoomReachable(true);
+    if (errorEl) errorEl.hidden = true;
+  } catch (err) {
+    if (isLoomConnectionError(err)) setLoomReachable(false);
+    if (errorEl) {
+      errorEl.textContent = `Could not search artifacts: ${err instanceof Error ? err.message : String(err)}`;
+      errorEl.hidden = false;
+    }
+    /* keep the previous list */
+  }
+  renderArtifacts();
 }
 
 /** Reload the global artifact list (for the Artifacts view). */
@@ -2935,6 +2973,50 @@ function renderArtifacts() {
       info.append(span);
     }
     row.append(info);
+    // View loads the artifact's decoded content on demand (backend
+    // get_artifact_content) and shows it directly under this row.
+    const viewBtn = document.createElement("button");
+    viewBtn.type = "button";
+    viewBtn.className = "btn ghost";
+    viewBtn.textContent = "View";
+    let contentEl: HTMLPreElement | null = null;
+    const showContent = (text: string) => {
+      contentEl = document.createElement("pre");
+      contentEl.className = "artifact-content";
+      contentEl.textContent = text;
+      row.after(contentEl);
+      viewBtn.textContent = "Hide";
+    };
+    viewBtn.addEventListener("click", () => {
+      if (contentEl) {
+        contentEl.remove();
+        contentEl = null;
+        viewBtn.textContent = "View";
+        return;
+      }
+      const cached = artifactContents.get(a.id);
+      if (cached !== undefined) {
+        showContent(cached);
+        return;
+      }
+      if (artifactContentLoading.has(a.id)) return;
+      artifactContentLoading.add(a.id);
+      viewBtn.disabled = true;
+      viewBtn.textContent = "Loading…";
+      void getArtifactContent(a.id)
+        .then((content) => {
+          artifactContents.set(a.id, content);
+          showContent(content);
+        })
+        .catch((err) => {
+          showContent(`Could not load this artifact: ${err instanceof Error ? err.message : String(err)}`);
+        })
+        .finally(() => {
+          artifactContentLoading.delete(a.id);
+          viewBtn.disabled = false;
+        });
+    });
+    row.append(viewBtn);
     if (item) {
       const isAttached = attached.has(a.id);
       const toggle = document.createElement("button");
@@ -4710,6 +4792,14 @@ async function init() {
       setArtifactTab(tab.dataset.atab as "artifacts" | "documents");
     });
   }
+  // Artifact search (server-side, via search_artifacts; debounced).
+  const artifactSearch = document.querySelector<HTMLInputElement>("#artifact-search");
+  artifactSearch?.addEventListener("input", () => {
+    window.clearTimeout(artifactSearchTimer);
+    artifactSearchTimer = window.setTimeout(() => {
+      void searchArtifactsView(artifactSearch.value);
+    }, 300);
+  });
   // Clicking anywhere else closes the popover menus.
   document.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;

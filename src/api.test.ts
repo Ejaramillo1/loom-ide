@@ -25,9 +25,13 @@ import {
   createIntent,
   deleteIntent,
   evidenceKindLabel,
+  getArtifactContent,
   getIntents,
   getLoomStatus,
+  getTrace,
   getWorkItems,
+  searchArtifacts,
+  switchModel,
   setActiveIntent,
   setIntentAcceptance,
   setWorkAutonomy,
@@ -411,5 +415,32 @@ describe("browser Loom response contract", () => {
     await expect(askLoom(" ")).rejects.toThrow(/Enter a message/);
     expect(fetchMock).not.toHaveBeenCalled();
     await expect(askLoom("Question")).rejects.toThrow(/empty response/);
+  });
+});
+
+describe("trace / model / artifact content / artifact search (Tauri-only wrappers)", () => {
+  // In vitest there is no Tauri runtime, so invokeCmd throws before
+  // reaching the mocked invoke. The command name in the error proves
+  // each wrapper is wired to the backend command of the same name.
+  it("getTrace calls the get_trace command", async () => {
+    await expect(getTrace("trace-1")).rejects.toThrow(/"get_trace" needs the Tauri app/);
+  });
+
+  it("switchModel calls the switch_model command", async () => {
+    await expect(switchModel("session-1", "deepseek", "deepseek-v4-pro")).rejects.toThrow(
+      /"switch_model" needs the Tauri app/,
+    );
+  });
+
+  it("getArtifactContent calls the get_artifact_content command", async () => {
+    await expect(getArtifactContent("artifact-1")).rejects.toThrow(
+      /"get_artifact_content" needs the Tauri app/,
+    );
+  });
+
+  it("searchArtifacts calls the search_artifacts command", async () => {
+    await expect(searchArtifacts("memory")).rejects.toThrow(
+      /"search_artifacts" needs the Tauri app/,
+    );
   });
 });

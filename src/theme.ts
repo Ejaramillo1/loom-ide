@@ -1,6 +1,6 @@
 import source from "../design-tokens.json?raw";
 const tokens = JSON.parse(source) as {
-  radius: { control: number; panel: number };
+  radius: Record<string, number>;
   dark: Record<string, number[]>;
   white: Record<string, number[]>;
 };
@@ -14,8 +14,9 @@ function apply(appearance: Appearance) {
     root.style.setProperty(`--theme-${name}`, `rgb(${rgb.join(" ")})`);
     root.style.setProperty(`--theme-${name}-rgb`, rgb.join(" "));
   }
-  root.style.setProperty("--radius-control", `${tokens.radius.control}px`);
-  root.style.setProperty("--radius-panel", `${tokens.radius.panel}px`);
+  for (const [name, radius] of Object.entries(tokens.radius)) {
+    root.style.setProperty(`--radius-${name}`, `${radius}px`);
+  }
   document.querySelectorAll<HTMLButtonElement>("[data-appearance]").forEach(button => {
     button.setAttribute("aria-pressed", String(button.dataset.appearance === appearance));
   });

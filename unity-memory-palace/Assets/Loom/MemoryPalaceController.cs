@@ -9,24 +9,24 @@ namespace Loom.MemoryPalace
 {
     public sealed class MemoryPalaceController : MonoBehaviour
     {
-        static readonly Color Deep = Rgb(16, 18, 31);
-        static readonly Color Reading = Rgb(19, 21, 35);
-        static readonly Color Surface = Rgb(25, 29, 48);
-        static readonly Color Text = Rgb(245, 245, 250);
-        static readonly Color Muted = Rgb(146, 153, 182);
-        static readonly Color Purple = Rgb(165, 139, 255);
-        static readonly Color Blue = Rgb(142, 200, 255);
-        static readonly Color Green = Rgb(117, 215, 164);
-        static readonly Color Amber = Rgb(241, 206, 117);
+        // shortcut: visual colors mirror White tokens; unify loading when live theme synchronization is added.
+        static readonly Color Deep = Rgb(245, 240, 235);
+        static readonly Color Reading = Rgb(248, 244, 240);
+        static readonly Color Surface = Rgb(241, 234, 229);
+        static readonly Color Text = Rgb(41, 39, 37);
+        static readonly Color Muted = Rgb(100, 93, 87);
+        static readonly Color Purple = Rgb(233, 215, 202);
+        static readonly Color Blue = Rgb(106, 145, 204);
+        static readonly Color Pearl = Rgb(235, 220, 211);
 
         static readonly Portal[] Portals =
         {
-            new("Work", "The pieces currently on the bench", Blue),
+            new("Work", "The pieces currently on the bench", Surface),
             new("Code", "The tools and material of the build", Purple),
-            new("Experiments", "The jig where ideas are tested", Blue),
-            new("Evidence", "Measurements and observed results", Green),
-            new("Agents", "Collaborators currently at the bench", Amber),
-            new("Notes", "The drawer for ideas worth returning to", new Color(0.72f, 0.63f, 1f)),
+            new("Experiments", "The jig where ideas are tested", Reading),
+            new("Evidence", "Measurements and observed results", Surface),
+            new("Agents", "Collaborators currently at the bench", Pearl),
+            new("Notes", "The drawer for ideas worth returning to", Pearl),
         };
 
         readonly List<MemoryAnchor> anchors = new();
@@ -63,9 +63,9 @@ namespace Loom.MemoryPalace
 
         public static bool PaletteMatchesDesignTokens()
         {
-            return ToBytes(Deep).Equals(new Color32(16, 18, 31, 255))
-                && ToBytes(Purple).Equals(new Color32(165, 139, 255, 255))
-                && ToBytes(Blue).Equals(new Color32(142, 200, 255, 255));
+            return ToBytes(Deep).Equals(new Color32(245, 240, 235, 255))
+                && ToBytes(Purple).Equals(new Color32(233, 215, 202, 255))
+                && ToBytes(Blue).Equals(new Color32(106, 145, 204, 255));
         }
 
         public static Vector2Int ReadLoomRecordCounts()
@@ -88,8 +88,8 @@ namespace Loom.MemoryPalace
 
             if (!reduceMotion)
             {
-                sphere.Rotate(0f, 8f * Time.deltaTime, 0f, Space.World);
-                var pulse = 1f + Mathf.Sin(Time.time * 0.7f) * 0.015f;
+                sphere.Rotate(0f, 1.2f * Time.deltaTime, 0f, Space.World);
+                var pulse = 1f + Mathf.Sin(Time.time * 0.35f) * 0.004f;
                 sphere.localScale = Vector3.one * 2.35f * pulse;
             }
 
@@ -104,11 +104,11 @@ namespace Loom.MemoryPalace
             RenderSettings.fog = true;
             RenderSettings.fogColor = Deep;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = 0.018f;
+            RenderSettings.fogDensity = 0.009f;
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = Surface;
-            RenderSettings.ambientEquatorColor = Reading;
-            RenderSettings.ambientGroundColor = Deep;
+            RenderSettings.ambientSkyColor = Rgb(226, 216, 208);
+            RenderSettings.ambientEquatorColor = Rgb(238, 230, 224);
+            RenderSettings.ambientGroundColor = Rgb(216, 191, 180);
 
             sceneCamera = Camera.main;
             if (!sceneCamera)
@@ -128,42 +128,44 @@ namespace Loom.MemoryPalace
 
             var key = new GameObject("Soft skylight", typeof(Light)).GetComponent<Light>();
             key.type = LightType.Directional;
-            key.color = Text;
-            key.intensity = 0.55f;
+            key.color = Rgb(255, 249, 243);
+            key.intensity = 0.85f;
+            key.shadows = LightShadows.Soft;
             key.transform.rotation = Quaternion.Euler(38f, -32f, 0f);
 
             var glow = new GameObject("Orb glow", typeof(Light)).GetComponent<Light>();
             glow.type = LightType.Point;
-            glow.color = Purple;
-            glow.intensity = 6f;
-            glow.range = 10f;
+            glow.color = Pearl;
+            glow.intensity = 0.2f;
+            glow.range = 6f;
             glow.transform.position = new Vector3(0f, 1.4f, 0f);
 
             var floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
             floor.name = "Reflective floor";
             floor.transform.localScale = new Vector3(5f, 1f, 4f);
-            floor.GetComponent<Renderer>().sharedMaterial = Material("Loom floor", Deep, 0.72f, 0.04f);
+            floor.GetComponent<Renderer>().sharedMaterial = Material("Loom floor", Deep, 0.24f, 0f);
 
             var bench = GameObject.CreatePrimitive(PrimitiveType.Cube);
             bench.name = "Resolute work surface";
             bench.transform.position = new Vector3(0f, 0.18f, 0f);
             bench.transform.localScale = new Vector3(13.5f, 0.34f, 7.8f);
-            bench.GetComponent<Renderer>().sharedMaterial = Material("Workbench surface", Surface, 0.76f, 0.08f);
+            bench.GetComponent<Renderer>().sharedMaterial = Material("Workbench surface", Surface, 0.32f, 0f);
 
             var back = GameObject.CreatePrimitive(PrimitiveType.Cube);
             back.name = "Memory wall";
             back.transform.SetPositionAndRotation(new Vector3(0f, 4f, 7f), Quaternion.identity);
             back.transform.localScale = new Vector3(18f, 8f, 0.25f);
-            back.GetComponent<Renderer>().sharedMaterial = Material("Memory wall", Reading, 0.7f, 0f);
+            back.GetComponent<Renderer>().sharedMaterial = Material("Memory wall", Reading, 0.16f, 0f);
 
             sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
             sphere.name = "Loom sphere";
             sphere.position = new Vector3(0f, 1.75f, 0f);
             sphere.localScale = Vector3.one * 2.35f;
-            sphere.GetComponent<Renderer>().sharedMaterial = Material("Loom sphere", Purple, 0.62f, 0.65f);
+            sphere.GetComponent<Renderer>().sharedMaterial = Material("Loom sphere", Rgb(248, 238, 230), 0.68f, 0.02f);
+            sphere.GetComponent<Renderer>().sharedMaterial.SetFloat("_Metallic", 0.12f);
 
-            CreateOrbit("Inner orbit", 4.1f, 1.05f, Purple, 0f);
-            CreateOrbit("Outer orbit", 5.75f, 1.35f, Blue, 17f);
+            CreateOrbit("Inner orbit", 4.1f, 1.05f, Rgb(216, 191, 180), 0f);
+            CreateOrbit("Outer orbit", 5.75f, 1.35f, Rgb(221, 213, 208), 17f);
 
             for (var i = 0; i < Portals.Length; i++)
             {
@@ -199,15 +201,15 @@ namespace Loom.MemoryPalace
                 _ => new Vector3(1.45f, 0.42f, 1.1f),
             };
             root.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
-            root.GetComponent<Renderer>().sharedMaterial = Material(portal.Name, portal.Color, 0.62f, 0.28f);
+            root.GetComponent<Renderer>().sharedMaterial = Material(portal.Name, portal.Color, 0.3f, 0.015f);
 
             var label = new GameObject("Label", typeof(TextMesh)).GetComponent<TextMesh>();
             label.transform.position = position + Vector3.up * 1.05f;
             label.text = portal.Name;
             label.anchor = TextAnchor.MiddleCenter;
             label.alignment = TextAlignment.Center;
-            label.characterSize = 0.035f;
-            label.fontSize = 42;
+            label.characterSize = 0.052f;
+            label.fontSize = 48;
             label.color = Text;
 
             var anchor = root.AddComponent<MemoryAnchor>();
@@ -233,7 +235,7 @@ namespace Loom.MemoryPalace
             line.loop = true;
             line.useWorldSpace = false;
             line.positionCount = segments;
-            line.widthMultiplier = 0.018f;
+            line.widthMultiplier = 0.01f;
             line.sharedMaterial = Material(name, color, 0f, 1.2f, true);
             for (var i = 0; i < segments; i++)
             {
@@ -258,8 +260,8 @@ namespace Loom.MemoryPalace
         {
             var target = new Vector3(0f, 1.25f, 0f);
             var parallax = reduceMotion ? Vector2.zero : look;
-            var desired = new Vector3(parallax.x * 1.1f, 4.8f + parallax.y * 0.45f, -distance);
-            sceneCamera.transform.position = Vector3.Lerp(sceneCamera.transform.position, desired, reduceMotion ? 1f : Time.deltaTime * 2.8f);
+            var desired = new Vector3(parallax.x * 0.25f, 4.8f + parallax.y * 0.12f, -distance);
+            sceneCamera.transform.position = Vector3.Lerp(sceneCamera.transform.position, desired, reduceMotion ? 1f : Time.deltaTime * 1.8f);
             sceneCamera.transform.rotation = Quaternion.Slerp(sceneCamera.transform.rotation,
                 Quaternion.LookRotation(target - sceneCamera.transform.position), reduceMotion ? 1f : Time.deltaTime * 3.5f);
         }
@@ -296,7 +298,7 @@ namespace Loom.MemoryPalace
             var scale = Mathf.Min(1f, Screen.width / 1000f, Screen.height / 520f);
             GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
             var width = Screen.width / scale;
-            GUI.Label(new Rect(28f, 22f, 620f, 38f), "LOOM  /  RESOLUTE WORKBENCH", titleStyle);
+            GUI.Label(new Rect(28f, 22f, 620f, 38f), "Loom · Resolute Workbench", titleStyle);
             GUI.Label(new Rect(30f, 60f, 700f, 28f), "A spatial bench for making knowledge · select a tool or workpiece", smallStyle);
 
             if (GUI.Button(new Rect(width - 172f, 24f, 144f, 34f), reduceMotion ? "Motion: reduced" : "Motion: ambient"))
@@ -332,14 +334,24 @@ namespace Loom.MemoryPalace
         void EnsureStyles()
         {
             if (titleStyle != null) return;
-            titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold, normal = { textColor = Text } };
+            titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Normal, normal = { textColor = Text } };
             bodyStyle = new GUIStyle(GUI.skin.label) { fontSize = 14, wordWrap = true, normal = { textColor = Text } };
-            smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 12, normal = { textColor = Muted } };
-            GUI.skin.box.normal.background = MakeTexture(new Color(Surface.r, Surface.g, Surface.b, 0.94f));
-            GUI.skin.textArea.normal.textColor = Text;
-            GUI.skin.textArea.normal.background = MakeTexture(Reading);
-            GUI.skin.button.normal.textColor = Text;
-            GUI.skin.button.normal.background = MakeTexture(new Color(Purple.r, Purple.g, Purple.b, 0.28f));
+            smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, normal = { textColor = Muted } };
+            GUI.skin.box.normal.background = MakeTexture(new Color(Reading.r, Reading.g, Reading.b, 0.97f), 22);
+            GUI.skin.box.border = new RectOffset(22, 22, 22, 22);
+            foreach (var style in new[] { GUI.skin.button, GUI.skin.textArea })
+            {
+                var radius = style == GUI.skin.button ? 10 : 14;
+                style.border = new RectOffset(radius, radius, radius, radius);
+                style.fontSize = 14;
+                style.normal.textColor = style.hover.textColor = style.active.textColor = style.focused.textColor = Text;
+                style.normal.background = MakeTexture(style == GUI.skin.button ? Surface : Reading, radius);
+                style.hover.background = MakeTexture(Pearl, radius);
+                style.active.background = style.focused.background = MakeTexture(Purple, radius);
+            }
+            GUI.skin.textArea.padding = new RectOffset(10, 10, 8, 8);
+            GUI.skin.settings.cursorColor = Text;
+            GUI.skin.settings.selectionColor = Purple;
         }
 
         static Material Material(string name, Color color, float smoothness, float emission, bool unlit = false)
@@ -359,10 +371,18 @@ namespace Loom.MemoryPalace
             return material;
         }
 
-        static Texture2D MakeTexture(Color color)
+        static Texture2D MakeTexture(Color color, int radius)
         {
-            var texture = new Texture2D(1, 1);
-            texture.SetPixel(0, 0, color);
+            var size = radius * 2 + 2;
+            var texture = new Texture2D(size, size) { wrapMode = TextureWrapMode.Clamp };
+            for (var y = 0; y < size; y++)
+                for (var x = 0; x < size; x++)
+                {
+                    var dx = x - Mathf.Clamp(x, radius, size - radius - 1);
+                    var dy = y - Mathf.Clamp(y, radius, size - radius - 1);
+                    var coverage = Mathf.Clamp01(radius + 0.5f - Mathf.Sqrt(dx * dx + dy * dy));
+                    texture.SetPixel(x, y, new Color(color.r, color.g, color.b, color.a * coverage));
+                }
             texture.Apply();
             return texture;
         }
@@ -452,18 +472,18 @@ namespace Loom.MemoryPalace
 
         public void Animate(bool hovered, bool selected, bool reduceMotion)
         {
-            var lift = hovered || selected ? 0.22f : 0f;
-            if (!reduceMotion) lift += Mathf.Sin(Time.time * 0.8f + phase) * 0.08f;
+            var lift = hovered || selected ? 0.12f : 0f;
+            if (!reduceMotion) lift += Mathf.Sin(Time.time * 0.8f + phase) * 0.025f;
             transform.position = Vector3.Lerp(transform.position, basePosition + Vector3.up * lift, reduceMotion ? 1f : Time.deltaTime * 5f);
-            transform.localScale = Vector3.Lerp(transform.localScale, baseScale * (selected ? 1.18f : hovered ? 1.1f : 1f), reduceMotion ? 1f : Time.deltaTime * 6f);
+            transform.localScale = Vector3.Lerp(transform.localScale, baseScale * (selected ? 1.06f : hovered ? 1.03f : 1f), reduceMotion ? 1f : Time.deltaTime * 6f);
             if (label && Camera.main)
             {
                 label.position = transform.position + Vector3.up * 0.95f;
                 label.rotation = Quaternion.LookRotation(label.position - Camera.main.transform.position);
             }
             var renderer = GetComponent<Renderer>();
-            renderer.material.SetColor("_EmissionColor", color * (selected ? 2.2f : hovered ? 1.6f : 0.9f));
-            if (!reduceMotion) transform.Rotate(0f, (selected ? 20f : 7f) * Time.deltaTime, 0f, Space.World);
+            renderer.material.SetColor("_EmissionColor", color * (selected ? 0.10f : hovered ? 0.055f : 0.015f));
+            if (!reduceMotion) transform.Rotate(0f, (selected ? 2f : 0.6f) * Time.deltaTime, 0f, Space.World);
         }
     }
 }

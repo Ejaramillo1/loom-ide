@@ -34,10 +34,10 @@ agent runtime.
   objects can retain a short local memory. Work and Experiment objects read the
   current saved Tauri record counts without changing those files.
 
-- **Shared Dark/White appearance:** both interfaces read `design-tokens.json`.
-  Lavender/blue accents, semantic colors, 12px control radii and 20px panel radii
-  replace the earlier cream-only Tauri palette. Each interface remembers its own
-  appearance preference.
+- **Quiet Complexity appearance:** both interfaces read `design-tokens.json`.
+  White uses warm ivory; Dark uses warm charcoal. Controls use 10px radii, main
+  panels 22px, and floating navigation 28px. Each interface keeps its existing
+  appearance preference. See [the visual refinement report](docs/QUIET_COMPLEXITY_REFINEMENT.md) for scope and validation.
 - **One primary navigation bar in Tauri:** the duplicated icon rail was removed.
   Code, Experiment, Work, Agents and Evidence remain in the bottom bar.
 - **Navigation between applications:** Workbench's **File → Go to Tauri
@@ -70,7 +70,7 @@ The [Loom connection audit](docs/LOOM_CONNECTION_AUDIT.md) records the pre-clean
 findings. The [frontend cleanup notes](docs/FRONTEND_CLEANUP.md) describe what was
 subsequently removed and preserved.
 
-## Current screenshots
+## Earlier screenshots — before Quiet Complexity
 
 ![Living Workbench — knowledge view without historical samples](docs/cleanup-workbench-knowledge.png)
 
@@ -122,8 +122,10 @@ See [the Workbench README](native-app/README.md) for vault and preview details.
 - **Existing Loom records:** the Work and Experiments descriptions report counts
   from Tauri's existing JSON stores. Unity reads them defensively and never
   writes, migrates or repairs them.
-- **Palette:** the scene uses the current dark values from
-  `design-tokens.json`; a Unity-side self-check verifies its key colors.
+- **Palette:** the scene mirrors the warm White palette from
+  `design-tokens.json`, with a pearl sphere, neutral lighting and restrained emission.
+  It does not yet follow the Dark/White selector. The Unity-side self-check verifies
+  its key colors and rounded-control textures.
 
 See [the Unity workbench README](unity-memory-palace/README.md) for controls and
 verification commands.
