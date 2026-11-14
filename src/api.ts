@@ -1083,7 +1083,7 @@ export interface KnowledgeListing {
   notes: KnowledgeNote[]; edges: KnowledgeEdge[]; activity: KnowledgeAudit[];
   pending: number; revision: string; root: string; kinds: string[]; folders: string[]; relations: string[];
 }
-export interface KnowledgeDetail { note: KnowledgeNote; versions: KnowledgeNote[]; backlinks: KnowledgeEdge[]; audit: KnowledgeAudit[]; revision: string }
+export interface KnowledgeDetail { note: KnowledgeNote; edges: KnowledgeEdge[]; versions: KnowledgeNote[]; backlinks: KnowledgeEdge[]; audit: KnowledgeAudit[]; revision: string }
 function vaultInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (!IN_TAURI) return Promise.reject(new Error("Open Loom in Tauri to use your markdown vault."));
   return invoke<T>(command, args);

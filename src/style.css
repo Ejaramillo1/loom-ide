@@ -604,14 +604,16 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 .scene[data-mode="code"] .main,
 .scene[data-mode="agents"] .main,
 .scene[data-mode="evidence"] .main,
-.scene[data-mode="artifacts"] .main {
+.scene[data-mode="artifacts"] .main,
+.scene[data-mode="knowledge"] .main {
   grid-template-columns: minmax(0, 1fr) var(--right-w);
 }
 
 .scene[data-mode="code"] .left-col,
 .scene[data-mode="agents"] .left-col,
 .scene[data-mode="evidence"] .left-col,
-.scene[data-mode="artifacts"] .left-col {
+.scene[data-mode="artifacts"] .left-col,
+.scene[data-mode="knowledge"] .left-col {
   display: none;
 }
 
@@ -2241,7 +2243,8 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   body.right-hidden .scene[data-mode="code"] .main,
   body.right-hidden .scene[data-mode="agents"] .main,
   body.right-hidden .scene[data-mode="evidence"] .main,
-  body.right-hidden .scene[data-mode="artifacts"] .main {
+  body.right-hidden .scene[data-mode="artifacts"] .main,
+  body.right-hidden .scene[data-mode="knowledge"] .main {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -2256,14 +2259,16 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   .scene[data-mode="code"] .main,
   .scene[data-mode="agents"] .main,
   .scene[data-mode="evidence"] .main,
-  .scene[data-mode="artifacts"] .main {
+  .scene[data-mode="artifacts"] .main,
+  .scene[data-mode="knowledge"] .main {
     grid-template-columns: var(--left-w) minmax(0, 1fr);
   }
 
   .scene[data-mode="code"] .main,
   .scene[data-mode="agents"] .main,
   .scene[data-mode="evidence"] .main,
-  .scene[data-mode="artifacts"] .main {
+  .scene[data-mode="artifacts"] .main,
+  .scene[data-mode="knowledge"] .main {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -2300,7 +2305,8 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   .scene[data-mode="code"] .main,
   .scene[data-mode="agents"] .main,
   .scene[data-mode="evidence"] .main,
-  .scene[data-mode="artifacts"] .main {
+  .scene[data-mode="artifacts"] .main,
+  .scene[data-mode="knowledge"] .main {
     grid-template-columns: minmax(0, 1fr);
     padding-left: 14px;
     padding-right: 14px;
@@ -3840,7 +3846,6 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 .chat-panel { background: var(--reading); }
 
 /* Shared markdown knowledge: reading surfaces use the existing semantic tokens. */
-.scene[data-mode="knowledge"] .left-col { display: none; }
 .view-knowledge { width: 100%; background: var(--reading); border: 1px solid var(--line); border-radius: var(--radius-panel); overflow: hidden; }
 .knowledge-tools, .knowledge-tabs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .knowledge-tools select { max-width: 100%; }
@@ -3886,3 +3891,5 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 #loom-status[data-state="error"] .status-dot { background: var(--theme-red); }
 #loom-status[data-state="executing"] .status-dot,
 #loom-status[data-state="exploring"] .status-dot { background: var(--theme-blue); }
+.exp-main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.exp-actions { display: flex; justify-content: flex-end; padding: 12px 20px 0; }

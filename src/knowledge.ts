@@ -47,13 +47,13 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   // shortcut: canvas positions last for this application session; persist only if durable layouts are requested.
   const positions = new Map<string, { x: number; y: number }>();
   const showNotice = (text = "", error = false) => { notice.textContent = text; notice.hidden = !text; notice.classList.toggle("error", error); };
-  const fail = (error: unknown) => { showNotice(String(error), true); pendingChanged(data?.pending ?? 0, true); };
+  const fail = (error: unknown) => { showNotice(String(error), true); };
   function changed() { if (data) { pendingChanged(data.pending, false); bell.textContent = `🔔 ${data.pending}`; bell.setAttribute("aria-label", `Memory garden: ${data.pending} pending proposals`); } }
   async function refresh() {
     if (loading) return;
     loading = true;
     try { data = await listKnowledge(); showNotice(); changed(); render(); }
-    catch (error) { fail(error); if (!data) content.replaceChildren(el("p", "Knowledge is unavailable. Open the desktop app or retry loading the vault.", "knowledge-empty")); }
+    catch (error) { pendingChanged(data?.pending ?? 0, true); fail(error); if (!data) content.replaceChildren(el("p", "Knowledge is unavailable. Open the desktop app or retry loading the vault.", "knowledge-empty")); }
     finally { loading = false; }
   }
   function empty(text: string) { content.append(el("p", text, "knowledge-empty")); }
@@ -215,9 +215,9 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     dialog.append(preview, button("Edit / Preview", () => { preview.hidden = !preview.hidden; body.hidden = !preview.hidden; if (!preview.hidden) { preview.replaceChildren(); for (const line of body.value.split("\n")) preview.append(el(line.startsWith("## ") ? "h3" : "p", line.startsWith("## ") ? line.slice(3) : line)); } }));
     const controls = el("div", "", "knowledge-tools");
     controls.append(button("Save", () => { if (!title.reportValidity()) return; void mutation(() => saveKnowledge({ ...note, meta: { ...note.meta, title: title.value, kind: kinds.value }, body: body.value }, detail.revision), () => { dialog.close(); void openNote(note.meta.id); }); }, "btn"), button("Discard", () => { if (!busy) { dirty = false; dialog.close(); } }), button("Focus in graph", () => { if (dirty) { close(); return; } dialog.close(); focus = note.meta.id; openTab("graph"); })); dialog.append(controls);
-    const provenance = el("details"); provenance.append(el("summary", "Source & provenance"), el("p", `Author: ${note.meta.author}\nStable ID: ${note.meta.id}\nCreated: ${time(note.meta.created)}\nModified: ${time(note.meta.modified)}\nFile: ${note.path}\nSource: ${note.meta.source}`, "knowledge-provenance")); dialog.append(provenance);
+    const provenance = el("details"); provenance.append(el("summary", "Source & provenance"), el("p", `Author: ${note.meta.author}\nStable ID: ${note.meta.id}\nCreated: ${time(note.meta.created)}\nModified: ${time(note.meta.modified)}\nFile: ${data!.root}/${note.path}\nSource: ${note.meta.source}`, "knowledge-provenance")); dialog.append(provenance);
     const connections = el("section"); connections.append(el("h3", "Connections & backlinks"));
-    const edges = data!.edges.filter(e => e.from === note.meta.id || e.to === note.meta.id);
+    const edges = detail.edges;
     if (!edges.length) connections.append(el("p", "No links yet. Choose evidence below to connect this note."));
     for (const edge of edges) {
       const incoming = edge.to === note.meta.id, other = incoming ? edge.from : edge.to;

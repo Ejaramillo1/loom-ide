@@ -5092,6 +5092,13 @@ async function init() {
     const input = $("#search-input") as HTMLInputElement;
     setSearchOpen(Boolean(input.hidden));
   });
+  $("#search-input").addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    const query = ($("#search-input") as HTMLInputElement).value.trim();
+    if (!query) return;
+    const first = knowledge?.searchResults(query)[0];
+    if (first) { e.preventDefault(); void knowledge?.openNote(first.meta.id); }
+  });
   $("#search-input").addEventListener("input", (e) => {
     applySearchFilter((e.target as HTMLInputElement).value);
   });

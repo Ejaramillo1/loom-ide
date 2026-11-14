@@ -158,6 +158,7 @@ pub struct Listing {
 #[derive(Serialize)]
 pub struct Detail {
     pub note: Note,
+    pub edges: Vec<Edge>,
     pub versions: Vec<Note>,
     pub backlinks: Vec<Edge>,
     pub audit: Vec<Audit>,
@@ -381,6 +382,7 @@ pub struct Vault {
     ledger: Ledger,
     revision: String,
     hidden_ids: HashSet<String>,
+    loom_markers: HashSet<String>,
 }
 impl Vault {
     pub fn open(root: PathBuf) -> Result<Self, String> {
@@ -413,6 +415,12 @@ impl Vault {
                 ));
             }
         }
+        let loom_markers = notes
+            .iter()
+            .flat_map(|n| n.body.lines())
+            .filter(|line| line.starts_with("Loom ID: "))
+            .map(str::to_owned)
+            .collect();
         let hidden_ids = notes
             .iter()
             .filter(|n| hidden(n))
@@ -431,6 +439,7 @@ impl Vault {
             ledger,
             revision,
             hidden_ids,
+            loom_markers,
         })
     }
     fn check(&self, revision: &str) -> Result<(), String> {
@@ -517,6 +526,11 @@ impl Vault {
         versions.sort_by_key(|n| std::cmp::Reverse(n.meta.version));
         Ok(Detail {
             note,
+            edges: self
+                .visible_edges()
+                .into_iter()
+                .filter(|e| e.from == id || e.to == id)
+                .collect(),
             versions,
             backlinks: self
                 .visible_edges()
@@ -785,11 +799,7 @@ impl Vault {
                 return Err("Invalid Loom ID".into());
             }
             let marker = format!("Loom ID: {id}");
-            if self
-                .notes
-                .iter()
-                .any(|n| n.body.lines().any(|line| line == marker))
-            {
+            if self.loom_markers.contains(&marker) {
                 continue;
             }
             let title = item
@@ -1323,8 +1333,51 @@ mod tests {
         assert_eq!(v.list("Loom ID: abc").notes.len(), 2);
     }
     #[test]
+    fn sync_does_not_duplicate_a_hidden_marker() {
+        let mut v = vault();
+        let id = v
+            .create(
+                "Existing mirror",
+                "Loom ID: existing",
+                "session",
+                FOLDERS[8],
+                Actor::Human,
+                &v.revision.clone(),
+            )
+            .unwrap();
+        let mut note = v.get(&id).unwrap().clone();
+        note.meta.author = "research fixture".into();
+        let original = note.encode().unwrap();
+        fs::write(v.root.join(&note.path), &original).unwrap();
+        let mut v = Vault::open(v.root.clone()).unwrap();
+        assert_eq!(
+            v.mirror(
+                &serde_json::json!({"sessions":[{"id":"existing"}]}),
+                "sessions",
+                "session",
+                FOLDERS[8]
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(
+            fs::read_to_string(v.root.join(&note.path)).unwrap(),
+            original
+        );
+    }
+    #[test]
+    #[ignore = "manual check of the local vault; ordinary unit tests must not depend on user data"]
     fn real_vault_read_only_smoke() {
         let root = default_root();
+        if let Some(raw) = read_optional(&root, PENDING, 64 * NOTE_CAP).unwrap() {
+            assert!(
+                serde_json::from_str::<Transaction>(&raw)
+                    .unwrap()
+                    .writes
+                    .is_empty(),
+                "Read-only smoke refuses to replay a pending journal"
+            );
+        }
         let before = read_optional(&root, LEDGER, 32 * NOTE_CAP).unwrap();
         let v = Vault::open(root.clone()).unwrap();
         println!(
