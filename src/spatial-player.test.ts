@@ -85,3 +85,18 @@ it("forwards vault counts to Unity and flushes a push sent before load", async (
   listeners.message({ ...vault(4, 1), origin: "http://elsewhere" });
   expect(sendMessage).toHaveBeenCalledTimes(1);
 });
+
+it("applies a theme change sent before load once Unity is ready", async () => {
+  const { loader, parent, listeners, createUnityInstance } = setup();
+  const sendMessage = vi.fn();
+  createUnityInstance.mockResolvedValue({ SendMessage: sendMessage });
+  startSpatialPlayer();
+  const theme = (name: string) => ({ source: parent, origin: "http://localhost", data: { type: "loom-theme", theme: name } });
+  listeners.message(theme("white"));
+  listeners.message(theme("dark"));
+  listeners.message(theme("white"));
+  expect(sendMessage).not.toHaveBeenCalled();
+  await loader.onload();
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+  expect(sendMessage).toHaveBeenCalledWith("Resolute Workbench", "ApplyTheme", "white");
+});

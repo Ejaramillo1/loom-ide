@@ -8,12 +8,16 @@ export function startSpatialPlayer() {
   let failed = false;
   // Vault counts pushed before the player is ready: flushed once it loads.
   let pendingVault = null;
+  // Theme changes sent before the player is ready: the latest one wins and
+  // is applied once Unity loads, so a toggle during load is not lost.
+  let pendingTheme = null;
   window.addEventListener?.("message", (event) => {
     if (event.source !== window.parent || event.origin !== location.origin) return;
-    if (event.data?.type === "loom-theme" && typeof event.data.theme === "string" && unityInstance) {
+    if (event.data?.type === "loom-theme" && typeof event.data.theme === "string") {
       const next = event.data.theme === "white" ? "white" : "dark";
       if (document.body) document.body.dataset.theme = next;
-      unityInstance.SendMessage("Resolute Workbench", "ApplyTheme", next);
+      if (unityInstance) unityInstance.SendMessage("Resolute Workbench", "ApplyTheme", next);
+      else pendingTheme = next;
     }
     if (event.data?.type === "loom-vault-changed" && typeof event.data.work === "number" && typeof event.data.experiments === "number") {
       const payload = JSON.stringify({ work: event.data.work, experiments: event.data.experiments });
@@ -53,7 +57,8 @@ export function startSpatialPlayer() {
       });
       if (failed) return;
       loading.hidden = true;
-      unityInstance?.SendMessage?.("Resolute Workbench", "ApplyTheme", theme);
+      unityInstance?.SendMessage?.("Resolute Workbench", "ApplyTheme", pendingTheme ?? theme);
+      pendingTheme = null;
       if (pendingVault) {
         unityInstance?.SendMessage?.("Resolute Workbench", "RefreshVault", pendingVault);
         pendingVault = null;
