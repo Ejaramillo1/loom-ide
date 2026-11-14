@@ -11,9 +11,13 @@ export type SphereState =
   | "processing"
   | "executing"
   | "attention"
-  | "completed";
+  | "completed"
+  | "error"
+  | "exploring";
 
 const TINTS: Record<SphereState, { glow: string; ring: string }> = {
+  error: { glow: "211,146,138", ring: "228,167,159" },
+  exploring: { glow: "139,166,204", ring: "169,189,217" },
   idle: { glow: "165, 139, 255", ring: "225, 230, 255" },
   listening: { glow: "235, 242, 255", ring: "210, 226, 250" },
   processing: { glow: "226, 236, 250", ring: "190, 210, 240" },

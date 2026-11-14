@@ -3880,3 +3880,9 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 .knowledge-search-result { display: block; text-align: left; padding: 8px 12px; width: 100%; }
 #knowledge-search-results { padding: 0 12px; }
 @media (max-width: 1100px) { .knowledge-tabs { gap: 3px; padding: 8px; } .knowledge-content { padding: 12px; } }
+#loom-status[data-state] .status-dot { background: var(--theme-purple); }
+#loom-status[data-state="attention"] .status-dot { background: var(--theme-amber); }
+#loom-status[data-state="completed"] .status-dot { background: var(--theme-green); }
+#loom-status[data-state="error"] .status-dot { background: var(--theme-red); }
+#loom-status[data-state="executing"] .status-dot,
+#loom-status[data-state="exploring"] .status-dot { background: var(--theme-blue); }

@@ -32,7 +32,7 @@ function select(label: string, values: string[], value: string, all?: string) {
 }
 const time = (value: number) => new Date(value * 1000).toLocaleString();
 
-export function installKnowledge(navigate: () => void, pendingChanged: (count: number) => void) {
+export function installKnowledge(navigate: () => void, pendingChanged: (count: number, failed: boolean) => void) {
   const host = document.querySelector<HTMLElement>("#view-knowledge")!;
   const content = host.querySelector<HTMLElement>("#knowledge-content")!;
   const notice = host.querySelector<HTMLElement>("#knowledge-notice")!;
@@ -47,8 +47,8 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   // shortcut: canvas positions last for this application session; persist only if durable layouts are requested.
   const positions = new Map<string, { x: number; y: number }>();
   const showNotice = (text = "", error = false) => { notice.textContent = text; notice.hidden = !text; notice.classList.toggle("error", error); };
-  const fail = (error: unknown) => showNotice(String(error), true);
-  function changed() { if (data) { pendingChanged(data.pending); bell.textContent = `🔔 ${data.pending}`; bell.setAttribute("aria-label", `Memory garden: ${data.pending} pending proposals`); } }
+  const fail = (error: unknown) => { showNotice(String(error), true); pendingChanged(data?.pending ?? 0, true); };
+  function changed() { if (data) { pendingChanged(data.pending, false); bell.textContent = `🔔 ${data.pending}`; bell.setAttribute("aria-label", `Memory garden: ${data.pending} pending proposals`); } }
   async function refresh() {
     if (loading) return;
     loading = true;

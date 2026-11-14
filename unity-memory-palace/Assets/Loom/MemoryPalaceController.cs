@@ -64,6 +64,7 @@ namespace Loom.MemoryPalace
         Color liveReading = Reading;
         Color liveSurface = Surface;
         string currentTheme = "white";
+        string currentState = "idle";
         Camera sceneCamera;
         Transform sphere;
         MemoryAnchor selected;
@@ -128,11 +129,11 @@ namespace Loom.MemoryPalace
                 keyLight.color = dark ? DarkKeyLight : Rgb(255, 249, 243);
                 keyLight.intensity = dark ? 0.7f : 0.85f;
             }
-            if (orbLight) orbLight.color = Pearl;
+
             if (floorMaterial) floorMaterial.color = deep;
             if (benchMaterial) benchMaterial.color = surface;
             if (wallMaterial) wallMaterial.color = reading;
-            if (sphereMaterial) sphereMaterial.color = Rgb(248, 238, 230);
+            ApplyLoomState(currentState);
             for (var i = 0; i < orbitMaterials.Count; i++)
                 orbitMaterials[i].color = dark ? (i == 0 ? DarkOrbitInner : DarkOrbitOuter) : orbitColors[i];
             foreach (var anchor in anchors)
@@ -148,6 +149,32 @@ namespace Loom.MemoryPalace
             liveSurface = surface;
             titleStyle = bodyStyle = smallStyle = null;
         }
+
+        // The host resolves mechanics::sphere_state; the player only renders that state.
+        public static Color StateColor(string state, bool dark) => state switch
+        {
+            "attention" => dark ? DarkAmber : Amber,
+            "completed" => dark ? DarkGreen : Green,
+            "error" => dark ? DarkRed : Red,
+            "exploring" or "executing" => dark ? DarkBlue : Blue,
+            _ => dark ? DarkPurple : Purple,
+        };
+
+        public void ApplyLoomState(string state)
+        {
+            if (state != "idle" && state != "listening" && state != "processing" && state != "executing"
+                && state != "exploring" && state != "attention" && state != "completed" && state != "error") return;
+            currentState = state;
+            var color = StateColor(state, currentTheme == "dark");
+            if (orbLight) orbLight.color = color;
+            if (sphereMaterial)
+            {
+                sphereMaterial.color = Color.Lerp(Pearl, color, 0.4f);
+                sphereMaterial.SetColor("_EmissionColor", color * 0.15f);
+            }
+        }
+
+        public void ApplyReducedMotion(string reduced) => reduceMotion = reduced == "true";
 
         static Color PortalColorWhite(string name)
         {
@@ -438,8 +465,6 @@ namespace Loom.MemoryPalace
             GUI.Label(new Rect(28f, 22f, 620f, 38f), "Loom · Resolute Workbench", titleStyle);
             GUI.Label(new Rect(30f, 60f, 700f, 28f), "A spatial bench for making knowledge · select a tool or workpiece", smallStyle);
 
-            if (GUI.Button(new Rect(width - 172f, 24f, 144f, 34f), reduceMotion ? "Motion: reduced" : "Motion: ambient"))
-                reduceMotion = !reduceMotion;
 
             if (selected == null) return;
             var panel = new Rect(width - 352f, 82f, 324f, 360f);

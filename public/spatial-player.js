@@ -11,8 +11,16 @@ export function startSpatialPlayer() {
   // Theme changes sent before the player is ready: the latest one wins and
   // is applied once Unity loads, so a toggle during load is not lost.
   let pendingTheme = null;
+  let pendingState = null;
+  const motion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+  const applyMotion = () => unityInstance?.SendMessage?.("Resolute Workbench", "ApplyReducedMotion", motion?.matches ? "true" : "false");
+  motion?.addEventListener?.("change", applyMotion);
   window.addEventListener?.("message", (event) => {
     if (event.source !== window.parent || event.origin !== location.origin) return;
+    if (event.data?.type === "loom-state" && ["idle", "listening", "processing", "executing", "exploring", "attention", "completed", "error"].includes(event.data.state)) {
+      if (unityInstance) unityInstance.SendMessage("Resolute Workbench", "ApplyLoomState", event.data.state);
+      else pendingState = event.data.state;
+    }
     if (event.data?.type === "loom-theme" && typeof event.data.theme === "string") {
       const next = event.data.theme === "white" ? "white" : "dark";
       if (document.body) document.body.dataset.theme = next;
@@ -59,6 +67,9 @@ export function startSpatialPlayer() {
       loading.hidden = true;
       unityInstance?.SendMessage?.("Resolute Workbench", "ApplyTheme", pendingTheme ?? theme);
       pendingTheme = null;
+      applyMotion();
+      if (pendingState) unityInstance?.SendMessage?.("Resolute Workbench", "ApplyLoomState", pendingState);
+      pendingState = null;
       if (pendingVault) {
         unityInstance?.SendMessage?.("Resolute Workbench", "RefreshVault", pendingVault);
         pendingVault = null;

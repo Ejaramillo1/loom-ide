@@ -1,7 +1,8 @@
+import { loomState } from "./loom-state";
 import { installKnowledge } from "./knowledge";
 import { getAppearance, setAppearance } from "./theme";
 import { openLivingWorkbench } from "./api";
-import { installSpatialWorkbench, notifySpatialVaultChanged } from "./spatial";
+import { installSpatialWorkbench, notifySpatialVaultChanged, notifySpatialState } from "./spatial";
 import "./style.css";
 import {
   addExperiment,
@@ -113,6 +114,8 @@ const LAYERS: { id: string; label: string; desc: string }[] = [
 ];
 
 const CAPTIONS: Record<SphereState, string> = {
+  error: "Needs attention — check the connection or local activity.",
+  exploring: "Exploring local knowledge.",
   idle: "At rest — nothing is running.",
   listening: "Listening — Loom is with you.",
   processing: "Thinking — preparing a reply.",
@@ -144,6 +147,8 @@ let mode: Mode = "spatial";
 let sphereState: SphereState = "idle";
 let knowledge: ReturnType<typeof installKnowledge> | null = null;
 let pendingKnowledge = 0;
+let knowledgeFailed = false;
+let chatInFlight = 0;
 let currentNote: NoteKind | null = null;
 let artifactTab: "artifacts" | "documents" = "artifacts";
 let loomReachable = false;
@@ -234,6 +239,7 @@ const $ = <T extends HTMLElement>(sel: string): T =>
 function setSphereState(state: SphereState) {
   sphereState = state;
   renderStatusPill();
+  if (state === "error") window.setTimeout(() => { if (sphereState === "error") setSphereState("idle"); }, 6000);
 }
 
 // ---------------------------------------------------------------------------
@@ -1767,7 +1773,7 @@ async function runWorkflow(name: string) {
     cancelWorkflow = false;
     workflowError = `Workflow “${name}” failed: ${err instanceof Error ? err.message : String(err)}`;
     renderWorkDetail();
-    setSphereState("idle");
+    setSphereState("error");
     if (isLoomConnectionError(err)) setLoomReachable(false);
   }
 }
@@ -2583,6 +2589,7 @@ async function refreshAttention() {
     attentionItems = [];
   }
   renderAttention(attentionItems);
+  renderStatusPill();
 }
 
 // ---------------------------------------------------------------------------
@@ -3223,6 +3230,7 @@ const CHAT_DRAFT_KEY = "loom-ide-tauri:chat-draft";
 function saveChatDraft() {
   const input = $("#chat-text") as HTMLInputElement;
   localStorage.setItem(CHAT_DRAFT_KEY, input.value);
+  renderStatusPill();
 }
 
 function restoreChatDraft() {
@@ -3337,6 +3345,7 @@ async function sendChat(text: string) {
   const cacheKey = workId ?? UNASSIGNED_KEY;
   addChatMessage("user", clean);
   cacheChatMessage(cacheKey, "user", clean);
+  chatInFlight++;
   setSphereState("processing");
 
   const log = $("#chat-log");
@@ -3403,7 +3412,10 @@ async function sendChat(text: string) {
       ? ""
       : " Start the Loom service and send your message again.";
     addChatError(`Could not reach Loom: ${detail}.${guidance}`);
-    setSphereState("idle");
+    setSphereState("error");
+  } finally {
+    chatInFlight--;
+    renderStatusPill();
   }
 }
 
@@ -4594,7 +4606,7 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
     addChatError(
       `The arm run failed: ${err instanceof Error ? err.message : String(err)}`,
     );
-    setSphereState("idle");
+    setSphereState("error");
   }
 }
 
@@ -4721,6 +4733,14 @@ function setChatMenu(open: boolean) {
   $("#chat-menu-btn").setAttribute("aria-expanded", String(open));
 }
 
+function currentLoomState(): SphereState {
+  const attention = knowledgeFailed || (loomStatusKnown && !loomReachable) || sphereState === "error" ? "error"
+    : pendingKnowledge > 0 || attentionItems.length > 0 || sphereState === "attention" ? "attention" : null;
+  return loomState(attention, chatInFlight > 0,
+    Boolean(runningWorkflow) || experiments.some(e => e.arms.some(a => a.status === "running")),
+    document.querySelector<HTMLInputElement>("#chat-text")?.value ?? "", sphereState === "completed");
+}
+
 function renderStatusPill() {
   const pill = $("#loom-status");
   const text = $("#loom-status-text");
@@ -4743,7 +4763,10 @@ function renderStatusPill() {
     pill.title =
       "The Loom server is not reachable at localhost:5006. Start the server to connect.";
   }
-  pill.title += ` ${CAPTIONS[pendingKnowledge > 0 ? "attention" : sphereState]}`;
+  const state = currentLoomState();
+  pill.title += ` ${CAPTIONS[state]}`;
+  pill.dataset.state = state;
+  notifySpatialState(state);
 }
 
 function setMode(next: Mode) {
@@ -4943,7 +4966,7 @@ async function init() {
   // Initialize local views before any Loom requests finish.
   initCodeEditor();
   initWorkspaceExplorer();
-  knowledge = installKnowledge(() => setMode("knowledge"), count => { pendingKnowledge = count; renderStatusPill(); });
+  knowledge = installKnowledge(() => setMode("knowledge"), (count, failed) => { pendingKnowledge = count; knowledgeFailed = failed; renderStatusPill(); });
   installSpatialWorkbench((object) => {
     switch (object) {
       case "Work": setMode("work"); break;
@@ -4954,7 +4977,7 @@ async function init() {
       case "Notes": setMode("knowledge"); break;
       default: break;
     }
-  }, () => ({ work: workItems.length, experiments: experiments.length }));
+  }, () => ({ work: workItems.length, experiments: experiments.length }), currentLoomState, () => { void knowledge?.refresh(); });
   // The footer provides the primary mode navigation.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
@@ -5099,9 +5122,7 @@ async function init() {
   renderWorkList();
   renderWorkDetail();
   renderChatScope();
-  // Create one work item from a title: the form submit and Capture idea
-  // share this path, so both link to the active intent and both get a
-  // best-effort Loom session when the server is up.
+  // The one work creation form links to the active intent and, when online, a Loom session.
   async function createWorkItemFromTitle(title: string): Promise<void> {
     try {
       const item = await addWorkItem(title, activeIntentId);
@@ -5142,19 +5163,6 @@ async function init() {
     const title = input.value.trim();
     if (!title) return;
     await createWorkItemFromTitle(title);
-  });
-
-  // Capture idea: same input, same path as the form, but the work item
-  // is titled "Idea: <text>" and linked to the active intent. An empty
-  // input only takes focus; nothing is created.
-  $("#capture-idea-btn").addEventListener("click", async () => {
-    const input = $("#new-work-input") as HTMLInputElement;
-    const text = input.value.trim();
-    if (!text) {
-      input.focus();
-      return;
-    }
-    await createWorkItemFromTitle(`Idea: ${text}`);
   });
 
   // Attention (local experiments waiting
@@ -5319,6 +5327,7 @@ async function init() {
   // restored, so closing the panel never loses an unsent message.
   showChatHint();
   restoreChatDraft();
+  renderStatusPill();
   $("#chat-text").addEventListener("input", saveChatDraft);
   $("#chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();

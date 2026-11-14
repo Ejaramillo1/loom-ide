@@ -31,18 +31,12 @@ mod workspace;
 
 #[tauri::command]
 fn save_spatial_memory(object: String, body: String) -> Result<String, String> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or("Repository unavailable")?
-        .join("native-app/Research Vault");
+    let root = knowledge::default_root();
     spatial::save(&root, &object, &body)
 }
 #[tauri::command]
 fn read_spatial_memory(object: String) -> Result<String, String> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or("Repository unavailable")?
-        .join("native-app/Research Vault");
+    let root = knowledge::default_root();
     spatial::read(&root, &object)
 }
 use store::{

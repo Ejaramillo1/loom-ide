@@ -1,8 +1,11 @@
+import type { SphereState } from "./sphere";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
 export function installSpatialWorkbench(
   onSpatialSelect?: (object: string) => void,
   getVaultCounts?: () => { work: number; experiments: number },
+  getState?: () => SphereState,
+  onMemorySaved?: () => void,
 ) {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame")!;
   const status = document.querySelector<HTMLElement>("#spatial-status")!;
@@ -23,6 +26,7 @@ export function installSpatialWorkbench(
       // the first change: the WebGL player cannot read the vault itself.
       const counts = getVaultCounts?.();
       if (counts) notifySpatialVaultChanged(counts.work, counts.experiments);
+      if (getState) notifySpatialState(getState());
       return;
     }
     if (event.data?.type === "loom-spatial-error" && typeof event.data.message === "string") {
@@ -50,7 +54,8 @@ export function installSpatialWorkbench(
       } else {
         if (typeof event.data.body !== "string") throw new Error("Invalid memory");
         await invoke("save_spatial_memory", { object, body: event.data.body });
-        message = "Saved to Living Workbench vault.";
+        message = "Saved to your knowledge vault.";
+        onMemorySaved?.();
       }
       ok = true;
     } catch (error) { message = `Could not ${action === "read" ? "open" : "save"}: ${String(error)}`; }
@@ -67,4 +72,10 @@ export function installSpatialWorkbench(
 export function notifySpatialVaultChanged(work: number, experiments: number): void {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame");
   frame?.contentWindow?.postMessage({ type: "loom-vault-changed", work, experiments }, location.origin);
+}
+
+/** Connection and activity use the same rule in the header and on the bench. */
+export function notifySpatialState(state: SphereState): void {
+  const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame");
+  frame?.contentWindow?.postMessage({ type: "loom-state", state }, location.origin);
 }

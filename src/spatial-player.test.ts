@@ -97,6 +97,19 @@ it("applies a theme change sent before load once Unity is ready", async () => {
   listeners.message(theme("white"));
   expect(sendMessage).not.toHaveBeenCalled();
   await loader.onload();
-  expect(sendMessage).toHaveBeenCalledTimes(1);
+  expect(sendMessage.mock.calls.filter(call => call[1] === "ApplyTheme")).toHaveLength(1);
   expect(sendMessage).toHaveBeenCalledWith("Resolute Workbench", "ApplyTheme", "white");
+});
+
+it("queues the latest valid sphere state and accepts state only from its host", async () => {
+  const { loader, parent, listeners, createUnityInstance } = setup();
+  const sendMessage = vi.fn(); createUnityInstance.mockResolvedValue({ SendMessage: sendMessage });
+  startSpatialPlayer();
+  const state = (value: string) => ({ source: parent, origin: "http://localhost", data: { type: "loom-state", state: value } });
+  listeners.message(state("executing")); listeners.message(state("attention"));
+  listeners.message(state("invalid")); listeners.message({ ...state("error"), origin: "http://foreign" });
+  await loader.onload();
+  expect(sendMessage).toHaveBeenCalledWith("Resolute Workbench", "ApplyLoomState", "attention");
+  sendMessage.mockClear(); listeners.message(state("completed"));
+  expect(sendMessage).toHaveBeenCalledWith("Resolute Workbench", "ApplyLoomState", "completed");
 });
