@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
 
 mod experiment;
+mod knowledge;
 #[path = "../../shared/navigation.rs"]
 mod navigation;
 use experiment::{Experiment, ExperimentStore};
@@ -2028,6 +2029,15 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            knowledge::knowledge_list,
+            knowledge::knowledge_read,
+            knowledge::knowledge_create,
+            knowledge::knowledge_save,
+            knowledge::knowledge_relate,
+            knowledge::knowledge_review,
+            knowledge::knowledge_pending_count,
+            knowledge::knowledge_export_canvas,
+            knowledge::knowledge_sync_from_loom,
             open_living_workbench,
             save_spatial_memory,
             read_spatial_memory,
