@@ -1,11 +1,13 @@
 //! Loom IDE — Tauri backend.
 //!
-//! Two data sources, kept strictly separate:
+//! Three data sources, kept strictly separate:
 //!
 //! 1. Local, structured work items (`<app-data>/loom-ide/work.json`) and a
 //!    user files in a separate workspace folder (Documents/Loom by default).
 //! 2. The Loom server on localhost:5006: sessions and agents, and chat via
 //!    `POST /v1/weave` with the selected session/agent.
+//!
+//! 3. Shared markdown knowledge in native-app/Research Vault, via knowledge.rs.
 //!
 //! Nothing here invents a reply or fakes progress. When the server is not
 //! reachable, session/agent/chat commands fail and the UI shows the error.
@@ -126,40 +128,6 @@ fn intents_file_path(app: &AppHandle) -> std::path::PathBuf {
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
         .join("loom-ide")
         .join("intents.json")
-}
-
-/// Open the existing native surface from this repository; no secondary source tree.
-#[tauri::command]
-fn open_living_workbench() -> Result<(), String> {
-    if navigation::activate(navigation::WORKBENCH)? {
-        return Ok(());
-    }
-    static CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
-    let mut child = CHILD.lock().map_err(|e| e.to_string())?;
-    if let Some(running) = child.as_mut() {
-        if running.try_wait().map_err(|e| e.to_string())?.is_none() {
-            return Ok(());
-        }
-    }
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or("Repository path unavailable")?;
-    let executable = [
-        repo.join("native-app/target/debug/living-workbench"),
-        repo.join("native-app/target/release/living-workbench"),
-    ]
-    .into_iter()
-    .find(|p| p.is_file())
-    .ok_or("Build Living Workbench first: cargo build --manifest-path native-app/Cargo.toml")?;
-    *child = Some(
-        std::process::Command::new(executable)
-            .current_dir(repo)
-            .arg("--vault")
-            .arg(repo.join("native-app/Research Vault"))
-            .spawn()
-            .map_err(|e| format!("Could not open Living Workbench: {e}"))?,
-    );
-    Ok(())
 }
 
 pub struct AppState {
@@ -2032,7 +2000,6 @@ pub fn run() {
             knowledge::knowledge_pending_count,
             knowledge::knowledge_export_canvas,
             knowledge::knowledge_sync_from_loom,
-            open_living_workbench,
             save_spatial_memory,
             read_spatial_memory,
             get_work_items,

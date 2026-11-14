@@ -1,7 +1,6 @@
 import { loomState } from "./loom-state";
 import { installKnowledge } from "./knowledge";
 import { getAppearance, setAppearance } from "./theme";
-import { openLivingWorkbench } from "./api";
 import { installSpatialWorkbench, notifySpatialVaultChanged, notifySpatialState } from "./spatial";
 import "./style.css";
 import {
@@ -4658,8 +4657,6 @@ function initAppMenu() {
     {
       label: "View",
       items: [
-        { label: "Living Workbench — knowledge, canvas & sphere", disabled: () => !isTauri, run: openLivingWorkbench },
-        "separator",
         ...(["code", "experiment", "work", "agents", "evidence", "knowledge"] as const).map((view) => ({
           label: view[0].toUpperCase() + view.slice(1),
           radio: true,

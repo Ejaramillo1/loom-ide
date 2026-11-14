@@ -1071,12 +1071,6 @@ export async function getStorageStatus(): Promise<StorageStatus> {
   return invokeCmd<StorageStatus>("get_storage_status");
 }
 
-/** Opens the native knowledge surface while preserving its vault and theme. */
-export async function openLivingWorkbench(): Promise<void> {
-  if (!IN_TAURI) throw new Error("Open the desktop Tauri application to launch Living Workbench.");
-  await invoke("open_living_workbench");
-}
-
 // Markdown knowledge is desktop-only; never substitute a browser JSON store.
 export interface KnowledgeMeta {
   id: string; kind: string; title: string; created: number; modified: number;

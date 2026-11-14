@@ -1,3 +1,5 @@
+> **DEPRECATED:** This second window is retired. The Tauri **Knowledge** view replaces its notes, graph, canvas, review queue and activity journal. The crate source remains here for reference; Tauri no longer launches it.
+
 > Current interface: historical starter notes, canned offline replies, the context-pack
 > preview and the experiment demonstration controls are no longer shown. New vaults
 > start empty. Existing sample files remain on disk. Canvas uses real vault notes;
