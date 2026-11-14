@@ -4,7 +4,7 @@ const tokens = JSON.parse(source) as {
   dark: Record<string, number[]>;
   white: Record<string, number[]>;
 };
-type Appearance = "dark" | "white";
+export type Appearance = "dark" | "white";
 const key = "loom:appearance";
 function apply(appearance: Appearance) {
   const root = document.documentElement;
@@ -17,6 +17,7 @@ function apply(appearance: Appearance) {
   for (const [name, radius] of Object.entries(tokens.radius)) {
     root.style.setProperty(`--radius-${name}`, `${radius}px`);
   }
+  document.querySelector<HTMLIFrameElement>("#spatial-frame")?.contentWindow?.postMessage({ type: "loom-theme", theme: appearance }, location.origin);
   document.querySelectorAll<HTMLButtonElement>("[data-appearance]").forEach(button => {
     button.setAttribute("aria-pressed", String(button.dataset.appearance === appearance));
   });
@@ -24,6 +25,18 @@ function apply(appearance: Appearance) {
 let appearance: Appearance = "dark";
 try { if (localStorage.getItem(key) === "white") appearance = "white"; } catch { /* Appearance works without persistence. */ }
 apply(appearance);
+
+/** The current appearance, for menus that offer Dark/White as choices. */
+export function getAppearance(): Appearance {
+  return appearance;
+}
+
+/** Switch appearance and remember the choice (the job the header switch did). */
+export function setAppearance(next: Appearance): void {
+  appearance = next;
+  apply(appearance);
+  try { localStorage.setItem(key, appearance); } catch { /* Keep the chosen appearance for this window. */ }
+}
 document.querySelectorAll<HTMLButtonElement>("[data-appearance]").forEach(button => {
   button.addEventListener("click", () => {
     appearance = button.dataset.appearance as Appearance;

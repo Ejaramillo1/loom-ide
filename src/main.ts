@@ -1,6 +1,6 @@
-import "./theme";
+import { getAppearance, setAppearance } from "./theme";
 import { openLivingWorkbench } from "./api";
-import { installSpatialWorkbench } from "./spatial";
+import { installSpatialWorkbench, notifySpatialVaultChanged } from "./spatial";
 import "./style.css";
 import {
   addExperiment,
@@ -174,6 +174,13 @@ const EXECUTIONS_LIMIT = 500;
 /** Executions are shown 10 at a time, with a Show more button. */
 const EXECUTIONS_PAGE = 10;
 let executionsShown = EXECUTIONS_PAGE;
+
+/** Tell the Unity bench the vault changed, so its portal counts update
+    live without a manual refresh (audit A5). Selection alone does not
+    change the counts, so it needs no push. */
+function refreshSpatialVault(): void {
+  notifySpatialVaultChanged(workItems.length, experiments.length);
+}
 let artifacts: Artifact[] = [];
 /** Artifacts for the selected work ("what this work produced"): scoped to
     the work's session when it has one, otherwise the global list. */
@@ -2678,14 +2685,12 @@ function openLeftDrawer(opener?: HTMLElement) {
   if (isRightDrawer() && rightOpen) closeRight(false);
   if (opener) lastFocus = opener;
   document.body.classList.add("left-open");
-  $("#work-toggle").setAttribute("aria-expanded", "true");
   updateScrim();
   ($("#left-close") as HTMLButtonElement).focus();
 }
 
 function closeLeftDrawer(returnFocus = true) {
   document.body.classList.remove("left-open");
-  $("#work-toggle").setAttribute("aria-expanded", "false");
   updateScrim();
   if (returnFocus && lastFocus) {
     lastFocus.focus();
@@ -4426,6 +4431,7 @@ function openNewExperimentForm() {
       );
       experiments = [created, ...experiments];
       selectedExperimentId = created.id;
+      refreshSpatialVault();
       renderExperiments();
     } catch (err) {
       addChatError(
@@ -4648,6 +4654,14 @@ function initAppMenu() {
             if (rightOpen && rightTab === "conversation") closeRight();
             else focusChat();
           } },
+        "separator",
+        // Appearance lives here now, not in the header (audit D7): the
+        // header keeps one panel toggle, and the menu is the single
+        // place for the Dark/White choice.
+        { label: "Dark", radio: true, checked: () => getAppearance() === "dark",
+          run: () => setAppearance("dark") },
+        { label: "White", radio: true, checked: () => getAppearance() === "white",
+          run: () => setAppearance("white") },
         "separator",
         ...LAYERS.map((layer) => ({
           label: layer.label,
@@ -4915,7 +4929,7 @@ async function init() {
       case "Notes": setArtifactTab("documents"); setMode("artifacts"); break;
       default: break;
     }
-  });
+  }, () => ({ work: workItems.length, experiments: experiments.length }));
   // The footer provides the primary mode navigation.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
@@ -5002,11 +5016,6 @@ async function init() {
   // Header: the objective banner opens the selected work in the Work view.
   $("#objective-btn").addEventListener("click", () => setMode("work"));
 
-  // Context is available as a tab inside the shared Conversation pane.
-  $("#work-toggle").addEventListener("click", (e) => {
-    if (document.body.classList.contains("left-open")) closeLeftDrawer();
-    else openLeftDrawer(e.currentTarget as HTMLElement);
-  });
   $("#chat-toggle").addEventListener("click", (e) => {
     if (rightOpen && rightTab === "conversation") closeRight();
     else openRight("conversation", e.currentTarget as HTMLElement);
@@ -5069,6 +5078,7 @@ async function init() {
     try {
       const item = await addWorkItem(title, activeIntentId);
       workItems = [item, ...workItems];
+      refreshSpatialVault();
       ($("#new-work-input") as HTMLInputElement).value = "";
       // The backend may have auto-created a one-line intent for this
       // work when no intent was active; pick it up in the header.

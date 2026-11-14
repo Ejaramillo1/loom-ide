@@ -33,3 +33,9 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .loading-sphere { animation: none; }
 }
+
+body[data-theme="dark"] {
+  background: #1d1b1a;
+  color: #f0e9e2;
+}
+body[data-theme="dark"] #bench-loading { background: #1d1b1a; }

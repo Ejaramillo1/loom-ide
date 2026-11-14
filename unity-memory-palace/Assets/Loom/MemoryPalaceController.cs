@@ -9,27 +9,61 @@ namespace Loom.MemoryPalace
 {
     public sealed class MemoryPalaceController : MonoBehaviour
     {
-        // shortcut: visual colors mirror White tokens; unify loading when live theme synchronization is added.
+        // Visual colors start from the White tokens; ApplyTheme switches the live scene to the shell theme (dark/white).
         static readonly Color Deep = Rgb(245, 240, 235);
         static readonly Color Reading = Rgb(248, 244, 240);
         static readonly Color Surface = Rgb(241, 234, 229);
         static readonly Color Text = Rgb(41, 39, 37);
         static readonly Color Muted = Rgb(100, 93, 87);
-        static readonly Color Purple = Rgb(233, 215, 202);
+        static readonly Color Purple = Rgb(161, 134, 116);
         static readonly Color Blue = Rgb(106, 145, 204);
+        static readonly Color Amber = Rgb(217, 166, 95);
+        static readonly Color Green = Rgb(120, 155, 137);
+        static readonly Color Red = Rgb(184, 117, 112);
         static readonly Color Pearl = Rgb(235, 220, 211);
+        // Dark theme palette (from design-tokens.json dark values).
+        static readonly Color DarkDeep = Rgb(29, 27, 26);
+        static readonly Color DarkReading = Rgb(36, 33, 31);
+        static readonly Color DarkSurface = Rgb(44, 40, 37);
+        static readonly Color DarkText = Rgb(240, 233, 226);
+        static readonly Color DarkMuted = Rgb(178, 168, 160);
+        static readonly Color DarkAmber = Rgb(217, 166, 95);
+        static readonly Color DarkBlue = Rgb(139, 166, 204);
+        static readonly Color DarkGreen = Rgb(147, 177, 159);
+        static readonly Color DarkRed = Rgb(211, 146, 138);
+        static readonly Color DarkPurple = Rgb(185, 164, 144);
+        static readonly Color DarkSky = Rgb(58, 52, 46);
+        static readonly Color DarkEquator = Rgb(44, 40, 37);
+        static readonly Color DarkGround = Rgb(32, 29, 27);
+        static readonly Color DarkOrbitInner = Rgb(120, 105, 95);
+        static readonly Color DarkOrbitOuter = Rgb(100, 88, 80);
+        static readonly Color DarkKeyLight = Rgb(255, 240, 225);
 
         static readonly Portal[] Portals =
         {
-            new("Work", "The pieces currently on the bench", Surface),
-            new("Code", "The tools and material of the build", Purple),
-            new("Experiments", "The jig where ideas are tested", Reading),
-            new("Evidence", "Measurements and observed results", Surface),
-            new("Agents", "Collaborators currently at the bench", Pearl),
+            new("Work", "The pieces currently on the bench", Amber),
+            new("Code", "The tools and material of the build", Blue),
+            new("Experiments", "The jig where ideas are tested", Green),
+            new("Evidence", "Measurements and observed results", Red),
+            new("Agents", "Collaborators currently at the bench", Purple),
             new("Notes", "The drawer for ideas worth returning to", Pearl),
         };
 
         readonly List<MemoryAnchor> anchors = new();
+        readonly List<Material> orbitMaterials = new();
+        readonly List<Color> orbitColors = new();
+        readonly List<TextMesh> portalLabels = new();
+        Material floorMaterial;
+        Material benchMaterial;
+        Material wallMaterial;
+        Material sphereMaterial;
+        Light keyLight;
+        Light orbLight;
+        Color liveText = Text;
+        Color liveMuted = Muted;
+        Color liveReading = Reading;
+        Color liveSurface = Surface;
+        string currentTheme = "white";
         Camera sceneCamera;
         Transform sphere;
         MemoryAnchor selected;
@@ -43,6 +77,7 @@ namespace Loom.MemoryPalace
         bool saving;
 #if UNITY_WEBGL && !UNITY_EDITOR
         [DllImport("__Internal")] static extern void LoomMemory(string action, string objectName, string body);
+        [DllImport("__Internal")] static extern void LoomNavigate(string objectName);
 #endif
         [Serializable] sealed class MemoryResult { public bool ok; public string action; public string body; public string message; }
         public void OnMemoryResult(string json)
@@ -64,14 +99,107 @@ namespace Loom.MemoryPalace
         public static bool PaletteMatchesDesignTokens()
         {
             return ToBytes(Deep).Equals(new Color32(245, 240, 235, 255))
-                && ToBytes(Purple).Equals(new Color32(233, 215, 202, 255))
-                && ToBytes(Blue).Equals(new Color32(106, 145, 204, 255));
+                && ToBytes(Purple).Equals(new Color32(161, 134, 116, 255))
+                && ToBytes(Blue).Equals(new Color32(106, 145, 204, 255))
+                && ToBytes(Amber).Equals(new Color32(217, 166, 95, 255))
+                && ToBytes(Green).Equals(new Color32(120, 155, 137, 255))
+                && ToBytes(Red).Equals(new Color32(184, 117, 112, 255));
         }
+
+        // Called from the Tauri shell (spatial-player.js) whenever the
+        // Dark/White selector changes, and once at the end of BuildWorld so
+        // a theme set before the world exists still applies.
+        public void ApplyTheme(string theme)
+        {
+            var dark = string.Equals(theme, "dark", StringComparison.OrdinalIgnoreCase);
+            currentTheme = dark ? "dark" : "white";
+            var deep = dark ? DarkDeep : Deep;
+            var reading = dark ? DarkReading : Reading;
+            var surface = dark ? DarkSurface : Surface;
+            var text = dark ? DarkText : Text;
+            var muted = dark ? DarkMuted : Muted;
+            RenderSettings.fogColor = deep;
+            RenderSettings.ambientSkyColor = dark ? DarkSky : Rgb(226, 216, 208);
+            RenderSettings.ambientEquatorColor = dark ? DarkEquator : Rgb(238, 230, 224);
+            RenderSettings.ambientGroundColor = dark ? DarkGround : Rgb(216, 191, 180);
+            if (sceneCamera) sceneCamera.backgroundColor = deep;
+            if (keyLight)
+            {
+                keyLight.color = dark ? DarkKeyLight : Rgb(255, 249, 243);
+                keyLight.intensity = dark ? 0.7f : 0.85f;
+            }
+            if (orbLight) orbLight.color = Pearl;
+            if (floorMaterial) floorMaterial.color = deep;
+            if (benchMaterial) benchMaterial.color = surface;
+            if (wallMaterial) wallMaterial.color = reading;
+            if (sphereMaterial) sphereMaterial.color = Rgb(248, 238, 230);
+            for (var i = 0; i < orbitMaterials.Count; i++)
+                orbitMaterials[i].color = dark ? (i == 0 ? DarkOrbitInner : DarkOrbitOuter) : orbitColors[i];
+            foreach (var anchor in anchors)
+            {
+                var color = dark ? PortalColorDark(anchor.Key) : PortalColorWhite(anchor.Key);
+                anchor.GetComponent<Renderer>().material.color = color;
+                anchor.SetColor(color);
+            }
+            foreach (var label in portalLabels) label.color = text;
+            liveText = text;
+            liveMuted = muted;
+            liveReading = reading;
+            liveSurface = surface;
+            titleStyle = bodyStyle = smallStyle = null;
+        }
+
+        static Color PortalColorWhite(string name)
+        {
+            foreach (var portal in Portals)
+                if (portal.Name == name) return portal.Color;
+            return Pearl;
+        }
+
+        static Color PortalColorDark(string name) => name switch
+        {
+            "Work" => DarkAmber,
+            "Code" => DarkBlue,
+            "Experiments" => DarkGreen,
+            "Evidence" => DarkRed,
+            "Agents" => DarkPurple,
+            _ => Pearl,
+        };
 
         public static Vector2Int ReadLoomRecordCounts()
         {
             var summary = LocalDataSummary.Load();
             return new Vector2Int(summary.WorkCount, summary.ExperimentCount);
+        }
+
+        [Serializable]
+        sealed class VaultCounts { public int work; public int experiments; }
+
+        // Called from the Tauri shell (spatial-player.js) whenever the vault
+        // changes in Tauri. The WebGL player cannot read the vault from disk,
+        // so the host pushes the counts and the bench updates live, with no
+        // manual refresh. Malformed input is ignored: a bad push must never
+        // break the player.
+        public void RefreshVault(string json)
+        {
+            VaultCounts counts;
+            try { counts = JsonUtility.FromJson<VaultCounts>(json); }
+            catch (ArgumentException) { return; }
+            if (counts == null) return;
+            localData = new LocalDataSummary(Mathf.Max(0, counts.work), Mathf.Max(0, counts.experiments));
+            foreach (var anchor in anchors)
+            {
+                foreach (var portal in Portals)
+                {
+                    if (portal.Name != anchor.Key) continue;
+                    anchor.SetDescription(portal.Name switch
+                    {
+                        "Work" => $"{portal.Description} · {localData.WorkCount} saved",
+                        "Experiments" => $"{portal.Description} · {localData.ExperimentCount} saved",
+                        _ => portal.Description,
+                    });
+                }
+            }
         }
 
         void Awake()
@@ -100,6 +228,9 @@ namespace Loom.MemoryPalace
         void BuildWorld()
         {
             anchors.Clear();
+            orbitMaterials.Clear();
+            orbitColors.Clear();
+            portalLabels.Clear();
             localData = LocalDataSummary.Load();
             RenderSettings.fog = true;
             RenderSettings.fogColor = Deep;
@@ -126,14 +257,14 @@ namespace Loom.MemoryPalace
             foreach (var light in FindObjectsByType<Light>())
                 Destroy(light.gameObject);
 
-            var key = new GameObject("Soft skylight", typeof(Light)).GetComponent<Light>();
+            var key = keyLight = new GameObject("Soft skylight", typeof(Light)).GetComponent<Light>();
             key.type = LightType.Directional;
             key.color = Rgb(255, 249, 243);
             key.intensity = 0.85f;
             key.shadows = LightShadows.Soft;
             key.transform.rotation = Quaternion.Euler(38f, -32f, 0f);
 
-            var glow = new GameObject("Orb glow", typeof(Light)).GetComponent<Light>();
+            var glow = orbLight = new GameObject("Orb glow", typeof(Light)).GetComponent<Light>();
             glow.type = LightType.Point;
             glow.color = Pearl;
             glow.intensity = 0.2f;
@@ -143,26 +274,26 @@ namespace Loom.MemoryPalace
             var floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
             floor.name = "Reflective floor";
             floor.transform.localScale = new Vector3(5f, 1f, 4f);
-            floor.GetComponent<Renderer>().sharedMaterial = Material("Loom floor", Deep, 0.24f, 0f);
+            floor.GetComponent<Renderer>().sharedMaterial = floorMaterial = Material("Loom floor", Deep, 0.24f, 0f);
 
             var bench = GameObject.CreatePrimitive(PrimitiveType.Cube);
             bench.name = "Resolute work surface";
             bench.transform.position = new Vector3(0f, 0.18f, 0f);
             bench.transform.localScale = new Vector3(13.5f, 0.34f, 7.8f);
-            bench.GetComponent<Renderer>().sharedMaterial = Material("Workbench surface", Surface, 0.32f, 0f);
+            bench.GetComponent<Renderer>().sharedMaterial = benchMaterial = Material("Workbench surface", Surface, 0.32f, 0f);
 
             var back = GameObject.CreatePrimitive(PrimitiveType.Cube);
             back.name = "Memory wall";
             back.transform.SetPositionAndRotation(new Vector3(0f, 4f, 7f), Quaternion.identity);
             back.transform.localScale = new Vector3(18f, 8f, 0.25f);
-            back.GetComponent<Renderer>().sharedMaterial = Material("Memory wall", Reading, 0.16f, 0f);
+            back.GetComponent<Renderer>().sharedMaterial = wallMaterial = Material("Memory wall", Reading, 0.16f, 0f);
 
             sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
             sphere.name = "Loom sphere";
             sphere.position = new Vector3(0f, 1.75f, 0f);
             sphere.localScale = Vector3.one * 2.35f;
-            sphere.GetComponent<Renderer>().sharedMaterial = Material("Loom sphere", Rgb(248, 238, 230), 0.68f, 0.02f);
-            sphere.GetComponent<Renderer>().sharedMaterial.SetFloat("_Metallic", 0.12f);
+            sphere.GetComponent<Renderer>().sharedMaterial = sphereMaterial = Material("Loom sphere", Rgb(248, 238, 230), 0.68f, 0.02f);
+            sphereMaterial.SetFloat("_Metallic", 0.12f);
 
             CreateOrbit("Inner orbit", 4.1f, 1.05f, Rgb(216, 191, 180), 0f);
             CreateOrbit("Outer orbit", 5.75f, 1.35f, Rgb(221, 213, 208), 17f);
@@ -175,6 +306,7 @@ namespace Loom.MemoryPalace
                 anchors.Add(CreateAnchor(Portals[i], position));
             }
 
+            ApplyTheme(currentTheme);
             MoveCamera();
         }
 
@@ -208,9 +340,10 @@ namespace Loom.MemoryPalace
             label.text = portal.Name;
             label.anchor = TextAnchor.MiddleCenter;
             label.alignment = TextAlignment.Center;
-            label.characterSize = 0.052f;
+            label.characterSize = 0.07f;
             label.fontSize = 48;
             label.color = Text;
+            portalLabels.Add(label);
 
             var anchor = root.AddComponent<MemoryAnchor>();
             var description = portal.Name switch
@@ -236,7 +369,10 @@ namespace Loom.MemoryPalace
             line.useWorldSpace = false;
             line.positionCount = segments;
             line.widthMultiplier = 0.01f;
-            line.sharedMaterial = Material(name, color, 0f, 1.2f, true);
+            var orbitMaterial = Material(name, color, 0f, 1.2f, true);
+            line.sharedMaterial = orbitMaterial;
+            orbitMaterials.Add(orbitMaterial);
+            orbitColors.Add(color);
             for (var i = 0; i < segments; i++)
             {
                 var angle = i * Mathf.PI * 2f / segments;
@@ -284,6 +420,7 @@ namespace Loom.MemoryPalace
                 saving = true;
                 saveStatus = "Opening memory…";
                 LoomMemory("read", selected.Key, "");
+                LoomNavigate(selected.Key);
 #else
                 draft = PlayerPrefs.GetString($"loom.memory.{selected.Key}", "");
                 savedDraft = draft;
@@ -334,23 +471,23 @@ namespace Loom.MemoryPalace
         void EnsureStyles()
         {
             if (titleStyle != null) return;
-            titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Normal, normal = { textColor = Text } };
-            bodyStyle = new GUIStyle(GUI.skin.label) { fontSize = 14, wordWrap = true, normal = { textColor = Text } };
-            smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, normal = { textColor = Muted } };
-            GUI.skin.box.normal.background = MakeTexture(new Color(Reading.r, Reading.g, Reading.b, 0.97f), 22);
+            titleStyle = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Normal, normal = { textColor = liveText } };
+            bodyStyle = new GUIStyle(GUI.skin.label) { fontSize = 14, wordWrap = true, normal = { textColor = liveText } };
+            smallStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, normal = { textColor = liveMuted } };
+            GUI.skin.box.normal.background = MakeTexture(new Color(liveReading.r, liveReading.g, liveReading.b, 0.97f), 22);
             GUI.skin.box.border = new RectOffset(22, 22, 22, 22);
             foreach (var style in new[] { GUI.skin.button, GUI.skin.textArea })
             {
                 var radius = style == GUI.skin.button ? 10 : 14;
                 style.border = new RectOffset(radius, radius, radius, radius);
                 style.fontSize = 14;
-                style.normal.textColor = style.hover.textColor = style.active.textColor = style.focused.textColor = Text;
-                style.normal.background = MakeTexture(style == GUI.skin.button ? Surface : Reading, radius);
+                style.normal.textColor = style.hover.textColor = style.active.textColor = style.focused.textColor = liveText;
+                style.normal.background = MakeTexture(style == GUI.skin.button ? liveSurface : liveReading, radius);
                 style.hover.background = MakeTexture(Pearl, radius);
                 style.active.background = style.focused.background = MakeTexture(Purple, radius);
             }
             GUI.skin.textArea.padding = new RectOffset(10, 10, 8, 8);
-            GUI.skin.settings.cursorColor = Text;
+            GUI.skin.settings.cursorColor = liveText;
             GUI.skin.settings.selectionColor = Purple;
         }
 
@@ -405,7 +542,10 @@ namespace Loom.MemoryPalace
 
         readonly struct LocalDataSummary
         {
-            LocalDataSummary(int workCount, int experimentCount)
+            // Internal (not private): RefreshVault builds a summary from
+            // counts pushed by the Tauri shell, and a nested type's
+            // private constructor is not reachable from its enclosing type.
+            internal LocalDataSummary(int workCount, int experimentCount)
             {
                 WorkCount = workCount;
                 ExperimentCount = experimentCount;
@@ -458,6 +598,10 @@ namespace Loom.MemoryPalace
         Transform label;
         public string Key { get; private set; }
         public string Description { get; private set; }
+
+        public void SetColor(Color anchorColor) { color = anchorColor; }
+
+        public void SetDescription(string description) { Description = description; }
 
         public void Initialize(string key, string description, Color anchorColor, Transform anchorLabel)
         {

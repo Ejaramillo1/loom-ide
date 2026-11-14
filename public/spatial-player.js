@@ -2,7 +2,25 @@ export function startSpatialPlayer() {
   const loading = document.querySelector("#bench-loading");
   const status = document.querySelector("#bench-loading-text");
   const canvas = document.querySelector("#unity-canvas");
+  const theme = new URLSearchParams(location.search).get("theme") === "white" ? "white" : "dark";
+  if (document.body) document.body.dataset.theme = theme;
+  let unityInstance = null;
   let failed = false;
+  // Vault counts pushed before the player is ready: flushed once it loads.
+  let pendingVault = null;
+  window.addEventListener?.("message", (event) => {
+    if (event.source !== window.parent || event.origin !== location.origin) return;
+    if (event.data?.type === "loom-theme" && typeof event.data.theme === "string" && unityInstance) {
+      const next = event.data.theme === "white" ? "white" : "dark";
+      if (document.body) document.body.dataset.theme = next;
+      unityInstance.SendMessage("Resolute Workbench", "ApplyTheme", next);
+    }
+    if (event.data?.type === "loom-vault-changed" && typeof event.data.work === "number" && typeof event.data.experiments === "number") {
+      const payload = JSON.stringify({ work: event.data.work, experiments: event.data.experiments });
+      if (unityInstance) unityInstance.SendMessage("Resolute Workbench", "RefreshVault", payload);
+      else pendingVault = payload;
+    }
+  });
   function fail(error) {
     failed = true;
     const message = String(error);
@@ -16,7 +34,7 @@ export function startSpatialPlayer() {
   loader.onload = async () => {
     try {
       if (typeof window.createUnityInstance !== "function") throw new Error("Unity player unavailable. Build the WebGL player and try again.");
-      await window.createUnityInstance(canvas, {
+      unityInstance = await window.createUnityInstance(canvas, {
         dataUrl: "/spatial/Build/spatial.data",
         frameworkUrl: "/spatial/Build/spatial.framework.js",
         codeUrl: "/spatial/Build/spatial.wasm",
@@ -35,6 +53,11 @@ export function startSpatialPlayer() {
       });
       if (failed) return;
       loading.hidden = true;
+      unityInstance?.SendMessage?.("Resolute Workbench", "ApplyTheme", theme);
+      if (pendingVault) {
+        unityInstance?.SendMessage?.("Resolute Workbench", "RefreshVault", pendingVault);
+        pendingVault = null;
+      }
       window.parent.postMessage({ type: "loom-spatial-ready" }, location.origin);
     } catch (error) { fail(error); }
   };

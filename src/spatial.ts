@@ -1,13 +1,17 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 
-export function installSpatialWorkbench() {
+export function installSpatialWorkbench(
+  onSpatialSelect?: (object: string) => void,
+  getVaultCounts?: () => { work: number; experiments: number },
+) {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame")!;
   const status = document.querySelector<HTMLElement>("#spatial-status")!;
   const loadError = document.querySelector<HTMLElement>("#spatial-load-error")!;
   const loadButton = document.querySelector<HTMLButtonElement>("#spatial-load")!;
   function load() {
     loadError.hidden = true;
-    frame.src = "/spatial-player.html";
+    const theme = document.documentElement?.dataset?.theme === "white" ? "white" : "dark";
+    frame.src = `/spatial-player.html?theme=${theme}`;
   }
   loadButton.addEventListener("click", load);
   let saving = false;
@@ -15,11 +19,19 @@ export function installSpatialWorkbench() {
     if (event.source !== frame.contentWindow || event.origin !== location.origin) return;
     if (event.data?.type === "loom-spatial-ready") {
       loadError.hidden = true;
+      // The bench shows real vault counts from the start, not just after
+      // the first change: the WebGL player cannot read the vault itself.
+      const counts = getVaultCounts?.();
+      if (counts) notifySpatialVaultChanged(counts.work, counts.experiments);
       return;
     }
     if (event.data?.type === "loom-spatial-error" && typeof event.data.message === "string") {
       status.textContent = event.data.message;
       loadError.hidden = false;
+      return;
+    }
+    if (event.data?.type === "loom-spatial-select" && typeof event.data.object === "string") {
+      onSpatialSelect?.(event.data.object);
       return;
     }
     if (event.data?.type !== "loom-memory") return;
@@ -46,4 +58,13 @@ export function installSpatialWorkbench() {
     frame.contentWindow?.postMessage({ type: "loom-memory-result", action, ok, body, message }, location.origin);
   });
   void load();
+}
+
+/** Push the vault's current work/experiment counts to the bench, so its
+    portal descriptions update without a manual refresh (audit A5). The
+    player forwards this to Unity's RefreshVault; a push sent before the
+    player is ready is held and flushed on load. */
+export function notifySpatialVaultChanged(work: number, experiments: number): void {
+  const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame");
+  frame?.contentWindow?.postMessage({ type: "loom-vault-changed", work, experiments }, location.origin);
 }
