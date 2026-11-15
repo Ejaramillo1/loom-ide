@@ -5128,6 +5128,12 @@ function handleStreamEvent(p: LoomStreamEvent) {
         question?: string;
         kind?: string;
         summary?: string;
+        question_id?: string;
+        options?: string[];
+        timeout_seconds?: number;
+        request_type?: string;
+        params_json?: string;
+        params_truncated?: boolean;
       });
     }
     return;
@@ -5161,22 +5167,65 @@ function renderToolLine(st: StreamReplyState, e: LoomStreamEvent["event"] & obje
   scrollChat();
 }
 
-/** A mid-turn human-in-the-loop card: questions get an answer field;
-    approvals (held tool calls) get Approve/Deny. Both deliver through the
-    clarification-answer path, whose request_id is the hold's handle. */
+/** A mid-turn human-in-the-loop card. Question cards (kind "question" or
+    unclassified) answer through the legacy clarification map with their
+    `question_id`. Approval/resource cards belong to Loom's stored-request
+    store, which exposes no network answer route (only the `looms hitl`
+    CLI resolves it) — those cards are display-only and say so (QC-07):
+    submitting approve/deny to the clarification map would answer the
+    wrong store. */
 function renderHitlCard(
   st: StreamReplyState,
-  hitl: { request_id: string; question?: string; kind?: string; summary?: string },
+  hitl: {
+    request_id: string;
+    question?: string;
+    kind?: string;
+    summary?: string;
+    question_id?: string;
+    options?: string[];
+    timeout_seconds?: number;
+    request_type?: string;
+    params_json?: string;
+    params_truncated?: boolean;
+  },
 ) {
   const card = document.createElement("div");
   card.className = "chat-clarification";
-  const isApproval = hitl.kind === "approval";
+  const isApproval = hitl.kind === "approval" || hitl.request_type === "approval";
+  const isResource = hitl.kind === "resource";
+
+  const head = document.createElement("strong");
+  head.className = "chat-clarification-title";
+  head.textContent = isApproval ? "Approval requested" : isResource ? "Resource hold" : "A question for you";
+  card.append(head);
+
   const q = document.createElement("p");
   q.textContent = hitl.question?.trim() || hitl.summary?.trim() ||
     (isApproval ? "Loom's agent is asking to run a tool." : "The agent has a question for you.");
   card.append(q);
-  const row = document.createElement("div");
-  row.className = "chat-clarification-row";
+
+  // The held call's parameters: untrusted structured data, rendered only
+  // as inert text (textContent), never parsed into the DOM (Step 5).
+  if (hitl.params_json) {
+    const pre = document.createElement("pre");
+    pre.className = "chat-clarification-params";
+    pre.textContent = hitl.params_json.slice(0, 2000);
+    card.append(pre);
+    if (hitl.params_truncated) {
+      const cut = document.createElement("p");
+      cut.className = "chat-clarification-note";
+      cut.textContent = "The server truncated the parameter list — this card shows only part of what is being approved.";
+      card.append(cut);
+    }
+  }
+
+  if (hitl.timeout_seconds && hitl.timeout_seconds > 0) {
+    const timeout = document.createElement("p");
+    timeout.className = "chat-clarification-timeout";
+    timeout.textContent = `The hold expires after ${hitl.timeout_seconds}s (server-supplied).`;
+    card.append(timeout);
+  }
+
   const deliver = async (answer: string, buttons: HTMLButtonElement[]) => {
     for (const b of buttons) b.disabled = true;
     try {
@@ -5187,10 +5236,10 @@ function renderHitlCard(
         if (sid) st.sessionId = sid;
       }
       if (!sid) throw new Error("The conversation session is not known yet.");
-      await answerClarification(sid, hitl.request_id, answer);
+      await answerClarification(sid, hitl.question_id ?? "", answer);
       const done = document.createElement("p");
       done.className = "chat-clarification-done";
-      done.textContent = `Answered — the agent continues.`;
+      done.textContent = "Answered — the agent continues.";
       card.append(done);
       row.hidden = true;
     } catch (err) {
@@ -5201,37 +5250,66 @@ function renderHitlCard(
       for (const b of buttons) b.disabled = false;
     }
   };
-  if (isApproval) {
-    const approve = document.createElement("button");
-    approve.type = "button";
-    approve.className = "btn";
-    approve.textContent = "Approve";
-    const deny = document.createElement("button");
-    deny.type = "button";
-    deny.className = "btn ghost";
-    deny.textContent = "Deny";
-    row.append(approve, deny);
-    card.append(row);
-    approve.addEventListener("click", () => { void deliver("approve", [approve, deny]); });
-    deny.addEventListener("click", () => { void deliver("deny", [approve, deny]); });
-  } else {
-    const input = document.createElement("input");
-    input.type = "text";
-    input.placeholder = "Your answer…";
-    input.setAttribute("aria-label", "Answer the agent's question");
-    const answer = document.createElement("button");
-    answer.type = "button";
-    answer.className = "btn";
-    answer.textContent = "Answer";
-    row.append(input, answer);
-    card.append(row);
-    answer.addEventListener("click", () => {
-      const value = input.value.trim();
-      if (!value || answer.disabled) return;
-      input.disabled = true;
-      void deliver(value, [answer]);
-    });
+
+  const row = document.createElement("div");
+  row.className = "chat-clarification-row";
+
+  if (isApproval || isResource) {
+    // The stored-request store has no network answer route; the hold is
+    // resolved server-side (its timeout) or via `looms hitl`. Do not
+    // pretend Approve/Deny can deliver (QC-07).
+    const unavailable = document.createElement("p");
+    unavailable.className = "chat-clarification-unavailable";
+    unavailable.textContent =
+      "This hold can't be answered from the IDE yet: Loom exposes no network route to its stored-request store (only the looms hitl CLI resolves it). The hold stays pending on the server until its timeout. No request was sent.";
+    card.append(unavailable);
+    st.msg.append(card);
+    scrollChat();
+    return;
   }
+
+  // Question card: the legacy clarification map needs the question_id.
+  if (!hitl.question_id) {
+    const unavailable = document.createElement("p");
+    unavailable.className = "chat-clarification-unavailable";
+    unavailable.textContent =
+      "This question card carries no question_id, so the legacy answer route can't deliver it. The hold stays pending on the server until its timeout.";
+    card.append(unavailable);
+    st.msg.append(card);
+    scrollChat();
+    return;
+  }
+
+  if (hitl.options && hitl.options.length > 0) {
+    const optionsRow = document.createElement("div");
+    optionsRow.className = "chat-clarification-options";
+    for (const option of hitl.options) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn ghost";
+      btn.textContent = option;
+      btn.addEventListener("click", () => { void deliver(option, [btn, ...Array.from(optionsRow.querySelectorAll("button"))]); });
+      optionsRow.append(btn);
+    }
+    card.append(optionsRow);
+  }
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Your answer…";
+  input.setAttribute("aria-label", "Answer the agent's question");
+  const answer = document.createElement("button");
+  answer.type = "button";
+  answer.className = "btn";
+  answer.textContent = "Answer";
+  row.append(input, answer);
+  card.append(row);
+  answer.addEventListener("click", () => {
+    const value = input.value.trim();
+    if (!value || answer.disabled) return;
+    input.disabled = true;
+    void deliver(value, [answer]);
+  });
   st.msg.append(card);
   scrollChat();
 }
