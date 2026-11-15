@@ -151,7 +151,21 @@ pub async fn mcp_server_add(
         body["enabled"] = Value::Bool(e);
     }
     let value = loom_send("POST", "/v1/mcp/servers".into(), Some(body)).await?;
-    Ok(parse_mcp(&value))
+    // AddMCPServerResponse { success, message, server }: a 200 with
+    // success=false is still a rejection (QC-12), and the created server
+    // is the nested `server` field, never the envelope itself.
+    if value.get("success").and_then(Value::as_bool) == Some(false) {
+        return Err(value
+            .get("message")
+            .or_else(|| value.get("error"))
+            .and_then(Value::as_str)
+            .unwrap_or("Loom rejected the MCP server.")
+            .to_string());
+    }
+    match value.get("server") {
+        Some(server) => Ok(parse_mcp(server)),
+        None => Err("Unexpected MCP add response shape (no server field).".into()),
+    }
 }
 
 #[tauri::command]
@@ -228,33 +242,103 @@ pub async fn mcp_server_restart(server_name: String) -> Result<McpServer, String
 
 #[tauri::command]
 pub async fn mcp_servers_health_check() -> Result<Vec<McpServer>, String> {
+    // HealthCheckMCPServersResponse { servers: map<name, MCPServerHealth> }.
+    // Only status/error ride the health map; the frontend merges them into
+    // the existing configuration rows by name so a health check never
+    // erases configured servers (QC-12).
     let value = loom_get("/v1/mcp/servers:health".into()).await?;
-    Ok(list_field(&value, &["servers", "results"])
-        .iter()
-        .map(parse_mcp)
-        .collect())
+    let map = value
+        .get("servers")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Unexpected MCP health response shape (no servers map).".to_string())?;
+    let mut rows = Vec::with_capacity(map.len());
+    for (name, health) in map {
+        rows.push(McpServer {
+            name: name.clone(),
+            enabled: false,
+            connected: false,
+            transport: String::new(),
+            command: String::new(),
+            args: Vec::new(),
+            env: serde_json::Map::new(),
+            status: health
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string(),
+            error: health
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            url: String::new(),
+        });
+    }
+    Ok(rows)
+}
+
+/// The result of testing an MCP server configuration
+/// (TestMCPServerConnectionResponse). Not a server row: the test returns
+/// success/message/error/tool_count, and a failure must never display as
+/// passed (QC-12).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct McpTestResult {
+    pub success: bool,
+    pub message: String,
+    pub tool_count: i64,
 }
 
 #[tauri::command]
 pub async fn mcp_server_test(
-    name: String,
+    _name: String,
     transport: String,
     command: Option<String>,
     args: Option<Vec<String>>,
     url: Option<String>,
-) -> Result<McpServer, String> {
-    let mut body = serde_json::json!({ "name": name.trim(), "transport": transport });
+) -> Result<McpTestResult, String> {
+    // TestMCPServerConnectionRequest has no `name` field — the connection
+    // is tested from the transport config alone.
+    let mut body = serde_json::json!({ "transport": transport.trim() });
     if let Some(c) = command {
-        body["command"] = Value::String(c);
+        if !c.trim().is_empty() {
+            body["command"] = Value::String(c);
+        }
     }
     if let Some(a) = args {
         body["args"] = Value::Array(a.into_iter().map(Value::String).collect());
     }
     if let Some(u) = url {
-        body["url"] = Value::String(u);
+        if !u.trim().is_empty() {
+            body["url"] = Value::String(u);
+        }
     }
     let value = loom_send("POST", "/v1/mcp/servers:test".into(), Some(body)).await?;
-    Ok(parse_mcp(&value))
+    let success = value
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !success {
+        return Err(value
+            .get("error")
+            .or_else(|| value.get("message"))
+            .and_then(Value::as_str)
+            .filter(|m| !m.is_empty())
+            .unwrap_or("Loom rejected the MCP connection test.")
+            .to_string());
+    }
+    Ok(McpTestResult {
+        success: true,
+        message: value
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        tool_count: value
+            .get("toolCount")
+            .or_else(|| value.get("tool_count"))
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+    })
 }
 
 #[tauri::command]
@@ -282,10 +366,12 @@ pub async fn agent_create(config: Value) -> Result<Value, String> {
     if config.is_empty() {
         return Err("The agent config is empty.".into());
     }
+    // CreateAgentRequest { config: AgentConfig } — the nested wrapper is
+    // the contract; a bare config posts to an incompatible shape (QC-08).
     loom_send(
         "POST",
         "/v1/agents".into(),
-        Some(Value::Object(config.clone())),
+        Some(serde_json::json!({ "config": config })),
     )
     .await
 }

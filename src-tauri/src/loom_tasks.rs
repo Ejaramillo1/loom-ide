@@ -94,7 +94,9 @@ pub async fn loom_tasks_list(
     let mut parts: Vec<String> = Vec::new();
     if let Some(b) = board_id {
         if !b.trim().is_empty() {
-            parts.push(format!("boardId={}", percent_encode_query(&b)));
+            // grpc-gateway query parameters keep the proto field names
+            // (snake_case); `boardId` would be silently ignored (QC-11).
+            parts.push(format!("board_id={}", percent_encode_query(&b)));
         }
     }
     if let Some(s) = status {
@@ -136,7 +138,13 @@ pub async fn loom_task_create(task: Value) -> Result<Value, String> {
         Some(serde_json::json!({ "task": task })),
     )
     .await?;
-    Ok(field(&value, &["task"]).cloned().unwrap_or(value))
+    // CreateTaskResponse { task }: a response without the required field
+    // is an unexpected envelope, never something to pass through as a
+    // task (QC-11).
+    match field(&value, &["task"]).cloned() {
+        Some(t) => Ok(t),
+        None => Err("Unexpected task create response shape (no task field).".into()),
+    }
 }
 
 #[tauri::command]
@@ -146,13 +154,18 @@ pub async fn loom_task_update(task: Value) -> Result<Value, String> {
         .and_then(|v| v.as_str())
         .filter(|s| !s.trim().is_empty())
         .ok_or("The task needs an id to update.")?;
+    // UpdateTaskRequest { task, update_mask }: the nested task is the
+    // contract; the route resolves {task.id} from inside that envelope.
     let value = send(
         "PATCH",
         format!("/v1/tasks/{}", percent_encode(id)),
-        Some(task),
+        Some(serde_json::json!({ "task": task })),
     )
     .await?;
-    Ok(field(&value, &["task"]).cloned().unwrap_or(value))
+    match field(&value, &["task"]).cloned() {
+        Some(t) => Ok(t),
+        None => Err("Unexpected task update response shape (no task field).".into()),
+    }
 }
 
 #[tauri::command]
@@ -295,7 +308,9 @@ pub async fn task_board_ready(board_id: String) -> Result<Vec<Value>, String> {
         return Err("No board selected.".into());
     }
     let value = get(format!("/v1/boards/{}/ready", percent_encode(&board_id))).await?;
-    Ok(tasks_of(value))
+    // GetReadyFrontResponse { ready_tasks } arrives as protojson
+    // `readyTasks` (QC-11); the snake_case fallback covers older peers.
+    Ok(list_field(&value, &["readyTasks", "ready_tasks"]).to_vec())
 }
 
 #[tauri::command]
@@ -304,7 +319,9 @@ pub async fn task_board_blocked(board_id: String) -> Result<Vec<Value>, String> 
         return Err("No board selected.".into());
     }
     let value = get(format!("/v1/boards/{}/blocked", percent_encode(&board_id))).await?;
-    Ok(tasks_of(value))
+    // GetBlockedTasksResponse { blocked_tasks } arrives as protojson
+    // `blockedTasks` (QC-11).
+    Ok(list_field(&value, &["blockedTasks", "blocked_tasks"]).to_vec())
 }
 
 #[tauri::command]
@@ -365,5 +382,16 @@ mod tests {
         let value = serde_json::json!({ "boards": [{"id": "b1"}] });
         assert_eq!(list_field(&value, &["boards", "results"]).len(), 1);
         assert_eq!(list_field(&value, &["results"]).len(), 0);
+    }
+
+    #[test]
+    fn ready_and_blocked_lists_read_protojson_keys() {
+        let ready = serde_json::json!({ "readyTasks": [{"id": "a"}] });
+        assert_eq!(list_field(&ready, &["readyTasks", "ready_tasks"]).len(), 1);
+        let blocked = serde_json::json!({ "blockedTasks": [{"id": "b"}] });
+        assert_eq!(
+            list_field(&blocked, &["blockedTasks", "blocked_tasks"]).len(),
+            1
+        );
     }
 }

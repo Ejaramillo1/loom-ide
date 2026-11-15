@@ -1098,10 +1098,11 @@ export async function getTrace(traceId: string): Promise<Trace> {
 
 export async function switchModel(
   sessionId: string,
+  agentId?: string,
   provider?: string,
   model?: string,
 ): Promise<unknown> {
-  return invokeCmd<unknown>("switch_model", { sessionId, provider, model });
+  return invokeCmd<unknown>("switch_model", { sessionId, agentId, provider, model });
 }
 
 export async function getArtifactContent(
@@ -1205,10 +1206,16 @@ export const restartMcpServer = (serverName: string) =>
   invokeCmd<McpServer>("mcp_server_restart", { serverName });
 export const healthCheckMcpServers = () =>
   invokeCmd<McpServer[]>("mcp_servers_health_check");
+export interface McpTestResult {
+  success: boolean;
+  message: string;
+  tool_count: number;
+}
+
 export const testMcpServer = (
   name: string, transport: string,
   command?: string, args?: string[], url?: string,
-) => invokeCmd<McpServer>("mcp_server_test", { name, transport, command, args, url });
+) => invokeCmd<McpTestResult>("mcp_server_test", { name, transport, command, args, url });
 export const listMcpServerTools = (serverName: string) =>
   invokeCmd<unknown[]>("mcp_server_tools", { serverName });
 

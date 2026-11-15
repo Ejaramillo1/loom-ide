@@ -3919,7 +3919,9 @@ function renderApps() {
   components.addEventListener("click", async () => {
     try {
       const types = await listComponentTypes();
-      const names = types.map((t) => (t as { name?: string }).name ?? JSON.stringify(t).slice(0, 40));
+      // ComponentType { type, description, category } arrives as protojson
+      // `type`, not `name` (QC-12 family).
+      const names = types.map((t) => (t as { type?: string; name?: string }).type ?? (t as { name?: string }).name ?? JSON.stringify(t).slice(0, 40));
       agentsNotice(`Component types: ${names.join(", ") || "none reported"}`);
     } catch (err) {
       agentsNotice(`Could not list component types: ${err instanceof Error ? err.message : String(err)}`, true);
@@ -3976,17 +3978,28 @@ async function submitRegisterTool() {
 function openAppCreateDialog() {
   const dialog = $("#app-dialog") as HTMLDialogElement;
   ($("#app-name") as HTMLInputElement).value = "";
-  ($("#app-html") as HTMLTextAreaElement).value = "<div>Hello from a Loom app.</div>";
+  ($("#app-desc") as HTMLTextAreaElement).value = "";
   ($("#app-error") as HTMLElement).hidden = true;
   dialog.showModal();
 }
 
 async function submitAppCreate() {
   const name = ($("#app-name") as HTMLInputElement).value.trim();
-  const html = ($("#app-html") as HTMLTextAreaElement).value.trim();
-  if (!name || !html) return;
+  const description = ($("#app-desc") as HTMLTextAreaElement).value.trim();
+  if (!name) return;
   try {
-    await createApp({ name, html });
+    // CreateUIAppRequest { name, display_name, description, spec }: the
+    // API is declarative (UIAppSpec), not an HTML upload (QC-22). The
+    // spec carries the title/description; components start empty and can
+    // be authored from the component-type catalog later.
+    const spec = {
+      version: "1.0",
+      title: name,
+      description,
+      layout: "stack",
+      components: [],
+    };
+    await createApp({ name, displayName: name, description, spec });
     ($("#app-dialog") as HTMLDialogElement).close();
     await refreshApps();
     agentsNotice(`App ${name} created.`);
@@ -4113,7 +4126,16 @@ function initAgentsView() {
   });
   $("#mcp-health-btn").addEventListener("click", async () => {
     try {
-      mcpServers = await healthCheckMcpServers();
+      // Health returns status/error per server name; merge into the
+      // existing rows so a health check never erases configuration (QC-12).
+      const health = await healthCheckMcpServers();
+      for (const h of health) {
+        const row = mcpServers.find((s) => s.name === h.name);
+        if (row) {
+          row.status = h.status;
+          row.error = h.error;
+        }
+      }
       renderMcpServers();
       agentsNotice("Health check complete.");
     } catch (err) {
@@ -4153,8 +4175,9 @@ async function testMcpConfig() {
   if (!form.name) return showMcpDialogError("The server needs a name.");
   showMcpDialogError("");
   try {
-    await testMcpServer(form.name, form.transport, form.command, form.args, form.url);
-    showMcpDialogError("Connection test passed — save it when ready.");
+    const result = await testMcpServer(form.name, form.transport, form.command, form.args, form.url);
+    const tools = result.tool_count > 0 ? `${result.tool_count} tools discovered.` : "No tools discovered.";
+    showMcpDialogError(`Connection test passed — ${tools}${result.message ? ` ${result.message}` : ""} Save it when ready.`);
   } catch (err) {
     showMcpDialogError(`Test failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -4168,7 +4191,10 @@ async function submitMcpServer() {
     // Edit mode saves through updateMcpServer — the add path is only for
     // new servers, so editing can never create a duplicate (§3.3.2).
     if (editingMcpName) {
-      const server = await updateMcpServer(editingMcpName, form.transport, form.command, form.args, form.url, true);
+      // Preserve the row's enabled state: editing must not silently
+      // re-enable a disabled server (issue 009).
+      const existing = mcpServers.find((s) => s.name === editingMcpName);
+      const server = await updateMcpServer(editingMcpName, form.transport, form.command, form.args, form.url, existing?.enabled);
       ($("#mcp-dialog") as HTMLDialogElement).close();
       agentsNotice(`MCP server ${server.name} updated.`);
     } else {
@@ -4443,9 +4469,19 @@ function renderSessionDetail(): HTMLElement {
       if (!modelSel.value) return;
       const detail = sessionDetail;
       if (!detail) return;
+      const picked = models.find((m) => m.id === modelSel.value);
       try {
-        await switchModel(detail.id, undefined, modelSel.value);
-        showSessionNote("Model switch requested.");
+        // The switch names the session's authoritative owner agent and the
+        // model's provider (QC-21): the backend changes agent-level
+        // configuration, so both must be explicit.
+        const result = await switchModel(detail.id, detail.agent_id, picked?.provider, modelSel.value);
+        const effective = (result as { new_model?: { id?: string; name?: string } }).new_model;
+        const shown = effective?.name ?? effective?.id ?? modelSel.value;
+        showSessionNote(
+          effective
+            ? `Model switched to ${shown} — this applies to the session's agent (${detail.agent_name || detail.agent_id || "unknown"}).`
+            : "Model switch requested.",
+        );
       } catch (err) {
         showSessionNote(`Could not switch the model: ${err instanceof Error ? err.message : String(err)}`, true);
       }

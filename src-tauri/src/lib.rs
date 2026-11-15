@@ -1621,6 +1621,7 @@ async fn list_providers() -> Result<Vec<ProviderEntry>, String> {
 #[tauri::command]
 async fn switch_model(
     session_id: String,
+    agent_id: Option<String>,
     provider: Option<String>,
     model: Option<String>,
 ) -> Result<serde_json::Value, String> {
@@ -1637,6 +1638,14 @@ async fn switch_model(
         return Err("Choose a provider, a model, or both before switching.".to_string());
     }
     let mut obj = serde_json::Map::new();
+    if let Some(a) = agent_id
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+    {
+        // The authoritative owner agent (QC-21): the switch applies at the
+        // agent level, so it must name whose configuration changes.
+        obj.insert("agentId".into(), a.into());
+    }
     if let Some(p) = provider {
         obj.insert("provider".into(), p.into());
     }
@@ -1653,6 +1662,16 @@ async fn switch_model(
     })
     .await
     .map_err(|e| e.to_string())??;
+    // SwitchModelResponse { success, previous_model, new_model, message }:
+    // a 200 with success=false is still a rejection.
+    if value.get("success").and_then(|v| v.as_bool()) == Some(false) {
+        return Err(value
+            .get("message")
+            .or_else(|| value.get("error"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("Loom rejected the model switch.")
+            .to_string());
+    }
     Ok(value)
 }
 
