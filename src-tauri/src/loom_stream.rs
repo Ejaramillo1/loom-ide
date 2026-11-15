@@ -321,8 +321,16 @@ fn weave_completed(value: &Value) -> Result<bool, String> {
     {
         return Err(error.to_string());
     }
-    Ok(value.get("stage").and_then(Value::as_i64) == Some(7)
-        || value.get("stage").and_then(Value::as_str) == Some("EXECUTION_STAGE_COMPLETED"))
+    let stage = value.get("stage");
+    // FAILED (8 / EXECUTION_STAGE_FAILED) fails even without error text:
+    // a failed execution must never read as "completed" (QC-04 residue).
+    if stage.and_then(Value::as_i64) == Some(8)
+        || stage.and_then(Value::as_str) == Some("EXECUTION_STAGE_FAILED")
+    {
+        return Err("Loom's execution failed.".into());
+    }
+    Ok(stage.and_then(Value::as_i64) == Some(7)
+        || stage.and_then(Value::as_str) == Some("EXECUTION_STAGE_COMPLETED"))
 }
 
 fn clarification_ack(value: &Value) -> Result<String, String> {
@@ -340,9 +348,593 @@ fn clarification_ack(value: &Value) -> Result<String, String> {
     }
 }
 
-/// Consume the SSE stream. Each `data:` JSON payload is re-emitted as a
-/// `loom-stream` progress event verbatim; the frontend interprets
-/// WeaveProgress fields (partial_content, tool lifecycle, hitl_request).
+// --- Response framing -----------------------------------------------------
+//
+// The unary reader (lib.rs `loom_http_raw`) decodes chunked bodies; until
+// now the stream reader parsed SSE directly from the raw socket. Go's
+// net/http writes streaming responses as HTTP/1.1 chunked transfer
+// encoding, and a write larger than the server's internal buffer (~2 KB)
+// is split mid-payload — so large events (typically the completion event,
+// which carries cost and context state) arrived split at a chunk boundary
+// and were corrupted or dropped (issue 017). Body framing is decoded here,
+// BEFORE SSE/NDJSON line parsing; TCP reads, HTTP chunks and event lines
+// have independent boundaries.
+
+/// Limits for the response head and body (§2.2.2: every stream is bounded).
+const MAX_HEADER_LINES: usize = 200;
+const MAX_HEADER_BYTES: usize = 64 * 1024;
+const MAX_LINE_BYTES: usize = 1024 * 1024;
+const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
+const MAX_CHUNK_SIZE_LINE: usize = 1024;
+
+/// The parsed response head: status plus body framing.
+struct ResponseHead {
+    status: u16,
+    chunked: bool,
+    content_length: Option<u64>,
+}
+
+fn checked_read_line<R: BufRead>(
+    reader: &mut R,
+    line: &mut String,
+    cancel: &AtomicBool,
+    started: Instant,
+) -> Result<usize, String> {
+    loop {
+        match reader.read_line(line) {
+            Ok(n) => return Ok(n),
+            Err(e)
+                if e.kind() == std::io::ErrorKind::TimedOut
+                    || e.kind() == std::io::ErrorKind::WouldBlock =>
+            {
+                if cancel.load(Ordering::SeqCst) {
+                    return Err("Cancelled.".into());
+                }
+                if started.elapsed() > Duration::from_secs(1800) {
+                    return Err("The Loom stream exceeded 30 minutes.".into());
+                }
+                continue;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+}
+
+fn read_response_head<R: BufRead>(
+    reader: &mut R,
+    cancel: &AtomicBool,
+    started: Instant,
+) -> Result<ResponseHead, String> {
+    let mut status = 0u16;
+    let mut chunked = false;
+    let mut content_length: Option<u64> = None;
+    let mut line = String::new();
+    let mut total = 0usize;
+    for index in 0..MAX_HEADER_LINES {
+        line.clear();
+        // The head phase honors the same cancel/deadline wakeups as the
+        // body: a Stop pending while Loom is slow to respond still lands.
+        let n = match checked_read_line(reader, &mut line, cancel, started) {
+            Ok(n) => n,
+            Err(e) if e == "Cancelled." => return Err(e),
+            Err(e) => return Err(format!("Could not read Loom's response head: {e}")),
+        };
+        if n == 0 {
+            return Err("Loom closed the connection before responding.".into());
+        }
+        total += n;
+        if total > MAX_HEADER_BYTES {
+            return Err("Loom's response headers exceeded the size limit.".into());
+        }
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() {
+            if status == 0 {
+                return Err("Loom returned no HTTP status line.".into());
+            }
+            return Ok(ResponseHead {
+                status,
+                chunked,
+                content_length,
+            });
+        }
+        if index == 0 {
+            status = trimmed
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+            continue;
+        }
+        let (name, value) = trimmed
+            .split_once(':')
+            .map(|(n, v)| (n.trim(), v.trim()))
+            .unwrap_or((trimmed, ""));
+        if name.eq_ignore_ascii_case("content-length") {
+            content_length = value.parse::<u64>().ok().filter(|l| *l > 0);
+        } else if name.eq_ignore_ascii_case("transfer-encoding") {
+            chunked = value
+                .split(',')
+                .any(|t| t.trim().eq_ignore_ascii_case("chunked"));
+        }
+    }
+    Err("Loom's response headers exceeded the line limit.".into())
+}
+
+/// Read with cancel and deadline wakeups: a socket read timeout (20 s) is
+/// how Stop actually stops — the flag is re-checked on every wake, so a
+/// silent stream cancels within ~20 s instead of waiting out a 310 s read.
+fn checked_read_until<R: BufRead>(
+    reader: &mut R,
+    byte: u8,
+    buf: &mut Vec<u8>,
+    cancel: &AtomicBool,
+    started: Instant,
+) -> Result<usize, String> {
+    loop {
+        match reader.read_until(byte, buf) {
+            Ok(n) => return Ok(n),
+            Err(e)
+                if e.kind() == std::io::ErrorKind::TimedOut
+                    || e.kind() == std::io::ErrorKind::WouldBlock =>
+            {
+                if cancel.load(Ordering::SeqCst) {
+                    return Err("Cancelled.".into());
+                }
+                if started.elapsed() > Duration::from_secs(1800) {
+                    return Err("The Loom stream exceeded 30 minutes.".into());
+                }
+                continue;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+}
+
+fn checked_read_exact<R: BufRead>(
+    reader: &mut R,
+    buf: &mut [u8],
+    cancel: &AtomicBool,
+    started: Instant,
+) -> Result<(), String> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match reader.read(&mut buf[filled..]) {
+            Ok(0) => return Err("Loom's response was truncated mid-chunk.".into()),
+            Ok(n) => filled += n,
+            Err(e)
+                if e.kind() == std::io::ErrorKind::TimedOut
+                    || e.kind() == std::io::ErrorKind::WouldBlock =>
+            {
+                if cancel.load(Ordering::SeqCst) {
+                    return Err("Cancelled.".into());
+                }
+                if started.elapsed() > Duration::from_secs(1800) {
+                    return Err("The Loom stream exceeded 30 minutes.".into());
+                }
+                continue;
+            }
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Ok(())
+}
+
+enum BodyMode {
+    /// Content-Length body: exactly `u64` decoded bytes remain.
+    Fixed(u64),
+    Chunked(ChunkedState),
+    /// Neither Content-Length nor chunked: body runs to EOF.
+    UntilEof,
+    Done,
+}
+
+enum ChunkedState {
+    Size,
+    Data { remaining: u64 },
+    Trailer,
+}
+
+/// Decodes HTTP body framing into decoded body lines. Chunk-size hex
+/// lines, chunk terminators, trailers and the zero chunk are consumed
+/// internally; callers only see decoded body bytes. Total decoded size is
+/// bounded (`MAX_BODY_BYTES`), each line is bounded (`MAX_LINE_BYTES`), and
+/// every blocking read re-checks the cancel flag and the 30-minute cap.
+struct BodyDecoder<R: BufRead> {
+    inner: R,
+    mode: BodyMode,
+    total: usize,
+    /// Bytes of the current chunk read past a newline, served before the
+    /// next socket read.
+    carry: Vec<u8>,
+}
+
+impl<R: BufRead> BodyDecoder<R> {
+    fn new(inner: R, head: &ResponseHead) -> Self {
+        let mode = if head.chunked {
+            BodyMode::Chunked(ChunkedState::Size)
+        } else if let Some(n) = head.content_length {
+            BodyMode::Fixed(n)
+        } else {
+            BodyMode::UntilEof
+        };
+        BodyDecoder {
+            inner,
+            mode,
+            total: 0,
+            carry: Vec::new(),
+        }
+    }
+
+    fn charge(&mut self, bytes: usize) -> Result<(), String> {
+        self.total += bytes;
+        if self.total > MAX_BODY_BYTES {
+            return Err("Loom's stream exceeded the 16 MB response limit.".into());
+        }
+        Ok(())
+    }
+
+    fn push_line(&mut self, out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), String> {
+        out.extend_from_slice(bytes);
+        if out.len() > MAX_LINE_BYTES {
+            return Err("A Loom stream event line exceeded the 1 MB limit.".into());
+        }
+        Ok(())
+    }
+
+    /// The next decoded-body line without its trailing CR/LF.
+    /// `Ok(false)` means clean end of body.
+    fn next_line(
+        &mut self,
+        out: &mut Vec<u8>,
+        cancel: &AtomicBool,
+        started: Instant,
+    ) -> Result<bool, String> {
+        out.clear();
+        let mut mode = std::mem::replace(&mut self.mode, BodyMode::Done);
+        loop {
+            match mode {
+                BodyMode::Done => return Ok(false),
+                BodyMode::Fixed(mut remaining) => {
+                    let mut tmp: Vec<u8> = Vec::new();
+                    let n = checked_read_until(&mut self.inner, b'\n', &mut tmp, cancel, started)?;
+                    if n == 0 {
+                        if remaining != 0 {
+                            return Err(
+                                "Loom's response ended before Content-Length was satisfied.".into(),
+                            );
+                        }
+                        self.mode = BodyMode::Done;
+                        return Ok(false);
+                    }
+                    self.charge(n)?;
+                    remaining = remaining.saturating_sub(n as u64);
+                    let content = strip_line_endings(&tmp[..n]);
+                    self.push_line(out, content)?;
+                    self.mode = if remaining == 0 {
+                        BodyMode::Done
+                    } else {
+                        BodyMode::Fixed(remaining)
+                    };
+                    return Ok(true);
+                }
+                BodyMode::Chunked(state) => {
+                    match self.chunked_step(state, out, cancel, started)? {
+                        ChunkedResult::Continue(next) => mode = BodyMode::Chunked(next),
+                        ChunkedResult::Line(next) => {
+                            self.mode = BodyMode::Chunked(next);
+                            return Ok(true);
+                        }
+                        ChunkedResult::Done => {
+                            self.mode = BodyMode::Done;
+                            if !out.is_empty() {
+                                // A body whose last event line lacked its
+                                // terminator: deliver the tail once, then
+                                // report EOF on the next call.
+                                return Ok(true);
+                            }
+                            mode = BodyMode::Done;
+                        }
+                    }
+                }
+                BodyMode::UntilEof => {
+                    let mut tmp: Vec<u8> = Vec::new();
+                    let n = checked_read_until(&mut self.inner, b'\n', &mut tmp, cancel, started)?;
+                    if n == 0 {
+                        self.mode = BodyMode::Done;
+                        if tmp.is_empty() {
+                            return Ok(false);
+                        }
+                        self.push_line(out, &tmp)?;
+                        return Ok(true);
+                    }
+                    self.charge(n)?;
+                    let content = strip_line_endings(&tmp[..n]);
+                    self.push_line(out, content)?;
+                    return Ok(true);
+                }
+            }
+        }
+    }
+
+    /// One step of the chunked state machine. Data segments are delivered
+    /// up to the next newline so event lines assemble correctly across
+    /// chunk boundaries.
+    fn chunked_step(
+        &mut self,
+        state: ChunkedState,
+        out: &mut Vec<u8>,
+        cancel: &AtomicBool,
+        started: Instant,
+    ) -> Result<ChunkedResult, String> {
+        match state {
+            ChunkedState::Size => {
+                let mut size_line: Vec<u8> = Vec::new();
+                let n =
+                    checked_read_until(&mut self.inner, b'\n', &mut size_line, cancel, started)?;
+                if n == 0 {
+                    return Err(
+                        "Loom's chunked response was truncated before the final chunk.".into(),
+                    );
+                }
+                if n > MAX_CHUNK_SIZE_LINE {
+                    return Err("Loom's chunk-size line exceeded the limit.".into());
+                }
+                let text = std::str::from_utf8(&size_line[..n])
+                    .map_err(|_| "Malformed chunk framing.".to_string())?;
+                let hex = text.trim().split(';').next().unwrap_or("").trim();
+                let size = u64::from_str_radix(hex, 16)
+                    .map_err(|_| format!("Malformed chunk framing: {hex:?}"))?;
+                if size == 0 {
+                    Ok(ChunkedResult::Continue(ChunkedState::Trailer))
+                } else {
+                    Ok(ChunkedResult::Continue(ChunkedState::Data {
+                        remaining: size,
+                    }))
+                }
+            }
+            ChunkedState::Data { remaining } => {
+                // Serve carried bytes of the current chunk first (bytes read
+                // past a newline in a previous step — already charged to
+                // `remaining`). They must precede the CRLF check or a
+                // carried blank line would be lost.
+                if let Some(pos) = self.carry.iter().position(|&b| b == b'\n') {
+                    let line_bytes: Vec<u8> = self.carry.drain(..=pos).collect();
+                    self.push_line(out, strip_line_endings(&line_bytes))?;
+                    return Ok(ChunkedResult::Line(ChunkedState::Data { remaining }));
+                }
+                if !self.carry.is_empty() {
+                    let bytes = std::mem::take(&mut self.carry);
+                    self.push_line(out, &bytes)?;
+                    return Ok(ChunkedResult::Continue(ChunkedState::Data { remaining }));
+                }
+                if remaining == 0 {
+                    let mut crlf = [0u8; 2];
+                    checked_read_exact(&mut self.inner, &mut crlf, cancel, started)?;
+                    if &crlf != b"\r\n" {
+                        return Err(
+                            "Malformed chunk framing: missing CRLF after chunk data.".into()
+                        );
+                    }
+                    return Ok(ChunkedResult::Continue(ChunkedState::Size));
+                }
+                let want = remaining.min(8192) as usize;
+                let mut buf = vec![0u8; want];
+                checked_read_exact(&mut self.inner, &mut buf, cancel, started)?;
+                self.charge(buf.len())?;
+                match buf.iter().position(|&b| b == b'\n') {
+                    Some(pos) => {
+                        let line_bytes: Vec<u8> = buf[..=pos].to_vec();
+                        self.carry = buf[pos + 1..].to_vec();
+                        self.push_line(out, strip_line_endings(&line_bytes))?;
+                        Ok(ChunkedResult::Line(ChunkedState::Data {
+                            remaining: remaining - buf.len() as u64,
+                        }))
+                    }
+                    None => {
+                        self.push_line(out, &buf)?;
+                        Ok(ChunkedResult::Continue(ChunkedState::Data {
+                            remaining: remaining - buf.len() as u64,
+                        }))
+                    }
+                }
+            }
+            ChunkedState::Trailer => {
+                let mut trailer: Vec<u8> = Vec::new();
+                let n = checked_read_until(&mut self.inner, b'\n', &mut trailer, cancel, started)?;
+                if n == 0 {
+                    return Err(
+                        "Loom's chunked response was truncated before the trailer terminator."
+                            .into(),
+                    );
+                }
+                let t = String::from_utf8_lossy(&trailer[..n]);
+                if t.trim_end_matches(['\r', '\n']).is_empty() {
+                    Ok(ChunkedResult::Done)
+                } else {
+                    // Trailer header line: consumed, no state.
+                    Ok(ChunkedResult::Continue(ChunkedState::Trailer))
+                }
+            }
+        }
+    }
+}
+
+enum ChunkedResult {
+    Continue(ChunkedState),
+    /// A complete line was delivered; the returned state is stored for the
+    /// next call.
+    Line(ChunkedState),
+    Done,
+}
+
+fn strip_line_endings(line: &[u8]) -> &[u8] {
+    let mut end = line.len();
+    if end > 0 && line[end - 1] == b'\n' {
+        end -= 1;
+    }
+    if end > 0 && line[end - 1] == b'\r' {
+        end -= 1;
+    }
+    &line[..end]
+}
+
+/// What the decoded stream produced: whether a weave completion event was
+/// observed, plus the skipped-chunk accounting for the diagnostic event.
+#[derive(Debug)]
+struct StreamRead {
+    completed: bool,
+    skipped_chunks: usize,
+    skipped_sample: String,
+}
+
+/// The response-body core of the stream reader: parse the head, decode
+/// body framing, and hand decoded events to `emit`. SSE `data:` payloads
+/// and gateway NDJSON `{"result": …}` envelopes both dispatch here (issue
+/// 003 rides the same decoded-body seam). `emit` receives the parsed event
+/// object; the caller wraps it in the Tauri event envelope.
+fn read_response_events<R: BufRead>(
+    reader: &mut R,
+    cancel: &AtomicBool,
+    event_name: &str,
+    started: Instant,
+    mut emit: impl FnMut(Value) -> Result<(), String>,
+) -> Result<StreamRead, String> {
+    let head = read_response_head(reader, cancel, started)?;
+    if !(200..300).contains(&head.status) {
+        // The error body is decoded through the same framing (Go writes
+        // error bodies chunked too), then the server's message is surfaced.
+        let mut decoder = BodyDecoder::new(reader, &head);
+        let mut body = Vec::new();
+        let mut line: Vec<u8> = Vec::new();
+        while decoder.next_line(&mut line, cancel, started)? {
+            body.extend_from_slice(&line);
+            body.push(b'\n');
+            if body.len() > MAX_LINE_BYTES {
+                break;
+            }
+        }
+        let text = String::from_utf8_lossy(&body);
+        let msg = serde_json::from_str::<Value>(text.trim())
+            .ok()
+            .and_then(|v| {
+                v.get("message")
+                    .and_then(|m| m.as_str())
+                    .map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| {
+                let snippet: String = text.trim().chars().take(200).collect();
+                if snippet.is_empty() {
+                    format!("Loom returned HTTP {}.", head.status)
+                } else {
+                    format!("Loom returned HTTP {}: {snippet}", head.status)
+                }
+            });
+        return Err(msg);
+    }
+
+    let mut decoder = BodyDecoder::new(reader, &head);
+    let mut event_payload = String::new();
+    let mut completed = false;
+    let mut skipped_chunks: usize = 0;
+    let mut skipped_sample = String::new();
+    let mut line: Vec<u8> = Vec::new();
+
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            return Err("Cancelled.".into());
+        }
+        if started.elapsed() > Duration::from_secs(1800) {
+            return Err("The Loom stream exceeded 30 minutes.".into());
+        }
+        let more = decoder.next_line(&mut line, cancel, started)?;
+        if !more {
+            if event_name == "loom-stream" && !completed {
+                return Err("Loom disconnected before confirming completion.".into());
+            }
+            break;
+        }
+        let text = match std::str::from_utf8(&line) {
+            Ok(t) => t,
+            Err(_) => {
+                skipped_chunks += 1;
+                if skipped_sample.len() < 200 {
+                    skipped_sample.push_str("<invalid utf-8 line> | ");
+                }
+                continue;
+            }
+        };
+        if text.is_empty() {
+            // End of an SSE event.
+            if !event_payload.is_empty() {
+                let payload = event_payload.trim().to_string();
+                event_payload.clear();
+                if payload != "[DONE]" {
+                    if let Ok(value) = serde_json::from_str::<Value>(&payload) {
+                        if event_name == "loom-stream" {
+                            completed |= weave_completed(&value)?;
+                        }
+                        emit(value)?;
+                    } else {
+                        // Non-JSON chunks are recorded, not silently dropped
+                        // (§2.1.3): they ride the terminal event so a dead
+                        // stream is diagnosable.
+                        skipped_chunks += 1;
+                        if skipped_sample.len() < 200 {
+                            skipped_sample.push_str(&payload);
+                            skipped_sample.push_str(" | ");
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        if text.starts_with(':') {
+            // SSE heartbeat/comment — keep-alive traffic, no state.
+            continue;
+        }
+        if let Some(data) = text.strip_prefix("data:") {
+            event_payload.push_str(data.trim_start());
+            event_payload.push('\n');
+            continue;
+        }
+        // Gateway NDJSON envelope: {"result": …} per line, or {"error": …}.
+        if let Ok(value) = serde_json::from_str::<Value>(text) {
+            if let Some(err) = value.get("error").filter(|e| !e.is_null()) {
+                let msg = err
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .or_else(|| err.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "Loom returned a stream error.".into());
+                return Err(msg);
+            }
+            if let Some(result) = value.get("result") {
+                if event_name == "loom-stream" {
+                    completed |= weave_completed(result)?;
+                }
+                emit(result.clone())?;
+                continue;
+            }
+        }
+        // `event:`, `id:`, `retry:` and anything unparseable are recorded
+        // as skipped chunks, not silently dropped (§2.1.3/§2.1.4).
+        skipped_chunks += 1;
+        if skipped_sample.len() < 200 {
+            skipped_sample.push_str(text);
+            skipped_sample.push_str(" | ");
+        }
+    }
+
+    Ok(StreamRead {
+        completed,
+        skipped_chunks,
+        skipped_sample,
+    })
+}
+
+/// Consume one stream from Loom: connect, write the request, decode the
+/// response (head, chunked/Content-Length framing), and re-emit decoded
+/// events as Tauri events.
 fn run_stream(
     app: &AppHandle,
     rid: &str,
@@ -352,11 +944,15 @@ fn run_stream(
     cancel: &AtomicBool,
     event_name: &'static str,
 ) -> Result<(), String> {
-    let addr = super::loom_addr();
-    let mut stream = TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(2))
-        .map_err(|e| {
-            format!("Loom is unavailable at {addr}. Start looms serve --http-port 5006. {e}")
-        })?;
+    let addr_str = super::loom_addr();
+    // An invalid LOOM_ADDR is a configuration error, not a panic
+    // (issue 017 note).
+    let addr: std::net::SocketAddr = addr_str
+        .parse()
+        .map_err(|e| format!("LOOM_ADDR ({addr_str}) is not a valid host:port address: {e}"))?;
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).map_err(|e| {
+        format!("Loom is unavailable at {addr_str}. Start looms serve --http-port 5006. {e}")
+    })?;
     // A short read timeout is what makes Stop actually stop: the cancel flag
     // is re-checked on every wake, so a silent stream cancels within ~20 s
     // instead of waiting out a 310 s read. The server's heartbeats keep the
@@ -376,126 +972,16 @@ fn run_stream(
         .write_all(request.as_bytes())
         .map_err(|e| e.to_string())?;
 
-    let reader = BufReader::new(stream);
-    let mut event_payload = String::new();
-    let mut status_line = String::new();
-    let mut in_headers = true;
-    let mut error_body = String::new();
-    let mut status_code: u16 = 0;
     let started = Instant::now();
-    let mut completed = false;
-    let mut skipped_chunks: usize = 0;
-    let mut skipped_sample = String::new();
-
-    for line in reader.lines() {
-        if cancel.load(Ordering::SeqCst) {
-            return Err("Cancelled.".into());
-        }
-        if started.elapsed() > Duration::from_secs(1800) {
-            return Err("The Loom stream exceeded 30 minutes.".into());
-        }
-        let line = match line {
-            Ok(line) => line,
-            Err(e)
-                if e.kind() == std::io::ErrorKind::TimedOut
-                    || e.kind() == std::io::ErrorKind::WouldBlock =>
-            {
-                // A quiet stretch: if a Stop is pending, end as cancelled;
-                // otherwise keep listening (heartbeats resume the stream).
-                if cancel.load(Ordering::SeqCst) {
-                    return Err("Cancelled.".into());
-                }
-                continue;
-            }
-            Err(e) => return Err(e.to_string()),
-        };
-
-        if in_headers {
-            if line.is_empty() {
-                in_headers = false;
-                status_code = status_line
-                    .split_whitespace()
-                    .nth(1)
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
-                if !(200..300).contains(&status_code) {
-                    // Fall through: read the error body below, then report
-                    // the server's own message instead of a bare status.
-                }
-            } else if line.starts_with("HTTP/") {
-                status_line = line;
-            }
-            continue;
-        }
-
-        if !(200..300).contains(&status_code) {
-            // Non-2xx: collect the body and surface it (§2.1.5).
-            error_body.push_str(&line);
-            error_body.push('\n');
-            continue;
-        }
-
-        if line.is_empty() {
-            // End of an SSE event.
-            if !event_payload.is_empty() {
-                let payload = event_payload.trim().to_string();
-                event_payload.clear();
-                if payload != "[DONE]" {
-                    if let Ok(value) = serde_json::from_str::<Value>(&payload) {
-                        if event_name == "loom-stream" {
-                            completed |= weave_completed(&value)?;
-                        }
-                        let _ = app.emit(
-                            event_name,
-                            serde_json::json!({ "requestId": rid, "kind": "progress", "event": value }),
-                        );
-                    } else {
-                        // Non-JSON chunks are recorded, not silently dropped
-                        // (§2.1.3): they ride the terminal event so a dead
-                        // stream is diagnosable.
-                        skipped_chunks += 1;
-                        if skipped_sample.len() < 200 {
-                            skipped_sample.push_str(&payload);
-                            skipped_sample.push_str(" | ");
-                        }
-                    }
-                }
-            }
-        } else if line.starts_with(':') {
-            // SSE heartbeat/comment — keep-alive traffic, no state.
-        } else if line.starts_with("data:") {
-            event_payload.push_str(line.trim_start_matches("data:").trim_start());
-            event_payload.push('\n');
-        } else {
-            // `event:`, `id:`, `retry:` lines are deliberately discarded
-            // (§2.1.4): the weave stream carries every event in `data:`
-            // payloads and none of these fields carry state we render.
-        }
-    }
-
-    if !(200..300).contains(&status_code) {
-        let body = error_body.trim();
-        let msg = serde_json::from_str::<Value>(body)
-            .ok()
-            .and_then(|v| {
-                v.get("message")
-                    .and_then(|m| m.as_str())
-                    .map(|s| s.to_string())
-            })
-            .unwrap_or_else(|| {
-                let snippet: String = body.chars().take(200).collect();
-                if snippet.is_empty() {
-                    format!("Loom returned HTTP {status_code}.")
-                } else {
-                    format!("Loom returned HTTP {status_code}: {snippet}")
-                }
-            });
-        return Err(msg);
-    }
-    if event_name == "loom-stream" && !completed {
-        return Err("Loom disconnected before confirming completion.".into());
-    }
-    if skipped_chunks > 0 {
+    let mut reader = BufReader::new(stream);
+    let read = read_response_events(&mut reader, cancel, event_name, started, |value| {
+        let _ = app.emit(
+            event_name,
+            serde_json::json!({ "requestId": rid, "kind": "progress", "event": value }),
+        );
+        Ok(())
+    })?;
+    if read.skipped_chunks > 0 {
         // The stream's non-JSON chunks ride one final progress event so a
         // dead stream is diagnosable instead of silently empty (§2.1.3).
         let _ = app.emit(
@@ -503,7 +989,7 @@ fn run_stream(
             serde_json::json!({
                 "requestId": rid,
                 "kind": "progress",
-                "skipped": { "chunks": skipped_chunks, "sample": skipped_sample },
+                "skipped": { "chunks": read.skipped_chunks, "sample": read.skipped_sample },
             }),
         );
     }
@@ -588,5 +1074,268 @@ mod tests {
             body.get("context").and_then(|v| v.get("active_work")),
             Some(&Value::String("w1".into()))
         );
+    }
+
+    // --- Transport fixtures (issue 017 / QC-05 / QC-04 residue) ---------
+    //
+    // These drive the production reader (`read_response_events`) with
+    // in-memory byte fixtures and one real loopback TCP socket. No live
+    // Loom, no model calls.
+
+    fn drive(bytes: &[u8], event_name: &str) -> (Result<StreamRead, String>, Vec<Value>) {
+        let cancel = AtomicBool::new(false);
+        let mut cursor = std::io::Cursor::new(bytes.to_vec());
+        let mut events = Vec::new();
+        let result =
+            read_response_events(&mut cursor, &cancel, event_name, Instant::now(), |value| {
+                events.push(value);
+                Ok(())
+            });
+        (result, events)
+    }
+
+    fn chunked(chunks: &[&[u8]]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for c in chunks {
+            out.extend_from_slice(format!("{:x}\r\n", c.len()).as_bytes());
+            out.extend_from_slice(c);
+            out.extend_from_slice(b"\r\n");
+        }
+        out.extend_from_slice(b"0\r\n\r\n");
+        out
+    }
+
+    #[test]
+    fn failed_stage_without_error_text_is_an_error() {
+        let err = weave_completed(&serde_json::json!({"stage": 8})).unwrap_err();
+        assert!(
+            err.contains("failed"),
+            "expected a failure for stage 8, got {err:?}"
+        );
+        assert!(weave_completed(&serde_json::json!({"stage": "EXECUTION_STAGE_FAILED"})).is_err());
+    }
+
+    #[test]
+    fn content_length_sse_parses_events() {
+        let body = b"data: {\"partial_content\":\"he\"}\n\ndata: {\"stage\":7}\n\n".to_vec();
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(&body);
+        let (result, events) = drive(&response, "loom-stream");
+        let read = result.expect("clean SSE body");
+        assert!(read.completed, "stage 7 must mark the weave complete");
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["partial_content"], "he");
+        assert_eq!(events[1]["stage"], 7);
+    }
+
+    #[test]
+    fn chunked_sse_split_across_chunk_boundaries_parses() {
+        let payload = b"data: {\"stage\":7,\"cost\":{\"total_cost\":0.0041},\"context_state\":{\"tokens_used\":123}}\n\n";
+        let split = 23; // mid-payload, deliberately inside the JSON
+        let mut response = b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        response.extend_from_slice(&chunked(&[&payload[..split], &payload[split..]]));
+        let (result, events) = drive(&response, "loom-stream");
+        let read = result.expect("split chunk payload must parse as one event");
+        assert!(read.completed);
+        assert_eq!(
+            events.len(),
+            1,
+            "the split halves must reassemble into one event"
+        );
+        assert_eq!(events[0]["stage"], 7);
+        assert_eq!(events[0]["cost"]["total_cost"], 0.0041);
+    }
+
+    #[test]
+    fn chunked_with_trailers_and_zero_chunk_reaches_clean_eof() {
+        let mut manual = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        manual.extend_from_slice(b"13\r\ndata: {\"stage\":7}\n\n\r\n");
+        manual.extend_from_slice(b"0\r\nX-Trace: abc123\r\n\r\n");
+        let (result, events) = drive(&manual, "loom-stream");
+        let read = result.expect("trailers must not corrupt the stream");
+        assert!(read.completed);
+        assert_eq!(events.len(), 1);
+    }
+
+    #[test]
+    fn truncated_mid_chunk_is_an_explicit_error() {
+        let mut response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        response.extend_from_slice(b"a\r\nabc"); // promised 10 bytes, gave 3, then EOF
+        let (result, _) = drive(&response, "loom-stream");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("truncated"),
+            "expected an explicit truncation error, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn loom_stream_eof_without_completion_is_an_error() {
+        let body = b"data: {\"partial_content\":\"partial only\"}\n\n".to_vec();
+        let mut response =
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len()).into_bytes();
+        response.extend_from_slice(&body);
+        let (result, events) = drive(&response, "loom-stream");
+        assert_eq!(
+            result.unwrap_err(),
+            "Loom disconnected before confirming completion."
+        );
+        assert_eq!(
+            events.len(),
+            1,
+            "the partial event must still have been delivered"
+        );
+    }
+
+    #[test]
+    fn ndjson_result_envelopes_are_unwrapped() {
+        let body = b"{\"result\":{\"runId\":\"r1\",\"status\":\"running\"}}\n{\"result\":{\"runId\":\"r1\",\"status\":\"completed\"}}\n".to_vec();
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(&body);
+        let (result, events) = drive(&response, "loom-workflow");
+        assert!(result.is_ok());
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["runId"], "r1");
+        assert_eq!(events[1]["status"], "completed");
+    }
+
+    #[test]
+    fn ndjson_error_envelope_surfaces_the_message() {
+        let body = b"{\"error\":{\"code\":5,\"message\":\"workflow not found\"}}\n".to_vec();
+        let mut response =
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len()).into_bytes();
+        response.extend_from_slice(&body);
+        let (result, _) = drive(&response, "loom-workflow");
+        assert_eq!(result.unwrap_err(), "workflow not found");
+    }
+
+    #[test]
+    fn chunk_size_line_is_bounded() {
+        let mut response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        response.extend_from_slice(&vec![b'f'; 2048]);
+        response.extend_from_slice(b"\r\n");
+        let (result, _) = drive(&response, "loom-patterns");
+        assert!(result.unwrap_err().contains("chunk-size line"));
+    }
+
+    #[test]
+    fn invalid_utf8_lines_are_counted_not_corrupting() {
+        let mut body = b"data: {\"ok\":1}\n\n".to_vec();
+        body.extend_from_slice(&[0xff, 0xfe, b'\n']);
+        let mut response =
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len()).into_bytes();
+        response.extend_from_slice(&body);
+        let (result, events) = drive(&response, "loom-patterns");
+        let read = result.expect("invalid utf-8 must not abort the stream");
+        assert_eq!(events.len(), 1);
+        assert!(
+            read.skipped_chunks >= 1,
+            "the bad line must be recorded as skipped"
+        );
+    }
+
+    #[test]
+    fn chunked_sse_over_a_real_tcp_socket_is_decoded() {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let payload = b"data: {\"stage\":7,\"cost\":{\"total_cost\":0.0041}}\n\n";
+        let split = 17;
+        let mut response = b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        response.extend_from_slice(&chunked(&[&payload[..split], &payload[split..]]));
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut req = [0u8; 1024];
+            let mut seen = 0usize;
+            // Read the request head (up to \r\n\r\n) before answering.
+            loop {
+                use std::io::Read;
+                let n = socket.read(&mut req[seen..]).unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                seen += n;
+                if req[..seen].windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            use std::io::Write;
+            let _ = socket.write_all(&response);
+        });
+        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let _ = stream
+            .write_all(b"POST /v1/weave:stream HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{}");
+        let cancel = AtomicBool::new(false);
+        let mut reader = BufReader::new(stream);
+        let mut events = Vec::new();
+        let read = read_response_events(
+            &mut reader,
+            &cancel,
+            "loom-stream",
+            Instant::now(),
+            |value| {
+                events.push(value);
+                Ok(())
+            },
+        )
+        .expect("the real socket fixture must decode cleanly");
+        server.join().unwrap();
+        assert!(read.completed);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["stage"], 7);
+    }
+
+    #[test]
+    fn cancel_during_silence_stops_the_reader() {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            // Hold the connection open without writing anything.
+            let mut buf = [0u8; 256];
+            loop {
+                use std::io::Read;
+                match socket.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if buf[..n].windows(4).any(|w| w == b"\r\n\r\n") {
+                            break;
+                        }
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(1500));
+        });
+        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).unwrap();
+        // A short timeout makes the silence-wakeup fast for the fixture;
+        // production uses 20 s — the wake path is identical.
+        stream
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
+        let _ = stream
+            .write_all(b"POST /v1/weave:stream HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{}");
+        let cancel = Arc::new(AtomicBool::new(false));
+        let flag = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            flag.store(true, Ordering::SeqCst);
+        });
+        let mut reader = BufReader::new(stream);
+        let started = Instant::now();
+        let result = read_response_events(&mut reader, &cancel, "loom-stream", started, |_| Ok(()));
+        server.join().unwrap();
+        assert_eq!(result.unwrap_err(), "Cancelled.");
     }
 }
