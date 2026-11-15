@@ -263,6 +263,9 @@ let runningWorkflow: string | null = null;
     (live progress instead of one blocking wait, §14.2). */
 let workflowStreamActive: string | null = null;
 let workflowStreamState: { progress: number; message: string; executionId: string | null } | null = null;
+/** The work the current workflow run was started from — captured once at
+    start, never read from the selection at completion (QC-13). */
+let workflowStreamOrigin: string | null = null;
 /** The active session subscription (GET /v1/sessions/{id}:subscribe). */
 let sessionSubId: string | null = null;
 /** Workflow schedules (HTTP-bound; no transport decision needed). */
@@ -1726,7 +1729,7 @@ function buildWorkflowsSection(): HTMLElement {
       const name = document.createElement("span");
       name.className = "execution-name";
       name.textContent =
-        executionWorkflowNames.get(ex.id) ?? ex.result?.pattern_type ?? "Workflow";
+        executionWorkflowNames.get(ex.id) ?? (ex.result as { patternType?: string; pattern_type?: string } | undefined)?.patternType ?? (ex.result as { pattern_type?: string } | undefined)?.pattern_type ?? "Workflow";
       const when = document.createElement("span");
       when.className = "execution-time";
       when.textContent = formatUnix(ex.started_at);
@@ -1840,6 +1843,7 @@ async function runWorkflow(name: string) {
   workflowError = null;
   workflowStreamState = null;
   const startedFromWork = selectedWorkId;
+  workflowStreamOrigin = startedFromWork;
   renderWorkDetail();
   setSphereState("executing");
   // Streaming first (§14.2): live progress instead of one blocking wait.
@@ -1865,6 +1869,7 @@ function finishWorkflowRun(
   if (token !== currentRunSeq) return;
   workflowStreamActive = null;
   workflowStreamState = null;
+  workflowStreamOrigin = null;
   void (async () => {
     if (error === null) {
       setLoomReachable(true);
@@ -1887,10 +1892,13 @@ function finishWorkflowRun(
         if (sphereState === "completed") setSphereState("idle");
       }, 3000);
     } else {
+      // Capture the name BEFORE clearing state: the error must say which
+      // workflow failed, not an empty placeholder.
+      const failedName = runningWorkflow ?? "";
       try { await refreshExecutionsList(); } catch { /* best-effort */ }
       runningWorkflow = null;
       cancelWorkflow = false;
-      workflowError = `Workflow “${runningWorkflow ?? ""}” failed: ${error}`;
+      workflowError = `Workflow “${failedName}” failed: ${error}`;
       renderWorkDetail();
       setSphereState("error");
       if (isLoomConnectionError(new Error(error))) setLoomReachable(false);
@@ -1904,23 +1912,27 @@ function handleWorkflowStreamEvent(p: StreamEnvelope<WorkflowProgressEvent>) {
     workflowStreamState = {
       progress: p.event.progress ?? workflowStreamState?.progress ?? 0,
       message: p.event.message ?? "",
-      executionId: p.event.execution_id ?? workflowStreamState?.executionId ?? null,
+      executionId: p.event.executionId ?? workflowStreamState?.executionId ?? null,
     };
     renderWorkDetail();
     return;
   }
   const executionId = workflowStreamState?.executionId ?? null;
+  // Attribution comes from the run's captured origin, never from whichever
+  // work is selected when the stream ends (QC-13).
+  const origin = workflowStreamOrigin;
   if (p.kind === "done") {
-    finishWorkflowRun(currentRunSeq, selectedWorkId, executionId, null);
+    finishWorkflowRun(currentRunSeq, origin, executionId, null);
   } else if (p.kind === "cancelled") {
     runningWorkflow = null;
     cancelWorkflow = false;
     workflowStreamActive = null;
     workflowStreamState = null;
+    workflowStreamOrigin = null;
     renderWorkDetail();
     setSphereState("idle");
   } else {
-    finishWorkflowRun(currentRunSeq, selectedWorkId, executionId, p.error ?? "stream failed");
+    finishWorkflowRun(currentRunSeq, origin, executionId, p.error ?? "stream failed");
   }
 }
 
@@ -1980,11 +1992,24 @@ async function runWorkflowUnary(name: string, token: number, startedFromWork: st
 
 /** Live session state: the backend forwards SessionUpdate events while a
     session is selected, so the detail pane reflects server-side changes
-    without polling. */
+    without polling. Changing or clearing the selection cancels the old
+    subscription first (QC-17): stale events must never clear or refresh
+    the new handle. */
 async function ensureSessionSubscription() {
   const id = selectedSessionId;
-  if (!id || !isTauri) return;
+  if (!id || !isTauri) {
+    if (sessionSubId) {
+      const old = sessionSubId;
+      sessionSubId = null;
+      void cancelLoomStream(old).catch(() => { /* already ended */ });
+    }
+    return;
+  }
   if (sessionSubId === `sess-${id}`) return;
+  if (sessionSubId) {
+    const old = sessionSubId;
+    void cancelLoomStream(old).catch(() => { /* already ended */ });
+  }
   sessionSubId = `sess-${id}`;
   try {
     await sessionSubscribe(sessionSubId, id);
@@ -2010,14 +2035,16 @@ function handleAbtestEvent(p: StreamEnvelope<AbTestEvent>) {
   if (!abtestState || p.requestId !== abtestState.requestId) return;
   if (p.kind === "progress" && p.event) {
     const e = p.event;
-    const name = e.provider_name ?? "provider";
+    const name = e.providerName ?? "provider";
     const entry = abtestState.per.get(name) ?? { text: "", finished: false };
-    if (e.content_chunk) entry.text += e.content_chunk;
+    if (e.contentChunk) entry.text += e.contentChunk;
     if (e.finished) {
       entry.finished = true;
       if (typeof e.score === "number") entry.score = e.score;
-      if (typeof e.latency_ms === "number") entry.latencyMs = e.latency_ms;
-      if (typeof e.cost_usd === "number") entry.costUsd = e.cost_usd;
+      // protojson serializes int64 latency_ms as a string on the wire.
+      const latency = typeof e.latencyMs === "string" ? Number(e.latencyMs) : e.latencyMs;
+      if (typeof latency === "number" && Number.isFinite(latency)) entry.latencyMs = latency;
+      if (typeof e.costUsd === "number") entry.costUsd = e.costUsd;
     }
     abtestState.per.set(name, entry);
     if (e.winner) abtestState.winner = e.winner;
@@ -2810,7 +2837,7 @@ function evidenceItems(workId?: string): EvidenceItem[] {
     const text = workflowResultText(ex.result);
     if (!text) continue;
     const name =
-      executionWorkflowNames.get(ex.id) ?? ex.result?.pattern_type ?? "Workflow";
+      executionWorkflowNames.get(ex.id) ?? (ex.result as { patternType?: string; pattern_type?: string } | undefined)?.patternType ?? (ex.result as { pattern_type?: string } | undefined)?.pattern_type ?? "Workflow";
     const detail = text.length > 400 ? `${text.slice(0, 400)}…` : text;
     items.push({
       id: `execution-${ex.id}`,

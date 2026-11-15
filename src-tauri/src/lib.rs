@@ -1136,7 +1136,7 @@ async fn get_loom_status() -> LoomStatus {
     // configured LLM provider, so it gets a longer read timeout, and any
     // 2xx counts as "the server is up" regardless of the body shape.
     let result = tauri::async_runtime::spawn_blocking(|| {
-        loom_http_raw("GET", "/v1/health", None, Duration::from_secs(30))
+        loom_http_raw("GET", "/v1/health", None, Duration::from_secs(30), &[])
     })
     .await;
     let (online, detail) = match result {
@@ -1219,6 +1219,7 @@ fn loom_http_raw(
     path: &str,
     body: Option<String>,
     read_timeout: Duration,
+    extra_headers: &[(&str, &str)],
 ) -> Result<(u16, Vec<u8>), String> {
     let addr = loom_addr();
     let mut stream = TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(2))
@@ -1232,8 +1233,15 @@ fn loom_http_raw(
         .set_write_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
     let body = body.unwrap_or_default();
+    let mut headers = String::from("Content-Type: application/json\r\n");
+    for (name, value) in extra_headers {
+        headers.push_str(name);
+        headers.push_str(": ");
+        headers.push_str(value);
+        headers.push_str("\r\n");
+    }
     let request = format!(
-        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     stream
@@ -1335,16 +1343,29 @@ fn loom_request(
     path: &str,
     body: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    loom_request_with_headers(method, path, body, &[])
+}
+
+/// `loom_request` with extra request headers. Used by the weave path to
+/// assert the slot origin: absent the header the server classifies every
+/// turn as BATCH and it queues at the admission door when the active-turn
+/// ceiling is reached (issue 013).
+fn loom_request_with_headers(
+    method: &str,
+    path: &str,
+    body: Option<String>,
+    extra_headers: &[(&str, &str)],
+) -> Result<serde_json::Value, String> {
     let read_timeout = Duration::from_secs(if body.is_some() { 180 } else { 4 });
     // One retry for transient connection failures on idempotent GETs only
     // (§2.2.5); a failed POST is never replayed — it may have executed.
-    let first = loom_http_raw(method, path, body.clone(), read_timeout);
+    let first = loom_http_raw(method, path, body.clone(), read_timeout, extra_headers);
     let (status, payload) = match first {
         Err(e)
             if method == "GET" && (e.contains("Connection refused") || e.contains("timed out")) =>
         {
             std::thread::sleep(Duration::from_millis(500));
-            loom_http_raw(method, path, body, read_timeout).map_err(|_| e)?
+            loom_http_raw(method, path, body, read_timeout, extra_headers).map_err(|_| e)?
         }
         other => other?,
     };
@@ -1760,7 +1781,14 @@ async fn ask_loom(
     obj.insert("enableTrace".into(), serde_json::Value::Bool(true));
     let body = serde_json::Value::Object(obj).to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        let value = loom_request("POST", "/v1/weave", Some(body))?;
+        // Interactive slot origin: a human is waiting on this turn, so it
+        // must bypass the batch admission door (issue 013).
+        let value = loom_request_with_headers(
+            "POST",
+            "/v1/weave",
+            Some(body),
+            &[("X-Loom-Slot-Origin", "interactive")],
+        )?;
         let text = ["text", "response", "content", "reply", "message"]
             .iter()
             .find_map(|key| {

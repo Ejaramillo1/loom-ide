@@ -1247,21 +1247,26 @@ export const resolveSessionGap = (sessionId: string) =>
 // ---- Workflow streaming, session subscribe, provider A/B (SSE bridges) ----
 
 export interface WorkflowProgressEvent {
-  execution_id?: string;
-  pattern_type?: string;
-  current_agent_id?: string;
+  /** Protojson (grpc-gateway NDJSON) camelCase; int64 arrives as a string. */
+  executionId?: string;
+  patternType?: string;
+  currentAgentId?: string;
   progress?: number;
   message?: string;
+  timestamp?: string | number;
+  partialResults?: unknown[];
 }
 export interface AbTestEvent {
-  provider_name?: string;
-  content_chunk?: string;
+  /** ABTestEvent is flat; the gateway NDJSON wire is protojson camelCase
+      and int64 latency_ms arrives as a JSON string. */
+  providerName?: string;
+  contentChunk?: string;
   finished?: boolean;
   score?: number;
-  latency_ms?: number;
-  cost_usd?: number;
+  latencyMs?: string | number;
+  costUsd?: number;
   winner?: string;
-  ab_test_id?: string;
+  abTestId?: string;
 }
 export interface StreamEnvelope<T> {
   requestId: string;

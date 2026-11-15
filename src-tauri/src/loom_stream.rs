@@ -963,8 +963,16 @@ fn run_stream(
     stream
         .set_write_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
+    // A human is waiting on chat turns: assert the interactive slot origin
+    // so the server bypasses the batch admission door (issue 013). Long-
+    // lived background streams (session/patterns/boards) stay batch.
+    let slot_origin = if event_name == "loom-stream" {
+        "X-Loom-Slot-Origin: interactive\r\n"
+    } else {
+        ""
+    };
     let request = format!(
-        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nAccept: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\n{slot_origin}Content-Type: application/json\r\nAccept: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         body.len(),
         body
     );
