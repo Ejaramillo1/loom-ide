@@ -8,6 +8,10 @@ fn validate(object: &str) -> Result<(), String> {
     Ok(())
 }
 
+// The bench no longer edits text (notes are edited in the Tauri Knowledge
+// surface), so these two functions are no longer registered as commands.
+// The module and its tests stay: native-app parity and vault safety rules.
+#[allow(dead_code)]
 pub fn read(root: &Path, object: &str) -> Result<String, String> {
     validate(object)?;
     let _guard = ACCESS.lock().map_err(|e| e.to_string())?;
@@ -25,6 +29,7 @@ pub fn read(root: &Path, object: &str) -> Result<String, String> {
     Ok(body)
 }
 
+#[allow(dead_code)]
 pub fn save(root: &Path, object: &str, body: &str) -> Result<String, String> {
     validate(object)?;
     if body.trim().is_empty() || body.chars().count() > 600 {

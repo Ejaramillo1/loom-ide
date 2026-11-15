@@ -4,6 +4,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Loom.MemoryPalace
 {
@@ -21,8 +23,10 @@ namespace Loom.MemoryPalace
         static readonly Color Green = Rgb(120, 155, 137);
         static readonly Color Red = Rgb(184, 117, 112);
         static readonly Color Pearl = Rgb(235, 220, 211);
-        // Dark theme palette (from design-tokens.json dark values).
-        static readonly Color DarkDeep = Rgb(29, 27, 26);
+        // Dark theme palette (from design-tokens.json dark values), regraded
+        // for the beauty pass: a near-black blue backdrop (#0A0E14) with cool
+        // dim ambient so blacks stay black and only the rig lights model form.
+        static readonly Color DarkDeep = Rgb(10, 14, 20);
         static readonly Color DarkReading = Rgb(36, 33, 31);
         static readonly Color DarkSurface = Rgb(44, 40, 37);
         static readonly Color DarkText = Rgb(240, 233, 226);
@@ -32,12 +36,19 @@ namespace Loom.MemoryPalace
         static readonly Color DarkGreen = Rgb(147, 177, 159);
         static readonly Color DarkRed = Rgb(211, 146, 138);
         static readonly Color DarkPurple = Rgb(185, 164, 144);
-        static readonly Color DarkSky = Rgb(58, 52, 46);
-        static readonly Color DarkEquator = Rgb(44, 40, 37);
-        static readonly Color DarkGround = Rgb(32, 29, 27);
+        static readonly Color DarkSky = Rgb(26, 32, 42);
+        static readonly Color DarkEquator = Rgb(20, 24, 32);
+        static readonly Color DarkGround = Rgb(12, 15, 22);
         static readonly Color DarkOrbitInner = Rgb(120, 105, 95);
         static readonly Color DarkOrbitOuter = Rgb(100, 88, 80);
         static readonly Color DarkKeyLight = Rgb(255, 240, 225);
+        // The three-point rig colors (§5.5): warm key, cool fill, white rim.
+        static readonly Color FillCool = Rgb(133, 158, 202);
+        static readonly Color RimWhite = Rgb(228, 236, 248);
+        // Emission hero discipline (§5.4): the sphere glows at 2–4× HDR;
+        // every other accent stays at 1–2 so only the state sphere blooms.
+        const float SphereEmission = 2.6f;
+        const float AccentEmission = 1.35f;
 
         static readonly Portal[] Portals =
         {
@@ -57,14 +68,17 @@ namespace Loom.MemoryPalace
         Material benchMaterial;
         Material wallMaterial;
         Material sphereMaterial;
+        Material contactShadowMaterial;
         Light keyLight;
-        Light orbLight;
+        Light fillLight;
+        Light rimLight;
         Color liveText = Text;
         Color liveMuted = Muted;
         Color liveReading = Reading;
         Color liveSurface = Surface;
         string currentTheme = "white";
         string currentState = "idle";
+        Color liveStateColor = Purple;
         Camera sceneCamera;
         Transform sphere;
         MemoryAnchor selected;
@@ -73,26 +87,9 @@ namespace Loom.MemoryPalace
         float distance = 11f;
         float orbitAngle;
         bool reduceMotion;
-        string draft = "";
-        string savedDraft = "";
-        string saveStatus = "";
-        bool saving;
 #if UNITY_WEBGL && !UNITY_EDITOR
-        [DllImport("__Internal")] static extern void LoomMemory(string action, string objectName, string body);
         [DllImport("__Internal")] static extern void LoomNavigate(string objectName);
 #endif
-        [Serializable] sealed class MemoryResult { public bool ok; public string action; public string body; public string message; }
-        public void OnMemoryResult(string json)
-        {
-            var result = JsonUtility.FromJson<MemoryResult>(json);
-            saving = false;
-            saveStatus = result.message;
-            if (result.ok)
-            {
-                if (result.action == "read") draft = result.body;
-                savedDraft = draft;
-            }
-        }
         LocalDataSummary localData;
         GUIStyle titleStyle;
         GUIStyle bodyStyle;
@@ -128,8 +125,14 @@ namespace Loom.MemoryPalace
             if (keyLight)
             {
                 keyLight.color = dark ? DarkKeyLight : Rgb(255, 249, 243);
-                keyLight.intensity = dark ? 0.7f : 0.85f;
+                keyLight.intensity = dark ? 0.9f : 0.85f;
             }
+            if (fillLight)
+            {
+                fillLight.color = FillCool;
+                fillLight.intensity = dark ? 0.32f : 0.22f;
+            }
+            if (rimLight) rimLight.intensity = dark ? 0.55f : 0.35f;
 
             if (floorMaterial) floorMaterial.color = deep;
             if (benchMaterial) benchMaterial.color = surface;
@@ -166,11 +169,13 @@ namespace Loom.MemoryPalace
                 && state != "exploring" && state != "attention" && state != "completed" && state != "error") return;
             currentState = state;
             var color = StateColor(state, currentTheme == "dark");
-            if (orbLight) orbLight.color = color;
+            liveStateColor = color;
             if (sphereMaterial)
             {
                 sphereMaterial.color = Color.Lerp(Pearl, color, 0.4f);
-                sphereMaterial.SetColor("_EmissionColor", color * 0.15f);
+                // HDR emission: the state reads as glow, not as a coloured
+                // ball (§6). The pulse in Update modulates around this base.
+                sphereMaterial.SetColor("_EmissionColor", color * SphereEmission);
             }
         }
 
@@ -246,6 +251,11 @@ namespace Loom.MemoryPalace
                 sphere.Rotate(0f, 1.2f * Time.deltaTime, 0f, Space.World);
                 var pulse = 1f + Mathf.Sin(Time.time * 0.35f) * 0.004f;
                 sphere.localScale = Vector3.one * 2.35f * pulse;
+                // The pulse animates emission, not a light: cheaper and
+                // bloom-stable (§5.4). HDR emission 2–4× makes the sphere
+                // bloom while paper and matte surfaces stay under threshold.
+                if (sphereMaterial)
+                    sphereMaterial.SetColor("_EmissionColor", liveStateColor * (SphereEmission + 0.3f * Mathf.Sin(Time.time * 1.1f)));
                 // The portals orbit the sphere so each can be brought to the
                 // front to select. Hovering or selecting pauses the ring.
                 if (hovered == null && selected == null) orbitAngle += 12f * Time.deltaTime;
@@ -283,23 +293,40 @@ namespace Loom.MemoryPalace
             sceneCamera.fieldOfView = 48f;
             sceneCamera.nearClipPlane = 0.1f;
             sceneCamera.farClipPlane = 80f;
+            // HDR is the prerequisite for bloom (§5.4): without it, emission
+            // clamps at 1.0 and the sphere has nothing to threshold on.
+            sceneCamera.allowHDR = true;
 
             foreach (var light in FindObjectsByType<Light>())
                 Destroy(light.gameObject);
 
-            var key = keyLight = new GameObject("Soft skylight", typeof(Light)).GetComponent<Light>();
+            // Three-point rig (§5.5): warm key from front-left, cool fill
+            // from front-right at ~40%, and a white rim behind the sphere
+            // pointing at the camera so every object gets a separating edge.
+            var key = keyLight = new GameObject("Warm key", typeof(Light)).GetComponent<Light>();
             key.type = LightType.Directional;
-            key.color = Rgb(255, 249, 243);
-            key.intensity = 0.85f;
+            key.color = Rgb(255, 240, 222);
+            key.intensity = 0.9f;
             key.shadows = LightShadows.Soft;
-            key.transform.rotation = Quaternion.Euler(38f, -32f, 0f);
+            key.transform.rotation = Quaternion.Euler(44f, -38f, 0f);
 
-            var glow = orbLight = new GameObject("Orb glow", typeof(Light)).GetComponent<Light>();
-            glow.type = LightType.Point;
-            glow.color = Pearl;
-            glow.intensity = 0.2f;
-            glow.range = 6f;
-            glow.transform.position = new Vector3(0f, 1.4f, 0f);
+            var fill = fillLight = new GameObject("Cool fill", typeof(Light)).GetComponent<Light>();
+            fill.type = LightType.Directional;
+            fill.color = FillCool;
+            fill.intensity = 0.32f;
+            fill.shadows = LightShadows.None;
+            fill.transform.rotation = Quaternion.Euler(30f, 118f, 0f);
+
+            var rim = rimLight = new GameObject("White rim", typeof(Light)).GetComponent<Light>();
+            rim.type = LightType.Spot;
+            rim.color = RimWhite;
+            rim.intensity = 0.55f;
+            rim.range = 30f;
+            rim.spotAngle = 60f;
+            rim.shadows = LightShadows.None;
+            rim.transform.SetPositionAndRotation(
+                new Vector3(0f, 2.6f, 4.2f),
+                Quaternion.LookRotation(new Vector3(0f, 0.6f, -1f).normalized));
 
             var floor = GameObject.CreatePrimitive(PrimitiveType.Plane);
             floor.name = "Reflective floor";
@@ -324,9 +351,36 @@ namespace Loom.MemoryPalace
             sphere.localScale = Vector3.one * 2.35f;
             sphere.GetComponent<Renderer>().sharedMaterial = sphereMaterial = Material("Loom sphere", Rgb(248, 238, 230), 0.68f, 0.02f);
             sphereMaterial.SetFloat("_Metallic", 0.12f);
+            // Shader-variant canary (§7.3): emission is enabled BY DEFAULT on
+            // the shipped sphere material, so the _EMISSION variant survives
+            // IL2CPP stripping and runtime keywords never silently no-op.
+            sphereMaterial.EnableKeyword("_EMISSION");
 
             CreateOrbit("Inner orbit", 4.1f, 1.05f, Rgb(216, 191, 180), 0f);
             CreateOrbit("Outer orbit", 5.75f, 1.35f, Rgb(221, 213, 208), 17f);
+
+            // One global grade (§5.6): ACES + bloom + gentle grade + vignette
+            // in a single profile, versionable and swapped via the Volume.
+            var gradeObject = new GameObject("Bench grade", typeof(Volume));
+            var grade = gradeObject.GetComponent<Volume>();
+            grade.isGlobal = true;
+            var profile = ScriptableObject.CreateInstance<VolumeProfile>();
+            var bloom = profile.Add<Bloom>(true);
+            bloom.threshold.Override(1.05f);
+            bloom.intensity.Override(0.45f);
+            bloom.scatter.Override(0.7f);
+            bloom.highQualityFiltering.Override(false);
+            var tonemapping = profile.Add<Tonemapping>(true);
+            tonemapping.mode.Override(TonemappingMode.ACES);
+            var adjustments = profile.Add<ColorAdjustments>(true);
+            adjustments.postExposure.Override(0.1f);
+            adjustments.contrast.Override(15f);
+            adjustments.saturation.Override(-5f);
+            adjustments.colorFilter.Override(new Color(1f, 0.95f, 0.9f));
+            var vignette = profile.Add<Vignette>(true);
+            vignette.intensity.Override(0.25f);
+            vignette.smoothness.Override(0.4f);
+            grade.sharedProfile = profile;
 
             var placements = new[] {
                 new Vector3(0, 0.36f, -2.65f), new Vector3(-2.85f, 0.36f, 1.35f),
@@ -337,6 +391,43 @@ namespace Loom.MemoryPalace
 
             ApplyTheme(currentTheme);
             MoveCamera();
+        }
+
+        // A soft radial-gradient blob under an object (§5.7's Low-tier
+        // grounding cue, used here for every tier): grounds props on the desk
+        // for one transparent draw each, before the flask in the sort order.
+        Renderer ContactShadow(Transform root)
+        {
+            if (!contactShadowMaterial)
+            {
+                var template = Resources.Load<Material>("LoomGlass");
+                contactShadowMaterial = new Material(template) { name = "Contact shadow" };
+                contactShadowMaterial.color = Color.white;
+                var tex = new Texture2D(128, 128) { wrapMode = TextureWrapMode.Clamp };
+                for (var y = 0; y < 128; y++)
+                {
+                    for (var x = 0; x < 128; x++)
+                    {
+                        var dx = (x - 63.5f) / 63.5f;
+                        var dy = (y - 63.5f) / 63.5f;
+                        var d = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy) / 1.414f);
+                        tex.SetPixel(x, y, new Color(0f, 0f, 0f, d * d * 0.45f));
+                    }
+                }
+                tex.Apply();
+                contactShadowMaterial.SetTexture("_BaseMap", tex);
+                contactShadowMaterial.renderQueue = 3000;
+            }
+            var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            quad.name = "Contact shadow";
+            quad.transform.SetParent(root, false);
+            quad.transform.localPosition = new Vector3(0f, -0.008f, 0f);
+            quad.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            quad.transform.localScale = new Vector3(2.6f, 2.6f, 1f);
+            var renderer = quad.GetComponent<Renderer>();
+            renderer.sharedMaterial = contactShadowMaterial;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            return renderer;
         }
 
         MemoryAnchor CreateAnchor(Portal portal, Vector3 position)
@@ -350,7 +441,16 @@ namespace Loom.MemoryPalace
             root.transform.rotation = outward.sqrMagnitude > 0.0001f
                 ? Quaternion.LookRotation(-outward.normalized) * Quaternion.Euler(0f, yaw, 0f)
                 : Quaternion.Euler(0f, yaw, 0f);
-            var accent = BuildPhysicalPortal(portal.Name, root.transform, Material(portal.Name, portal.Color, 0.42f, 0.015f));
+            var accentMaterial = Material(portal.Name, portal.Color, 0.42f, 0.015f);
+            // One reserved accent per object (§5.4): emissive at 1–2× HDR so
+            // it reads as a soft glow while the sphere's 2–4× stays the hero.
+            accentMaterial.EnableKeyword("_EMISSION");
+            accentMaterial.SetColor("_EmissionColor", portal.Color * AccentEmission);
+            var accent = BuildPhysicalPortal(portal.Name, root.transform, accentMaterial);
+
+            // Grounding cue (§5.7): a soft contact shadow under the object
+            // so props sit on the desk instead of floating in black.
+            ContactShadow(root.transform);
 
             var label = new GameObject("Label", typeof(TextMesh)).GetComponent<TextMesh>();
             label.transform.position = position + Vector3.up * 1.05f;
@@ -379,11 +479,14 @@ namespace Loom.MemoryPalace
         // Physical parts share URP materials; only the accent follows the portal palette.
         Renderer BuildPhysicalPortal(string key, Transform root, Material accent)
         {
-            var paper = Material("Ivory paper", Rgb(229, 218, 195), 0.18f, 0f);
+            // PBR signatures per surface (§5.2): paper matte, metal bright,
+            // wood in between — so each reads under the same light instead
+            // of six grey primitives.
+            var paper = Material("Ivory paper", Rgb(229, 218, 195), 0.25f, 0f);
             var ink = Material("Graphite", Rgb(47, 51, 54), 0.3f, 0f);
-            var metal = Material("Brushed nickel", Rgb(150, 159, 162), 0.64f, 0f);
-            metal.SetFloat("_Metallic", 0.72f);
-            var wood = Material("Oiled walnut", Rgb(105, 66, 39), 0.3f, 0f);
+            var metal = Material("Brushed nickel", Rgb(150, 159, 162), 0.72f, 0f);
+            metal.SetFloat("_Metallic", 0.88f);
+            var wood = Material("Oiled walnut", Rgb(105, 66, 39), 0.37f, 0f);
             var grain = new Texture2D(128, 64) { wrapMode = TextureWrapMode.Repeat };
             for (var y = 0; y < grain.height; y++)
                 for (var x = 0; x < grain.width; x++)
@@ -396,6 +499,13 @@ namespace Loom.MemoryPalace
             var glassTemplate = Resources.Load<Material>("LoomGlass");
             if (!glassTemplate) throw new InvalidOperationException("Loom glass material resource is missing");
             var glass = new Material(glassTemplate) { name = "Optical glass" };
+            // Faked-glass discipline (§5.3): one transparent in a fixed slot —
+            // after the contact shadows (3000), before nothing else. Both the
+            // flask and the lens share it, so they never sort against each
+            // other's geometry.
+            glass.SetFloat("_Metallic", 0.1f);
+            glass.SetFloat("_Smoothness", 0.85f);
+            glass.renderQueue = 3010;
 
             Renderer Box(string name, Transform parent, Vector3 p, Vector3 size, Material mat) => Part(name, parent, PrimitiveType.Cube, p, size, mat);
             Renderer Ball(string name, Transform parent, Vector3 p, Vector3 size, Material mat) => Part(name, parent, PrimitiveType.Sphere, p, size, mat);
@@ -618,16 +728,11 @@ namespace Loom.MemoryPalace
             if (hovered != null && mouse.leftButton.wasPressedThisFrame)
             {
                 selected = hovered;
+                // The bench navigates; it does not edit text. Selecting an
+                // object opens the matching Tauri view (Notes editing lives
+                // in the Tauri Knowledge surface, not in IMGUI).
 #if UNITY_WEBGL && !UNITY_EDITOR
-                draft = savedDraft = "";
-                saving = true;
-                saveStatus = "Opening memory…";
-                LoomMemory("read", selected.Key, "");
                 LoomNavigate(selected.Key);
-#else
-                draft = PlayerPrefs.GetString($"loom.memory.{selected.Key}", "");
-                savedDraft = draft;
-                saveStatus = "";
 #endif
             }
         }
@@ -635,35 +740,23 @@ namespace Loom.MemoryPalace
         void OnGUI()
         {
             EnsureStyles();
-            // The scene title and instructions live in the host's HTML header,
-            // so Unity reserves its surface for the objects. The object-memory
-            // note panel is drawn at its real size — no matrix scaling that
-            // would shrink the text below its reading size.
+            // The bench navigates and shows state; text editing lives in the
+            // Tauri Notes view. The read-only card is drawn at its real size
+            // — no matrix scaling that would shrink text below reading size.
             if (selected == null) return;
-            var panel = new Rect(Screen.width - 348f, 20f, 328f, 360f);
+            var panel = new Rect(Screen.width - 348f, 20f, 328f, 168f);
             GUI.Box(panel, GUIContent.none);
             GUI.Label(new Rect(panel.x + 20f, panel.y + 18f, panel.width - 40f, 32f), selected.Key, titleStyle);
-            GUI.Label(new Rect(panel.x + 20f, panel.y + 56f, panel.width - 40f, 50f), selected.Description, bodyStyle);
-            GUI.Label(new Rect(panel.x + 20f, panel.y + 116f, panel.width - 40f, 24f), "Work kept with this object", smallStyle);
-            GUI.enabled = !saving;
-            draft = GUI.TextArea(new Rect(panel.x + 20f, panel.y + 144f, panel.width - 40f, 92f), draft, 600);
-            if (GUI.Button(new Rect(panel.x + 20f, panel.y + 248f, 132f, 34f), "Keep at bench"))
+            GUI.Label(new Rect(panel.x + 20f, panel.y + 54f, panel.width - 40f, 50f), selected.Description, bodyStyle);
+            GUI.Label(new Rect(panel.x + 20f, panel.y + 104f, panel.width - 40f, 24f), "Notes are edited in the Tauri Notes view.", smallStyle);
+            if (GUI.Button(new Rect(panel.x + 20f, panel.y + 130f, 176f, 30f), "Open note in Notes"))
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
-                saving = true;
-                saveStatus = "Saving to vault…";
-                LoomMemory("save", selected.Key, draft);
-#else
-                PlayerPrefs.SetString($"loom.memory.{selected.Key}", draft);
-                PlayerPrefs.Save();
-                savedDraft = draft;
-                saveStatus = "Saved locally in this player.";
+                LoomNavigate("Notes");
 #endif
+                selected = null;
             }
-            GUI.enabled = !saving;
-            if (GUI.Button(new Rect(panel.x + 164f, panel.y + 248f, 140f, 34f), draft == savedDraft ? "Close" : "Discard & close")) selected = null;
-            GUI.enabled = true;
-            GUI.Label(new Rect(panel.x + 20f, panel.y + 290f, panel.width - 40f, 62f), saveStatus, bodyStyle);
+            if (GUI.Button(new Rect(panel.x + 210f, panel.y + 130f, 98f, 30f), "Close")) selected = null;
         }
 
         void EnsureStyles()

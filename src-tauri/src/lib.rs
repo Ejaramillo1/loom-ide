@@ -33,16 +33,6 @@ mod spatial;
 mod store;
 mod workspace;
 
-#[tauri::command]
-fn save_spatial_memory(object: String, body: String) -> Result<String, String> {
-    let root = knowledge::default_root();
-    spatial::save(&root, &object, &body)
-}
-#[tauri::command]
-fn read_spatial_memory(object: String) -> Result<String, String> {
-    let root = knowledge::default_root();
-    spatial::read(&root, &object)
-}
 use store::{
     AcceptanceCriterion, AttentionItem, Intent, IntentStore, WorkItem, WorkStore, autonomy_rank,
 };
@@ -2010,8 +2000,6 @@ pub fn run() {
             knowledge::knowledge_signature,
             knowledge::knowledge_canvas_layout_save,
             knowledge::knowledge_canvas_layout_load,
-            save_spatial_memory,
-            read_spatial_memory,
             get_work_items,
             add_work_item,
             set_work_status,
