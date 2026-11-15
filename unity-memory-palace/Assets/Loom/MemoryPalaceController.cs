@@ -139,7 +139,6 @@ namespace Loom.MemoryPalace
             foreach (var anchor in anchors)
             {
                 var color = dark ? PortalColorDark(anchor.Key) : PortalColorWhite(anchor.Key);
-                anchor.GetComponent<Renderer>().material.color = color;
                 anchor.SetColor(color);
             }
             foreach (var label in portalLabels) label.color = text;
@@ -325,13 +324,12 @@ namespace Loom.MemoryPalace
             CreateOrbit("Inner orbit", 4.1f, 1.05f, Rgb(216, 191, 180), 0f);
             CreateOrbit("Outer orbit", 5.75f, 1.35f, Rgb(221, 213, 208), 17f);
 
-            for (var i = 0; i < Portals.Length; i++)
-            {
-                var angle = i * Mathf.PI * 2f / Portals.Length - Mathf.PI * 0.5f;
-                var radius = i % 2 == 0 ? 4.3f : 5.4f;
-                var position = new Vector3(Mathf.Cos(angle) * radius, 0.72f, Mathf.Sin(angle) * radius);
-                anchors.Add(CreateAnchor(Portals[i], position));
-            }
+            var placements = new[] {
+                new Vector3(0, 0.36f, -2.65f), new Vector3(-2.85f, 0.36f, 1.35f),
+                new Vector3(2.7f, 0.36f, -0.1f), new Vector3(2.8f, 0.36f, -2.55f),
+                new Vector3(2.65f, 0.36f, 2.05f), new Vector3(-2.8f, 0.36f, -1.2f),
+            };
+            for (var i = 0; i < Portals.Length; i++) anchors.Add(CreateAnchor(Portals[i], placements[i]));
 
             ApplyTheme(currentTheme);
             MoveCamera();
@@ -339,28 +337,10 @@ namespace Loom.MemoryPalace
 
         MemoryAnchor CreateAnchor(Portal portal, Vector3 position)
         {
-            var shape = portal.Name switch
-            {
-                "Work" => PrimitiveType.Cylinder,
-                "Experiments" => PrimitiveType.Cylinder,
-                "Evidence" => PrimitiveType.Capsule,
-                "Agents" => PrimitiveType.Sphere,
-                _ => PrimitiveType.Cube,
-            };
-            var root = GameObject.CreatePrimitive(shape);
-            root.name = $"Memory · {portal.Name}";
+            var root = new GameObject($"Memory · {portal.Name}");
             root.transform.position = position;
-            root.transform.localScale = portal.Name switch
-            {
-                "Work" => new Vector3(0.95f, 0.42f, 0.95f),
-                "Code" => new Vector3(1.1f, 1.45f, 1.1f),
-                "Experiments" => new Vector3(0.72f, 0.9f, 0.72f),
-                "Evidence" => new Vector3(0.72f, 0.92f, 0.72f),
-                "Agents" => Vector3.one * 1.08f,
-                _ => new Vector3(1.45f, 0.42f, 1.1f),
-            };
-            root.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
-            root.GetComponent<Renderer>().sharedMaterial = Material(portal.Name, portal.Color, 0.3f, 0.015f);
+            root.transform.rotation = Quaternion.Euler(0f, portal.Name == "Code" ? 15f : -12f, 0f);
+            var accent = BuildPhysicalPortal(portal.Name, root.transform, Material(portal.Name, portal.Color, 0.42f, 0.015f));
 
             var label = new GameObject("Label", typeof(TextMesh)).GetComponent<TextMesh>();
             label.transform.position = position + Vector3.up * 1.05f;
@@ -382,8 +362,192 @@ namespace Loom.MemoryPalace
 #if UNITY_WEBGL && !UNITY_EDITOR
             description = portal.Description;
 #endif
-            anchor.Initialize(portal.Name, description, portal.Color, label.transform);
+            anchor.Initialize(portal.Name, description, portal.Color, label.transform, accent);
             return anchor;
+        }
+
+        // Physical parts share URP materials; only the accent follows the portal palette.
+        Renderer BuildPhysicalPortal(string key, Transform root, Material accent)
+        {
+            var paper = Material("Ivory paper", Rgb(229, 218, 195), 0.18f, 0f);
+            var ink = Material("Graphite", Rgb(47, 51, 54), 0.3f, 0f);
+            var metal = Material("Brushed nickel", Rgb(150, 159, 162), 0.64f, 0f);
+            metal.SetFloat("_Metallic", 0.72f);
+            var wood = Material("Oiled walnut", Rgb(105, 66, 39), 0.3f, 0f);
+            var grain = new Texture2D(128, 64) { wrapMode = TextureWrapMode.Repeat };
+            for (var y = 0; y < grain.height; y++)
+                for (var x = 0; x < grain.width; x++)
+                {
+                    var line = Mathf.Sin(y * 1.9f + Mathf.Sin(x * 0.065f) * 1.3f);
+                    grain.SetPixel(x, y, Color.Lerp(Rgb(150, 125, 99), Color.white, (line + 1f) * 0.5f));
+                }
+            grain.Apply();
+            wood.SetTexture("_BaseMap", grain);
+            var glassTemplate = Resources.Load<Material>("LoomGlass");
+            if (!glassTemplate) throw new InvalidOperationException("Loom glass material resource is missing");
+            var glass = new Material(glassTemplate) { name = "Optical glass" };
+
+            Renderer Box(string name, Transform parent, Vector3 p, Vector3 size, Material mat) => Part(name, parent, PrimitiveType.Cube, p, size, mat);
+            Renderer Ball(string name, Transform parent, Vector3 p, Vector3 size, Material mat) => Part(name, parent, PrimitiveType.Sphere, p, size, mat);
+            switch (key)
+            {
+                case "Notes":
+                {
+                    var spine = Box("Cloth spine", root, new Vector3(0, 0.12f, 0), new Vector3(0.12f, 0.15f, 1.23f), accent);
+                    for (var side = -1; side <= 1; side += 2)
+                    {
+                        var leaf = new GameObject(side < 0 ? "Left leaves" : "Right leaves").transform;
+                        leaf.SetParent(root, false);
+                        leaf.localPosition = new Vector3(side * 0.43f, 0.12f, 0);
+                        leaf.localRotation = Quaternion.Euler(0, 0, side * 7f);
+                        Box("Leather cover", leaf, Vector3.zero, new Vector3(0.87f, 0.045f, 1.25f), wood);
+                        for (var i = 0; i < 6; i++)
+                            Box("Page edge", leaf, new Vector3(0, 0.035f + i * 0.014f, 0), new Vector3(0.82f - i * 0.008f, 0.012f, 1.17f), paper);
+                        for (var i = 0; i < 9; i++)
+                            Box("Ruled paper", leaf, new Vector3(0, 0.115f, -0.43f + i * 0.1f), new Vector3(0.65f, 0.002f, 0.003f), metal);
+                    }
+                    Box("Ribbon bookmark", root, new Vector3(0.08f, 0.1f, -0.65f), new Vector3(0.06f, 0.012f, 0.32f), accent);
+                    var pencil = Part("Pencil", root, PrimitiveType.Cylinder, new Vector3(1.02f, 0.08f, 0), new Vector3(0.045f, 0.52f, 0.045f), wood);
+                    pencil.transform.localRotation = Quaternion.Euler(90, 0, -12);
+                    return spine;
+                }
+                case "Code":
+                {
+                    Box("Aluminium laptop base", root, new Vector3(0, 0.09f, 0), new Vector3(1.65f, 0.13f, 1.05f), metal);
+                    Box("Keyboard well", root, new Vector3(0, 0.16f, 0.15f), new Vector3(1.4f, 0.012f, 0.49f), ink);
+                    for (var row = 0; row < 4; row++)
+                        for (var col = 0; col < 11; col++)
+                            Box("Key", root, new Vector3(-0.62f + col * 0.124f, 0.178f, -0.025f + row * 0.115f), new Vector3(0.103f, 0.02f, 0.085f), metal);
+                    Box("Trackpad", root, new Vector3(0, 0.161f, -0.32f), new Vector3(0.52f, 0.009f, 0.24f), ink);
+                    var lid = new GameObject("Hinged display").transform;
+                    lid.SetParent(root, false); lid.localPosition = new Vector3(0, 0.15f, 0.46f); lid.localRotation = Quaternion.Euler(14, 0, 0);
+                    Box("Display casing", lid, new Vector3(0, 0.55f, 0), new Vector3(1.65f, 1.1f, 0.07f), metal);
+                    Box("Black bezel", lid, new Vector3(0, 0.55f, -0.041f), new Vector3(1.54f, 0.99f, 0.012f), ink);
+                    var screen = Box("Unlit screen", lid, new Vector3(0, 0.57f, -0.05f), new Vector3(1.42f, 0.84f, 0.008f), accent);
+                    Ball("Camera lens", lid, new Vector3(0, 1.055f, -0.05f), Vector3.one * 0.025f, ink);
+                    Box("Screen reflection", lid, new Vector3(0, 0.94f, -0.057f), new Vector3(1.3f, 0.012f, 0.003f), metal);
+                    return screen;
+                }
+                case "Work":
+                {
+                    Box("Toolbox floor", root, new Vector3(0, 0.08f, 0), new Vector3(1.85f, 0.14f, 1.02f), wood);
+                    for (var side = -1; side <= 1; side += 2)
+                    {
+                        for (var row = 0; row < 3; row++)
+                            Box("Side plank", root, new Vector3(0, 0.21f + row * 0.16f, side * 0.47f), new Vector3(1.85f, 0.15f, 0.09f), wood);
+                        Box("Raised end", root, new Vector3(side * 0.86f, 0.51f, 0), new Vector3(0.12f, 0.91f, 0.94f), wood);
+                        for (var z = -1; z <= 1; z += 2)
+                        {
+                            Box("Corner strap", root, new Vector3(side * 0.76f, 0.35f, z * 0.523f), new Vector3(0.1f, 0.53f, 0.018f), metal);
+                            for (var y = 0; y < 2; y++) Ball("Rivet", root, new Vector3(side * 0.76f, 0.15f + y * 0.38f, z * 0.539f), Vector3.one * 0.04f, ink);
+                        }
+                    }
+                    var handle = Part("Wooden carrying handle", root, PrimitiveType.Cylinder, new Vector3(0, 0.98f, 0), new Vector3(0.14f, 0.85f, 0.14f), wood);
+                    handle.transform.localRotation = Quaternion.Euler(0, 0, 90);
+                    var hammer = new GameObject("Hammer").transform; hammer.SetParent(root, false); hammer.localPosition = new Vector3(-0.3f, 0.5f, 0.15f); hammer.localRotation = Quaternion.Euler(0, 0, -25);
+                    Box("Hammer shaft", hammer, Vector3.zero, new Vector3(0.08f, 0.7f, 0.09f), wood);
+                    Box("Hammer head", hammer, new Vector3(0, 0.35f, 0), new Vector3(0.42f, 0.16f, 0.17f), metal);
+                    var tool = Box("Screwdriver grip", root, new Vector3(0.4f, 0.67f, -0.17f), new Vector3(0.13f, 0.33f, 0.13f), accent);
+                    Box("Screwdriver shaft", root, new Vector3(0.4f, 0.38f, -0.17f), new Vector3(0.035f, 0.3f, 0.035f), metal);
+                    return tool;
+                }
+                case "Experiments":
+                {
+                    Lathe("Borosilicate flask", root, new[] { new Vector2(0, 0.06f), new Vector2(0.57f, 0.06f), new Vector2(0.62f, 0.13f), new Vector2(0.59f, 0.22f), new Vector2(0.2f, 1.12f), new Vector2(0.18f, 1.55f), new Vector2(0.23f, 1.57f), new Vector2(0.23f, 1.63f), new Vector2(0.145f, 1.63f), new Vector2(0.145f, 1.16f), new Vector2(0.54f, 0.18f), new Vector2(0, 0.13f) }, glass);
+                    var liquid = Lathe("Tinted glass base", root, new[] { new Vector2(0, 0.14f), new Vector2(0.52f, 0.14f), new Vector2(0.44f, 0.4f), new Vector2(0, 0.4f) }, accent);
+                    Ring("Rolled glass lip", root, new Vector3(0, 1.6f, 0), 0.19f, 0.035f, metal);
+                    for (var i = 0; i < 4; i++)
+                        Box("Etched graduation", root, new Vector3(0, 0.45f + i * 0.13f, -0.5f + i * 0.058f), new Vector3(i % 2 == 0 ? 0.21f : 0.12f, 0.012f, 0.012f), paper);
+                    return liquid;
+                }
+                case "Agents":
+                {
+                    for (var side = -1; side <= 1; side += 2)
+                    {
+                        Part("Boot", root, PrimitiveType.Capsule, new Vector3(side * 0.27f, 0.14f, -0.08f), new Vector3(0.29f, 0.16f, 0.45f), ink);
+                        Part("Leg", root, PrimitiveType.Cylinder, new Vector3(side * 0.27f, 0.37f, 0), new Vector3(0.14f, 0.16f, 0.14f), metal);
+                        Ball("Shoulder joint", root, new Vector3(side * 0.53f, 0.84f, 0), Vector3.one * 0.22f, metal);
+                        var arm = Part("Arm", root, PrimitiveType.Capsule, new Vector3(side * 0.62f, 0.63f, -0.02f), new Vector3(0.17f, 0.24f, 0.17f), paper);
+                        arm.transform.localRotation = Quaternion.Euler(0, 0, side * 16);
+                        Ball("Hand", root, new Vector3(side * 0.68f, 0.4f, -0.02f), Vector3.one * 0.21f, metal);
+                    }
+                    Ball("Ceramic torso", root, new Vector3(0, 0.74f, 0), new Vector3(0.91f, 0.8f, 0.58f), paper);
+                    var badge = Box("Chest inset", root, new Vector3(0, 0.8f, -0.3f), new Vector3(0.38f, 0.25f, 0.04f), accent);
+                    Part("Neck", root, PrimitiveType.Cylinder, new Vector3(0, 1.13f, 0), new Vector3(0.23f, 0.1f, 0.23f), metal);
+                    Ball("Rounded head", root, new Vector3(0, 1.43f, 0), new Vector3(1f, 0.66f, 0.62f), paper);
+                    Ball("Dark faceplate", root, new Vector3(0, 1.43f, -0.27f), new Vector3(0.8f, 0.42f, 0.16f), ink);
+                    for (var side = -1; side <= 1; side += 2) Ball("Eye lens", root, new Vector3(side * 0.21f, 1.46f, -0.35f), new Vector3(0.13f, 0.16f, 0.055f), accent);
+                    Part("Antenna", root, PrimitiveType.Cylinder, new Vector3(0.22f, 1.86f, 0), new Vector3(0.025f, 0.13f, 0.025f), metal);
+                    Ball("Antenna cap", root, new Vector3(0.22f, 1.99f, 0), Vector3.one * 0.09f, accent);
+                    return badge;
+                }
+                default: // Evidence: blank documents and an optical instrument, never invented results.
+                {
+                    for (var i = 0; i < 4; i++)
+                    {
+                        var sheet = Box("Document", root, new Vector3(0, 0.025f + i * 0.027f, 0), new Vector3(1.35f, 0.02f, 1.45f), paper);
+                        sheet.transform.localRotation = Quaternion.Euler(0, i * 7 - 10, 0);
+                    }
+                    var magnifier = new GameObject("Magnifying glass").transform; magnifier.SetParent(root, false);
+                    magnifier.localPosition = new Vector3(-0.12f, 0.22f, 0.15f); magnifier.localRotation = Quaternion.Euler(-12, -28, 0);
+                    Ring("Brass lens rim", magnifier, Vector3.zero, 0.45f, 0.045f, metal);
+                    Part("Glass lens", magnifier, PrimitiveType.Sphere, Vector3.zero, new Vector3(0.86f, 0.055f, 0.86f), glass);
+                    var ferrule = Part("Handle ferrule", magnifier, PrimitiveType.Cylinder, new Vector3(0, 0, -0.54f), new Vector3(0.12f, 0.12f, 0.12f), metal);
+                    ferrule.transform.localRotation = Quaternion.Euler(90, 0, 0);
+                    var grip = Part("Magnifier handle", magnifier, PrimitiveType.Capsule, new Vector3(0, 0, -0.9f), new Vector3(0.15f, 0.26f, 0.15f), accent);
+                    grip.transform.localRotation = Quaternion.Euler(90, 0, 0);
+                    Box("Document clip", root, new Vector3(0.47f, 0.14f, 0.59f), new Vector3(0.25f, 0.04f, 0.18f), metal);
+                    return grip;
+                }
+            }
+        }
+
+        static Renderer Part(string name, Transform parent, PrimitiveType shape, Vector3 position, Vector3 scale, Material material)
+        {
+            var part = GameObject.CreatePrimitive(shape);
+            part.name = name; part.transform.SetParent(parent, false);
+            part.transform.localPosition = position; part.transform.localScale = scale;
+            var renderer = part.GetComponent<Renderer>(); renderer.sharedMaterial = material;
+            return renderer;
+        }
+
+        static Renderer Ring(string name, Transform parent, Vector3 position, float radius, float thickness, Material material)
+        {
+            var profile = new Vector2[17];
+            for (var i = 0; i < profile.Length; i++)
+            {
+                var angle = i * Mathf.PI * 2 / (profile.Length - 1);
+                profile[i] = new Vector2(radius + Mathf.Cos(angle) * thickness, Mathf.Sin(angle) * thickness);
+            }
+            var ring = Lathe(name, parent, profile, material);
+            ring.transform.localPosition = position;
+            return ring;
+        }
+
+        static Renderer Lathe(string name, Transform parent, Vector2[] profile, Material material)
+        {
+            const int segments = 48;
+            var vertices = new Vector3[profile.Length * (segments + 1)];
+            var triangles = new int[(profile.Length - 1) * segments * 6];
+            var cursor = 0;
+            for (var row = 0; row < profile.Length; row++)
+                for (var col = 0; col <= segments; col++)
+                {
+                    var angle = col * Mathf.PI * 2 / segments;
+                    vertices[row * (segments + 1) + col] = new Vector3(Mathf.Cos(angle) * profile[row].x, profile[row].y, Mathf.Sin(angle) * profile[row].x);
+                    if (row == profile.Length - 1 || col == segments) continue;
+                    var a = row * (segments + 1) + col; var b = a + segments + 1;
+                    triangles[cursor++] = a; triangles[cursor++] = b; triangles[cursor++] = a + 1;
+                    triangles[cursor++] = b; triangles[cursor++] = b + 1; triangles[cursor++] = a + 1;
+                }
+            var mesh = new Mesh { name = name, vertices = vertices, triangles = triangles };
+            mesh.RecalculateNormals(); mesh.RecalculateBounds();
+            var part = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider));
+            part.transform.SetParent(parent, false);
+            part.GetComponent<MeshFilter>().sharedMesh = mesh;
+            part.GetComponent<MeshCollider>().sharedMesh = mesh;
+            var renderer = part.GetComponent<Renderer>(); renderer.sharedMaterial = material;
+            return renderer;
         }
 
         void CreateOrbit(string name, float radius, float height, Color color, float tilt)
@@ -423,7 +587,9 @@ namespace Loom.MemoryPalace
         {
             var target = new Vector3(0f, 1.25f, 0f);
             var parallax = reduceMotion ? Vector2.zero : look;
-            var desired = new Vector3(parallax.x * 0.25f, 4.8f + parallax.y * 0.12f, -distance);
+            // Keep all six tools within the narrower center column without changing user zoom.
+            var framing = Mathf.Max(1f, 1.1f / sceneCamera.aspect);
+            var desired = new Vector3(parallax.x * 0.25f, 1.25f + 3.55f * framing + parallax.y * 0.12f, -distance * framing);
             sceneCamera.transform.position = Vector3.Lerp(sceneCamera.transform.position, desired, reduceMotion ? 1f : Time.deltaTime * 1.8f);
             sceneCamera.transform.rotation = Quaternion.Slerp(sceneCamera.transform.rotation,
                 Quaternion.LookRotation(target - sceneCamera.transform.position), reduceMotion ? 1f : Time.deltaTime * 3.5f);
@@ -438,7 +604,7 @@ namespace Loom.MemoryPalace
                 && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
 
             var ray = sceneCamera.ScreenPointToRay(mouse.position.ReadValue());
-            if (Physics.Raycast(ray, out var hit, 100f)) hovered = hit.collider.GetComponent<MemoryAnchor>();
+            if (Physics.Raycast(ray, out var hit, 100f)) hovered = hit.collider.GetComponentInParent<MemoryAnchor>();
             if (hovered != null && mouse.leftButton.wasPressedThisFrame)
             {
                 selected = hovered;
@@ -621,19 +787,21 @@ namespace Loom.MemoryPalace
         Color color;
         float phase;
         Transform label;
+        Renderer accent;
         public string Key { get; private set; }
         public string Description { get; private set; }
 
-        public void SetColor(Color anchorColor) { color = anchorColor; }
+        public void SetColor(Color anchorColor) { color = anchorColor; if (accent) accent.sharedMaterial.color = color; }
 
         public void SetDescription(string description) { Description = description; }
 
-        public void Initialize(string key, string description, Color anchorColor, Transform anchorLabel)
+        public void Initialize(string key, string description, Color anchorColor, Transform anchorLabel, Renderer accentRenderer)
         {
             Key = key;
             Description = description;
             color = anchorColor;
             label = anchorLabel;
+            accent = accentRenderer;
             basePosition = transform.position;
             baseScale = transform.localScale;
             phase = Mathf.Abs(key.GetHashCode() % 1000) * 0.01f;
@@ -647,12 +815,11 @@ namespace Loom.MemoryPalace
             transform.localScale = Vector3.Lerp(transform.localScale, baseScale * (selected ? 1.06f : hovered ? 1.03f : 1f), reduceMotion ? 1f : Time.deltaTime * 6f);
             if (label && Camera.main)
             {
-                label.position = transform.position + Vector3.up * 0.95f;
+                label.position = transform.position + new Vector3(0f, 0.08f, -0.96f);
                 label.rotation = Quaternion.LookRotation(label.position - Camera.main.transform.position);
             }
-            var renderer = GetComponent<Renderer>();
-            renderer.material.SetColor("_EmissionColor", color * (selected ? 0.10f : hovered ? 0.055f : 0.015f));
-            if (!reduceMotion) transform.Rotate(0f, (selected ? 2f : 0.6f) * Time.deltaTime, 0f, Space.World);
+            accent.sharedMaterial.SetColor("_EmissionColor", color * (selected ? 0.10f : hovered ? 0.055f : 0.015f));
+            // Tools keep their useful orientation; the shared lift still signals hover/selection.
         }
     }
 }
