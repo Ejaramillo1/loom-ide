@@ -77,6 +77,7 @@ type ChatStubs = {
   askLoomStream: ReturnType<typeof vi.fn>;
   askLoom: ReturnType<typeof vi.fn>;
   recordRun: ReturnType<typeof vi.fn>;
+  composeWeaveQuery: ReturnType<typeof vi.fn>;
 };
 
 function defaultStubs(): ChatStubs {
@@ -102,6 +103,7 @@ function defaultStubs(): ChatStubs {
     askLoomStream: vi.fn(() => new Promise<void>(() => {})),
     askLoom: vi.fn(async () => ({ text: "unary reply" })),
     recordRun: vi.fn(),
+    composeWeaveQuery: vi.fn((clean: string) => ({ query: clean, attached: false, truncated: false })),
   };
 }
 
@@ -151,7 +153,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     "refreshSessions", "refreshAgents", "setWorkSession",
     "renderWorkList", "renderSessionBar", "loadWorkArtifacts",
     "getLoomStatus", "answerClarification", "buildChatContext",
-    "askLoomStream", "askLoom", "recordRun",
+    "askLoomStream", "askLoom", "recordRun", "composeWeaveQuery",
     code + "\nreturn install();",
   )(
     document, window, (sel: string) => node(sel.slice(1)), localStorage,
@@ -164,7 +166,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     stubs.refreshSessions, stubs.refreshAgents, stubs.setWorkSession,
     stubs.renderWorkList, stubs.renderSessionBar, stubs.loadWorkArtifacts,
     stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext,
-    stubs.askLoomStream, stubs.askLoom, stubs.recordRun,
+    stubs.askLoomStream, stubs.askLoom, stubs.recordRun, stubs.composeWeaveQuery,
   );
   return { api, stubs, node, window, localStorage };
 }
