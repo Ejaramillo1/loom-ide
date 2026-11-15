@@ -85,3 +85,43 @@ A second read of the build plan against the repo found the remaining gaps; the i
 - **Workflow scheduling (§13)**: list/create/pause/resume/trigger/delete/history for cron schedules, HTTP-bound.
 - **Tool detail (§14.1)**: the MCP tools drawer shows each tool's parameter schema.
 - **Look-dev from the URP 3D Sample (§3)**: still not imported — needs a Unity Hub template download; the documented values stand in. Baked GI/probes stay out (runtime-built scene). D14, Q2, Monaco, the gRPC-only services and the harness connection remain blocked as before.
+
+## 7x7x7 remaining-work plan pass (assistant, 15 Nov ~02:00)
+
+The 343-item remaining-work plan (`docs/REMAINING_WORK_PLAN_7X7X7.md`) was
+audited against the repo. Its two corrections drove this pass: tasks and
+skills are 100% HTTP (no transport decision), and the blur had causes in
+code. Implemented:
+
+- **Loom tasks + boards** (`loom_tasks.rs`): boards CRUD, task CRUD,
+  claim/release/close/transition, dependencies, ready/blocked, decompose,
+  task context; a kanban in Work beside local work (labelled by source)
+  with live board updates.
+- **Skills** (HTTP): add/classify/bulk-import shelf in Knowledge — honest
+  that Loom has no list endpoint.
+- **Apps CRUD + component types, tool register + permission request, TLS
+  status/renew, storage migration, schedule pause/resume + execution
+  cancel, pattern stream, task stream.**
+- **Connection model**: Stop cancels silent streams within ~20 s; unknown
+  request ids error; non-JSON chunks and non-2xx bodies are reported;
+  `LOOM_ADDR` override; one retry on transient GET failures; visible
+  Reconnecting state; continuous re-probe while offline; documented in
+  `docs/LOOM_CONNECTION_MODEL.md`.
+- **Chat context pack**: active work, intent, open file and session/
+  agent ids travel with every query (stream and unary).
+- **Sharpness**: DPR cap raised to 2×; soft shadows + 8 m shadow distance
+  + opaque texture on the shipped renderer; AA field 4 on all tiers;
+  high-quality bloom; 512 px PBR maps; larger labels; self-check runs at
+  the shipping High tier; per-light rig captures; tier selector in the
+  View menu with bloom off on Low.
+- **Docs**: `docs/DECISIONS.md` (open + taken), `docs/BACKLOG.md`,
+  connection model, and the §7.3 corrections across the older reports.
+
+Measured live against the running server: first stream event at **10.37 s**
+on the local CPU qwen3:4b (the Phase-3 "under a second" target is
+model/hardware-bound, not IDE-bound — the IDE renders tokens as they
+arrive). Live trace lookup is pending the unary weave completing.
+
+Still open, all registered: D14 real-window captures (permission), Q2
+fallback, Monaco/benchmark dependencies, the gRPC-only services, the
+harness MCP connection, and every decision in `docs/DECISIONS.md`.
