@@ -13,11 +13,11 @@ case. Nothing here is scheduled; nothing here is silently dropped.
 | Learning agent | 7 | gRPC-only · backlog |
 | LLM scheduler | 3 | gRPC-only · backlog |
 | Memory layer / ROM / learned layer | 5 | gRPC-only · backlog |
-| Graph memory viewer/writes | 15 | gRPC-only · blocked on the transport decision |
-| Judge scoring in Experiments | 4 | gRPC-only · blocked on the transport decision |
-| Tool registry beyond register/list | 5 | gRPC-only · blocked on the transport decision |
-| Loom-as-MCP-server ↔ MuseBridge harness | — | blocked on the harness decision |
-| xterm.js terminal · file explorer · Monaco · promptfoo · Docling · memory backend (Cognee/Mem0/Graphiti) · E2B · Opik · LiteLLM | — | one decision per dependency |
+| Graph memory viewer/writes | 15 | gRPC-only · backlog (transport decided: Rust gRPC client) |
+| Judge scoring in Experiments | 4 | gRPC-only · backlog (transport decided: Rust gRPC client) |
+| Tool registry beyond register/list | 5 | gRPC-only · backlog (transport decided: Rust gRPC client) |
+| Loom-as-MCP-server ↔ MuseBridge harness | — | backlog — connect decided, both directions |
+| xterm.js terminal · file explorer · memory backend (Cognee/Mem0/Graphiti) · E2B · Opik · LiteLLM | — | one decision per dependency (Monaco, promptfoo and Docling are decided) |
 
 ## Real-window verification (D14)
 
