@@ -72,6 +72,16 @@ pub fn start_loom_stream(
 /// Start a streaming weave. Returns immediately; progress arrives as
 /// `loom-stream` events carrying `{ requestId, kind, event? , error? }`
 /// where kind is `progress` | `done` | `error` | `cancelled`.
+fn validate_stream_inputs(request_id: &str, message: &str) -> Result<(), String> {
+    if message.trim().is_empty() {
+        return Err("Enter a message first.".into());
+    }
+    if request_id.trim().is_empty() {
+        return Err("A request id is required.".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn ask_loom_stream(
     app: AppHandle,
@@ -81,10 +91,8 @@ pub fn ask_loom_stream(
     agent_id: Option<String>,
     context: Option<std::collections::HashMap<String, String>>,
 ) -> Result<(), String> {
+    validate_stream_inputs(&request_id, &message)?;
     let message = message.trim();
-    if message.is_empty() {
-        return Err("Enter a message first.".into());
-    }
     let mut obj = serde_json::Map::new();
     obj.insert("query".into(), Value::String(message.to_string()));
     if let Some(s) = session_id {
@@ -457,4 +465,25 @@ fn run_stream(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_of_an_unknown_request_is_an_error() {
+        // No stream is running for this id: the frontend must be able to
+        // tell whether its Stop cancelled anything (§2.1.2).
+        let result = cancel_loom_stream("never-started".to_string());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn stream_inputs_are_validated_before_any_network_work() {
+        assert!(validate_stream_inputs("r1", "  ").is_err());
+        assert!(validate_stream_inputs("", "hello").is_err());
+        assert!(validate_stream_inputs("   ", "hello").is_err());
+        assert!(validate_stream_inputs("r1", "hello").is_ok());
+    }
 }

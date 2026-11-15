@@ -1374,14 +1374,10 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   flex: 1;
   min-height: 220px;
   margin-top: 12px;
-  border: none;
-  outline: none;
-  resize: none;
-  background: transparent;
-  font-family: var(--mono);
-  font-size: 13.5px;
-  line-height: 1.65;
-  padding: 4px 2px;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  overflow: hidden;
 }
 
 .code-foot {

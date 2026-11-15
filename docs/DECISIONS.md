@@ -56,5 +56,14 @@ need Eduardo; "taken" items are recorded defaults he can override.
 - The two meanings of "experiment" (local JSON records vs vault notes of
   kind `experiment`) are intentionally separate; the same word names both.
 - Three scoped search inputs stay (work/notes, knowledge, artifacts).
+- Attention items keep both kinds in the type (`decision` is produced;
+  `finding` stays reserved for a future Loom surface).
+- Experiment history is the local experiment list; run comparison happens
+  through the arms and the provider A/B dialog. No export endpoint exists.
+- renderScale stays tier-driven (High 1 / Balanced 0.85 / Low 0.75); the
+  measured canvas size drives the camera aspect instead, so framing
+  follows the real embed on resize.
+- The unary weave path is the fallback only; Stop is a streaming-path
+  control (the server offers no unary cancel).
 - Intent rendering: one editor inside `#intent-header` (the critique's
   "two places" is stale — verified resolved).

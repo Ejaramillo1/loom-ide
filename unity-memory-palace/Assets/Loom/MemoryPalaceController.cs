@@ -196,6 +196,19 @@ namespace Loom.MemoryPalace
             if (index < QualitySettings.names.Length) QualitySettings.SetQualityLevel(index, false);
         }
 
+        /// The measured canvas size drives the camera aspect (§1.1.2/§1.1.4):
+        /// framing follows the real embed, and a resize updates it without a
+        /// reload.
+        [Serializable] sealed class CanvasSize { public int width; public int height; }
+        public void ApplyCanvasSize(string json)
+        {
+            var size = JsonUtility.FromJson<CanvasSize>(json);
+            if (size != null && size.width > 0 && size.height > 0 && sceneCamera)
+            {
+                sceneCamera.aspect = (float)size.width / size.height;
+            }
+        }
+
         static Color PortalColorWhite(string name)
         {
             foreach (var portal in Portals)
@@ -809,8 +822,11 @@ namespace Loom.MemoryPalace
             // Keep all six tools within the narrower center column without
             // changing user zoom. The 4.12/12.76 constants keep the same
             // 17.9° pitch and bench coverage at the product-shot FOV of 42°
-            // (the previous 3.55/11 were tuned for 48°).
-            var framing = Mathf.Max(1f, 1.1f / sceneCamera.aspect);
+            // (the previous 3.55/11 were tuned for 48°). The framing factor
+            // was 1.1/aspect; 1.0/aspect keeps the camera closer so objects
+            // hold more pixels in narrow columns (§1.1.3) — the portal
+            // framing self-check confirms nothing crops at 0.65/1/1.6.
+            var framing = Mathf.Max(1f, 1.0f / sceneCamera.aspect);
             var desired = new Vector3(parallax.x * 0.25f, 1.25f + 4.12f * framing + parallax.y * 0.12f, -distance * framing);
             sceneCamera.transform.position = Vector3.Lerp(sceneCamera.transform.position, desired, reduceMotion ? 1f : Time.deltaTime * 1.8f);
             sceneCamera.transform.rotation = Quaternion.Slerp(sceneCamera.transform.rotation,

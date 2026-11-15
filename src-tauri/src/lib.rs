@@ -1142,21 +1142,33 @@ async fn get_loom_status() -> LoomStatus {
     let (online, detail) = match result {
         Ok(Ok((status, payload))) if (200..300).contains(&status) => {
             match serde_json::from_slice::<serde_json::Value>(&payload) {
-                Ok(value) => match value.get("status").and_then(|v| v.as_str()) {
-                    Some("healthy") => (true, "Loom HTTP service is healthy.".to_string()),
-                    Some("degraded") => (
-                        true,
-                        format!("Loom is degraded ({}).", component_errors(&value)),
-                    ),
-                    Some(other) => (
-                        false,
-                        format!("Loom reports {other}: {}.", component_errors(&value)),
-                    ),
-                    None => (true, "Loom HTTP service is up.".to_string()),
-                },
+                Ok(value) => {
+                    // The probe validates the body shape (§2.2.2): a 2xx
+                    // without the health contract is not "up".
+                    let has_contract = value.get("status").and_then(|v| v.as_str()).is_some();
+                    if !has_contract {
+                        (
+                            false,
+                            "Loom answered without a health body (missing status).".to_string(),
+                        )
+                    } else {
+                        match value.get("status").and_then(|v| v.as_str()) {
+                            Some("healthy") => (true, "Loom HTTP service is healthy.".to_string()),
+                            Some("degraded") => (
+                                true,
+                                format!("Loom is degraded ({}).", component_errors(&value)),
+                            ),
+                            Some(other) => (
+                                false,
+                                format!("Loom reports {other}: {}.", component_errors(&value)),
+                            ),
+                            None => (true, "Loom HTTP service is up.".to_string()),
+                        }
+                    }
+                }
                 Err(_) => (
-                    true,
-                    "Loom HTTP service is up (health body unreadable).".to_string(),
+                    false,
+                    "Loom HTTP service is up but its health body is unreadable.".to_string(),
                 ),
             }
         }

@@ -120,7 +120,11 @@ code. Implemented:
 Measured live against the running server: first stream event at **10.37 s**
 on the local CPU qwen3:4b (the Phase-3 "under a second" target is
 model/hardware-bound, not IDE-bound — the IDE renders tokens as they
-arrive). Live trace lookup is pending the unary weave completing.
+arrive). The unary weave did not complete in 15 minutes on the same model
+— the blocking-wait the streaming path replaces, measured and registered.
+Trace lookup awaits a completing turn; the GetTrace endpoint exists in the
+proto and the trace view is wired, but no live trace id was obtainable
+from a streamed turn (WeaveProgress carries no trace id).
 
 Still open, all registered: D14 real-window captures (permission), Q2
 fallback, Monaco/benchmark dependencies, the gRPC-only services, the

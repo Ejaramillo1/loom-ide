@@ -93,6 +93,7 @@ import {
   sessionSubscribe,
   providerAbtest,
   listWorkflowSchedules,
+  listWorkflowTemplates,
   createWorkflowSchedule,
   updateWorkflowSchedule,
   deleteWorkflowSchedule,
@@ -138,6 +139,7 @@ import {
 import type { SphereState } from "./sphere";
 import { installAppMenu, textEditingActions } from "./app-menu";
 import { listen } from "@tauri-apps/api/event";
+import { applyCodeTheme, createCodeEditor, languageForPath, setCodeLanguage, type CodeEditor } from "./monaco";
 
 // ---------------------------------------------------------------------------
 // State
@@ -2253,6 +2255,19 @@ function openScheduleDialog() {
     opt.textContent = wf.name;
     sel.append(opt);
   }
+  // Workflow templates (§4.3.6) join the picker, labelled as templates so
+  // the source of the name is clear.
+  void listWorkflowTemplates().then((templates) => {
+    for (const raw of templates) {
+      const t = raw as { name?: string; id?: string };
+      const name = t.name ?? t.id ?? "";
+      if (!name) continue;
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = `${name} · template`;
+      sel.append(opt);
+    }
+  }).catch(() => { /* templates are best-effort */ });
   ($("#schedule-cron") as HTMLInputElement).value = "0 */6 * * *";
   ($("#schedule-timezone") as HTMLInputElement).value = "UTC";
   ($("#schedule-error") as HTMLElement).hidden = true;
@@ -4828,8 +4843,7 @@ function buildChatContext(): Record<string, string> | undefined {
   if (intent) context.active_intent = intent.statement;
   if (openFilePath) {
     context.open_file = workspaceLabel(openFilePath);
-    const editor = $("#code-editor") as HTMLTextAreaElement | null;
-    const content = editor?.value ?? "";
+    const content = getEditorValue();
     if (content.trim()) context.open_file_content = content.slice(0, 4000);
   }
   if (selectedExperimentId) {
@@ -5740,6 +5754,28 @@ let documentRequest = 0;
 let saveInFlight: Promise<boolean> | null = null;
 let folderOpening = false;
 
+// The Monaco editor instance for Code mode, created lazily on first open.
+let codeEditor: CodeEditor | null = null;
+
+function getEditorValue(): string {
+  return codeEditor?.getValue() ?? "";
+}
+
+function setEditorValue(value: string): void {
+  codeEditor?.setValue(value);
+}
+
+function ensureCodeEditor(): CodeEditor {
+  if (codeEditor) return codeEditor;
+  const container = document.getElementById("code-editor");
+  codeEditor = createCodeEditor(container!, { value: "" });
+  codeEditor.onDidChangeModelContent(() => {
+    $("#code-saved").hidden = true;
+    markEditorDirty();
+  });
+  return codeEditor;
+}
+
 function workspaceLabel(path: string) {
   const value = path.replaceAll("\\", "/");
   const root = workspaceInfo?.path.replaceAll("\\", "/").replace(/\/$/, "");
@@ -5936,7 +5972,9 @@ async function openFile(path: string) {
     openFilePath = path;
     openFileOriginal = text;
     currentNote = null;
-    ($("#code-editor") as HTMLTextAreaElement).value = text;
+    ensureCodeEditor();
+    setEditorValue(text);
+    setCodeLanguage(codeEditor!, languageForPath(path));
     $("#code-error").hidden = true;
     renderEditor();
     renderFileTree();
@@ -6807,6 +6845,8 @@ function renderEditor() {
     close.setAttribute("aria-label", "Close file");
     close.addEventListener("click", () => { void closeFile(); });
     tabs.append(title, close);
+    // The editor container was hidden while empty; re-layout once visible.
+    requestAnimationFrame(() => codeEditor?.layout());
   }
   $("#code-path").hidden = true;
 }
@@ -6815,7 +6855,7 @@ function markEditorDirty() {
   const title = document.getElementById("open-file-title");
   if (title) {
     const name = openFilePath ? workspaceLabel(openFilePath) : NOTE_DOCS.find((note) => note.kind === currentNote)?.title;
-    const dirty = openFilePath !== null && ($("#code-editor") as HTMLTextAreaElement).value !== openFileOriginal;
+    const dirty = openFilePath !== null && getEditorValue() !== openFileOriginal;
     title.textContent = `${name ?? ""}${dirty ? " •" : ""}`;
   }
 }
@@ -6824,7 +6864,7 @@ function clearEditor() {
   openFilePath = null;
   openFileOriginal = null;
   currentNote = null;
-  ($("#code-editor") as HTMLTextAreaElement).value = "";
+  if (codeEditor) setEditorValue("");
   $("#code-error").hidden = true;
   $("#code-saved").hidden = true;
   renderEditor();
@@ -6837,15 +6877,14 @@ async function closeFile() {
 
 function saveNote(): Promise<boolean> {
   if (saveInFlight) return saveInFlight;
-  const editor = $("#code-editor") as HTMLTextAreaElement;
   if (!openFilePath && !currentNote) return Promise.resolve(true);
-  if (openFilePath && editor.value === openFileOriginal) return Promise.resolve(true);
+  if (openFilePath && getEditorValue() === openFileOriginal) return Promise.resolve(true);
   const path = openFilePath;
-  const content = editor.value;
+  const content = getEditorValue();
   const original = openFileOriginal;
   const kind = currentNote;
   const button = $("#code-save") as HTMLButtonElement;
-  editor.readOnly = true;
+  codeEditor?.updateOptions({ readOnly: true });
   button.disabled = true;
   button.textContent = "Saving…";
   saveInFlight = (async () => {
@@ -6862,7 +6901,7 @@ function saveNote(): Promise<boolean> {
       showEditorError(error);
       return false;
     } finally {
-      editor.readOnly = false;
+      codeEditor?.updateOptions({ readOnly: false });
       button.disabled = false;
       button.textContent = "Save";
     }
@@ -6876,7 +6915,9 @@ async function openNote(kind: NoteKind) {
   currentNote = kind;
   openFilePath = null;
   openFileOriginal = null;
-  ($("#code-editor") as HTMLTextAreaElement).value = localStorage.getItem(noteKey(kind)) ?? "";
+  ensureCodeEditor();
+  setEditorValue(localStorage.getItem(noteKey(kind)) ?? "");
+  setCodeLanguage(codeEditor!, "markdown");
   renderEditor();
   setMode("code");
 }
@@ -6884,13 +6925,12 @@ async function openNote(kind: NoteKind) {
 async function reloadFile() {
   if (!openFilePath || saveInFlight) return;
   const path = openFilePath;
-  const editor = $("#code-editor") as HTMLTextAreaElement;
-  if (editor.value !== openFileOriginal && !window.confirm("Discard your unsaved changes and reload this file?")) return;
+  if (getEditorValue() !== openFileOriginal && !window.confirm("Discard your unsaved changes and reload this file?")) return;
   const request = ++documentRequest;
   try {
     const content = await readFile(path);
     if (request !== documentRequest || openFilePath !== path) return;
-    editor.value = content;
+    setEditorValue(content);
     openFileOriginal = content;
     markEditorDirty();
     $("#code-error").hidden = true;
@@ -6900,21 +6940,16 @@ async function reloadFile() {
 
 function initCodeEditor() {
   clearEditor();
-  $("#code-editor").addEventListener("input", () => {
-    $("#code-saved").hidden = true;
-    markEditorDirty();
-  });
   window.addEventListener("beforeunload", (event) => {
-    if (openFilePath && ($("#code-editor") as HTMLTextAreaElement).value !== openFileOriginal) {
+    if (openFilePath && getEditorValue() !== openFileOriginal) {
       event.preventDefault();
       event.returnValue = "";
     }
   });
   $("#code-save").addEventListener("click", () => { void saveNote(); });
   $("#code-ask").addEventListener("click", async () => {
-    const editor = $("#code-editor") as HTMLTextAreaElement;
     focusChat();
-    await sendChat(`About this text: ${editor.value.slice(0, 280)}`);
+    await sendChat(`About this text: ${getEditorValue().slice(0, 280)}`);
   });
 }
 
@@ -6931,6 +6966,11 @@ async function init() {
   initAppMenu();
   // Initialize local views before any Loom requests finish.
   initCodeEditor();
+  // Monaco follows the app's Dark/White appearance (set via data-theme).
+  new MutationObserver(() => applyCodeTheme()).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
   initWorkspaceExplorer();
   knowledge = installKnowledge(() => setMode("knowledge"), (count, failed) => { pendingKnowledge = count; knowledgeFailed = failed; renderStatusPill(); }, refreshSpatialVault);
   installSpatialWorkbench((object) => {

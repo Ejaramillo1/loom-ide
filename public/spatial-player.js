@@ -15,6 +15,18 @@ export function startSpatialPlayer() {
   const motion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   const applyMotion = () => unityInstance?.SendMessage?.("Resolute Workbench", "ApplyReducedMotion", motion?.matches ? "true" : "false");
   motion?.addEventListener?.("change", applyMotion);
+  // The canvas's measured size drives the bench camera aspect (§1.1.4):
+  // on load and on every resize, so framing follows the real embed
+  // instead of a stale aspect.
+  const reportSize = () => {
+    if (!unityInstance) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      unityInstance.SendMessage("Resolute Workbench", "ApplyCanvasSize",
+        JSON.stringify({ width: Math.round(rect.width), height: Math.round(rect.height) }));
+    }
+  };
+  window.addEventListener?.("resize", reportSize);
   window.addEventListener?.("message", (event) => {
     if (event.source !== window.parent || event.origin !== location.origin) return;
     if (event.data?.type === "loom-state" && ["idle", "listening", "processing", "executing", "exploring", "attention", "completed", "error"].includes(event.data.state)) {
@@ -86,6 +98,7 @@ export function startSpatialPlayer() {
         unityInstance?.SendMessage?.("Resolute Workbench", "RefreshVault", pendingVault);
         pendingVault = null;
       }
+      reportSize();
       window.parent.postMessage({ type: "loom-spatial-ready" }, location.origin);
     } catch (error) { fail(error); }
   };
