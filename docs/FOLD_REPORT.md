@@ -2,7 +2,17 @@
 
 - Branch: `tauri-prototype`. Baseline `1f20256` (overnight run) → head `0dface2`.
 - Codex run: 14 Nov 08:37–09:06, ended early on usage limit (165,642 tokens). Phase 5 verification finished by the assistant 14 Nov ~12:00.
-- Outcome: Phases 0–5 complete. The fold is done and the second window is retired. Nothing pushed.
+- Outcome: Phases 0–5 complete. The fold is done and the second window is retired.
+
+## Status update (14 Nov ~21:30)
+
+This report was written at ~12:00; the following happened after, and supersedes the stale items below.
+
+- The branch was pushed to `origin/tauri-prototype` at 21:19 and is in sync.
+- Both recorded blockers are resolved: the "tenth relation type" was a miscount (the inventory lists the same nine the source defines), and note deletion is satisfied by an in-place archive/restore rule (status `archived`, file preserved).
+- The `WORKBENCH` constant is retained with `#[allow(dead_code)]` (native-app still uses it); the build warning is cleared.
+- A critique pass (Eduardo, 21:00) changed the app: it now opens on **Experiment** (not Spatial), the compact Canvas no longer shrinks text, the bench has one Graph/Canvas pane, Unity no longer scales its UI, and the render runs at full resolution with 4× MSAA. Commits `7e5a950`–`cc61643`.
+- D14 (real-window pixel check) has still not been performed; visual claims rest on geometry checks and the browser preview.
 
 ## Per phase
 
@@ -33,12 +43,12 @@
 - The Codex run ended at 09:06 on the usage limit, mid-Phase-5. Phase 5 was completed by the assistant instead; no stretch work was done (Unity physical object forms, D9 empty-state wording, D12 full-bleed check).
 - Two files appeared mid-run from outside the fold (`docs/APPROVED_VISUAL_REFERENCE.md` and `docs/loom-unified-workbench-reference.webp`, 08:47–08:50, from the main-chat image work). They are not implementation output and were left untracked.
 
-## What is left for Eduardo
+## What is left for Eduardo (updated 14 Nov ~21:30)
 
-- Q2 fallback view if Unity fails to load: still deferred by his choice. Unity-failure behaviour unchanged.
-- Tenth relation type: name it if wanted.
-- Note deletion: not implemented. Needs his authorization or an archival rule.
-- `WORKBENCH` constant and the workbench port code in `shared/navigation.rs`: retained deliberately; delete when he says so (removing it also clears the one build warning).
-- D14 real-window pixel check: still blocked (needs automatic visual feedback enabled locally; desktop controls fail on this Linux laptop).
-- Push: the branch is 13 commits ahead of origin (6 overnight + 5 Codex + 1 Phase-5 fix + this report). Nothing pushed.
-- Stretch work (only if wanted): Unity physical object forms (Notes notebook, Experiments flask, Work toolbox, Code laptop, Agents robot, Evidence magnifying glass), D9 empty-state wording unification, D12 full-bleed verification.
+- Q2 fallback view if Unity fails to load: still deferred. No fallback decided.
+- Tenth relation type: **resolved** — the inventory's "10" was a miscount (it lists the same nine the source defines); nothing to add.
+- Note deletion: **resolved** — notes archive/restore in place (status `archived`, file preserved); destructive deletion stays forbidden.
+- `WORKBENCH` constant: retained with `#[allow(dead_code)]` (native-app still uses it); the one build warning is cleared.
+- D14 real-window pixel check: still not performed (no screenshot tool on this machine).
+- Push: done at 21:19; branch in sync with `origin/tauri-prototype`.
+- Stretch work: the Unity physical object forms, D9 empty-state wording, and D12 full-bleed check were subsequently completed (see `docs/DESIGN_PROGRESS.md`).

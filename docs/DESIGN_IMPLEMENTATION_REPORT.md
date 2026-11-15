@@ -3,6 +3,8 @@
 Date: 2026-11-14. Repository: `/home/ed/loom-ide-tauri`. Branch: `tauri-prototype`.
 Baseline: `fe0c01e`. Implementation is in the existing application, not a mockup.
 
+> **Status update (14 Nov ~21:30):** this report covers the "approved reference implementation" phase. The branch has since been pushed to `origin/tauri-prototype` (21:19) and further work landed: the portal-click collider fix, the portal orbit, the full-resolution/4× MSAA render fix, and a UI critique pass (open on Experiment, one Graph/Canvas pane, no text scaling). See `docs/DESIGN_PROGRESS.md` for the living record.
+
 ## Delivered behavior
 
 - Spatial: the original conversation pane sits left of the Unity bench; the right rail stacks Knowledge Graph over Canvas. At widths below 1100px, conversation and Knowledge become mutually exclusive drawers with close controls, scrim, Escape handling, focus trapping and focus return. Other modes retain their existing 1440px inspector breakpoint and remembered tab/open state.
@@ -29,7 +31,7 @@ Baseline: `fe0c01e`. Implementation is in the existing application, not a mockup
 
 The initial sandboxed Rust runs failed the two existing window-registration tests because loopback binding was prohibited. The identical suites passed with authorized host loopback access. Unity's initial Editor launch also required host access and startup time. No build was killed. Early test-harness type/import errors were corrected using Vite's already installed transform API; final frontend checks pass.
 
-Existing warnings remain: Tauri's retained `WORKBENCH` constant; native-app's unused `Exploring` and `Comparison` variants. The two ignored Tauri tests require live Loom and the real vault; neither was enabled.
+Existing warnings remain: native-app's unused `Exploring` and `Comparison` variants. The retained `WORKBENCH` constant is now annotated `#[allow(dead_code)]` (native-app still uses it), clearing the one Tauri warning. The two ignored Tauri tests require live Loom and the real vault; neither was enabled.
 
 ## Local commits
 
@@ -40,7 +42,7 @@ Existing warnings remain: Tauri's retained `WORKBENCH` constant; native-app's un
 ## Boundaries and limitations
 
 - No browser screenshots, desktop pixel inspection or rendered Unity/WebGL appearance review was performed. Prior browser/computer inspection was permission-blocked; no alternative capture route was used to bypass that block. Geometry and bounds checks do not establish visual quality, glass sorting, absence of occlusion, frame rate or photorealistic parity. No such parity is claimed. Glass uses transparent URP Lit shading; it does not simulate optical refraction or magnification.
-- Native-app source and backend source are unchanged. No packages, workspace/project/clone, seed/demo records, data migrations or user-vault writes were introduced. No files were intentionally deleted from the source tree. Nothing was pushed, merged, rebased or reset.
+- Native-app source and backend source are unchanged. No packages, workspace/project/clone, seed/demo records, data migrations or user-vault writes were introduced. No files were intentionally deleted from the source tree. Nothing was merged, rebased or reset; the branch was pushed to `origin/tauri-prototype` at 21:19.
 - The approved Markdown reference, attached WebP and existing implementation prompt remain preserved and untracked.
 - Q2 remains undecided; Unity load-failure handling is unchanged. JSON Canvas export and existing canvas session-only position persistence remain as before. Compact Canvas can be scrolled to reach all notes; graph density still depends on vault size.
 - Live server workflows and actual desktop rendering/input were not exercised. The real user vault was not used by unit tests. The built desktop app will be left at `src-tauri/target/release/loom-ide` for the user to run.
