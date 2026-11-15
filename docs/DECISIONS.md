@@ -1,28 +1,40 @@
 # Decisions registry
 
 Every decision that shapes the app, registered in one place. "Open" items
-need Eduardo; "taken" items are recorded defaults he can override.
+need Eduardo; "decided" items were resolved by him on 15 Nov 2026; "taken"
+items are recorded defaults he can override.
 
-## Open — Eduardo's call
+## Decided — 15 Nov 2026 (Eduardo, one by one)
 
-1. **Benchmark components**: xterm.js (terminal), filex / FileBrowser
-   Quantum / Filestash (file explorer), promptfoo, Docling, Cognee/Mem0/
-   Graphiti, E2B, Opik, LiteLLM — one decision per dependency.
-2. **Phase 5 transport** for the genuinely gRPC-only services (judge,
-   graph memory, memory layer, tool registry beyond HTTP, teleprompter,
-   learning, scheduler): gateway bindings in Loom vs a Rust gRPC client
-   vs per-service mix. Tasks and skills are NOT in this decision — both
-   are 100% HTTP.
-3. **Q2**: Unity-failure fallback stays deferred (the "3D unavailable"
-   panel exists as the cheap option if approved).
-4. **Loom-as-MCP-server ↔ MuseBridge harness** connection.
-5. **Task migration**: read-bridge only (current) vs full migration vs
-   local forever.
-6. **Avatar**: wire it or remove it.
-7. **One Loom-state surface**: pill or sphere (both exist; roles to be
-   defined).
-8. **Canvas 2D `sphere.ts`**: delete the dead class or resurrect it.
-9. **Tenth relation type**: already resolved — nine, not ten (miscount).
+The ten decisions below were taken by Eduardo on 15 Nov 2026 and close the
+"open" items they replace. They are also recorded in
+`docs/REMAINING_WORK_PLAN_7X7X7.md` ("Decisiones registradas (15 nov 2026)").
+
+1. **Code-mode editor: Monaco**, with its diff viewer. CodeMirror is out.
+2. **Benchmark components: promptfoo + Docling** approved to start; the
+   rest (xterm.js, filex / FileBrowser Quantum / Filestash, Cognee/Mem0/
+   Graphiti, E2B, Opik, LiteLLM) are decided one by one.
+3. **Phase-5 transport: a Rust gRPC client** in the IDE backend, Judge
+   first. Loom is not touched.
+4. **Q2: a static "3D no disponible" panel**; the non-spatial views stay
+   reachable.
+5. **Loom-as-MCP-server ↔ harness: connect**, in both directions, with an
+   explicit list of which PC tools are exposed.
+6. **Task migration: full migration** of local work to Loom tasks; the
+   intents/attention mapping is defined before migrating, and the
+   migration is explicit, never silent.
+7. **Avatar: wire it**; its account/profile concept is defined at
+   implementation time.
+8. **Both state surfaces with defined roles**: the pill is the precise
+   text state, the sphere the ambient colour state, both from one shared
+   state.
+9. **Tenth relation type: "blocks"** — the count is ten, not nine.
+10. **Workflow streaming first, then ABTest.**
+
+## Still open
+
+- Canvas 2D `sphere.ts`: the `Sphere` class is dead code (only the
+  `SphereState` type is imported); delete it or resurrect it.
 
 ## Taken (recorded defaults, override-able)
 
