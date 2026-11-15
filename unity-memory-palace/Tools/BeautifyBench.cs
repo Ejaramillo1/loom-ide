@@ -11,6 +11,7 @@
 using System;
 using System.IO;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -72,6 +73,22 @@ low.msaaSampleCount = 1;
 EditorUtility.SetDirty(balanced);
 EditorUtility.SetDirty(low);
 
+// The lowest tier drops SSAO entirely (§5.7): baked AO equivalents are the
+// contact-shadow decals, and SSAO's depth priming + blur passes are exactly
+// the cost integrated GPUs should not pay.
+const string lowRendererPath = "Assets/Settings/Low_Renderer.asset";
+if (!File.Exists(lowRendererPath)) AssetDatabase.CopyAsset("Assets/Settings/Mobile_Renderer.asset", lowRendererPath);
+var lowRenderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(lowRendererPath);
+lowRenderer.rendererFeatures.RemoveAll(f => f is ScreenSpaceAmbientOcclusion);
+EditorUtility.SetDirty(lowRenderer);
+var lowSo = new SerializedObject(low);
+var lowRendererList = lowSo.FindProperty("m_RendererDataList");
+if (lowRendererList != null && lowRendererList.arraySize > 0)
+{
+    lowRendererList.GetArrayElementAtIndex(0).objectReferenceValue = lowRenderer;
+    lowSo.ApplyModifiedProperties();
+}
+
 // Quality levels: High (WebGL + Standalone default), Balanced, Low.
 var levels = new (string, UniversalRenderPipelineAsset)[]
 {
@@ -106,20 +123,40 @@ qsObject.ApplyModifiedProperties();
 // WebGL 1.0; Chromium (the Tauri WebView) is WebGL2.
 PlayerSettings.SetGraphicsAPIs(BuildTarget.WebGL, new[] { GraphicsDeviceType.OpenGLES3 });
 
-// Preloaded canaries (§7.3): the _EMISSION and transparent variants ride
-// in a preloaded collection so runtime keyword toggles never silently
-// no-op in an IL2CPP-stripped build.
+// WebGL build-size discipline (§7.4): data caching on, exceptions none,
+// managed stripping High (the link.xml keeps the primitive colliders and
+// the material canaries keep the runtime-toggled shader variants), and
+// IL2CPP code generation set for smaller builds.
+PlayerSettings.WebGL.dataCaching = true;
+PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.None;
+PlayerSettings.SetManagedStrippingLevel(NamedBuildTarget.WebGL, ManagedStrippingLevel.High);
+try
+{
+    PlayerSettings.SetIl2CppCodeGeneration(NamedBuildTarget.WebGL, Il2CppCodeGeneration.OptimizeSize);
+}
+catch (Exception)
+{
+    // Older editors lack the named-build-target API; stripping level alone
+    // still applies. Not an error.
+}
+
+// Preloaded canaries (§7.3): the _EMISSION, _NORMALMAP and transparent
+// variants ride in a preloaded collection so runtime keyword toggles never
+// silently no-op in an IL2CPP-stripped build.
 var svc = new ShaderVariantCollection();
 var lit = Shader.Find("Universal Render Pipeline/Lit");
 var unlit = Shader.Find("Universal Render Pipeline/Unlit");
+var particleUnlit = Shader.Find("Universal Render Pipeline/Particles/Unlit");
 if (lit)
 {
     svc.Add(new ShaderVariantCollection.ShaderVariant(lit, PassType.ScriptableRenderPipeline,
-        new[] { "_EMISSION", "_SURFACE_TYPE_TRANSPARENT", "_ALPHAPREMULTIPLY_ON" }));
+        new[] { "_EMISSION", "_NORMALMAP", "_SURFACE_TYPE_TRANSPARENT", "_ALPHAPREMULTIPLY_ON" }));
     svc.Add(new ShaderVariantCollection.ShaderVariant(lit, PassType.ScriptableRenderPipeline, new string[0]));
 }
 if (unlit)
     svc.Add(new ShaderVariantCollection.ShaderVariant(unlit, PassType.ScriptableRenderPipeline, new string[0]));
+if (particleUnlit)
+    svc.Add(new ShaderVariantCollection.ShaderVariant(particleUnlit, PassType.ScriptableRenderPipeline, new string[0]));
 const string svcPath = "Assets/Settings/WorkbenchShaders.shadervariants";
 if (File.Exists(svcPath)) AssetDatabase.DeleteAsset(svcPath);
 AssetDatabase.CreateAsset(svc, svcPath);

@@ -92,7 +92,7 @@
                   <ul id="exp-list" class="exp-list"></ul>
                 </aside>
                 <div class="exp-main">
-                  <div class="exp-actions"><button class="btn" id="exp-new" type="button">New experiment</button></div>
+                  <div class="exp-actions"><button class="btn" id="exp-new" type="button">New experiment</button><button class="btn ghost" id="abtest-btn" type="button">Compare providers</button></div>
                   <div id="exp-detail" class="exp-detail"></div>
                 </div>
               </div>
@@ -409,8 +409,38 @@
         <button id="mcp-cancel" class="btn ghost" type="button">Cancel</button>
       </div>
     </dialog>
-    <dialog id="agent-create-dialog" class="app-help-dialog" aria-labelledby="agent-create-title">
-      <h2 id="agent-create-title">Create agent</h2>
+    <dialog id="abtest-dialog" class="app-help-dialog" aria-labelledby="abtest-title">
+      <h2 id="abtest-title">Compare providers</h2>
+      <p>Run the same prompt through several providers and compare their answers, scores, latency and cost. The winner is scored by Loom.</p>
+      <label for="abtest-prompt">Prompt</label>
+      <textarea id="abtest-prompt" rows="3" spellcheck="false"></textarea>
+      <label for="abtest-mode">Mode</label>
+      <select id="abtest-mode"></select>
+      <label>Providers</label>
+      <div id="abtest-providers" class="abtest-providers"></div>
+      <p id="abtest-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="abtest-start" class="btn" type="button">Run comparison</button>
+        <button id="abtest-cancel" class="btn ghost" type="button">Close</button>
+      </div>
+      <div id="abtest-body" class="abtest-body"></div>
+    </dialog>
+    <dialog id="schedule-dialog" class="app-help-dialog" aria-labelledby="schedule-title">
+      <h2 id="schedule-title">New schedule</h2>
+      <p>Run a saved workflow on a cron schedule (minute hour day month weekday).</p>
+      <label for="schedule-workflow">Workflow</label>
+      <select id="schedule-workflow"></select>
+      <label for="schedule-cron">Cron expression</label>
+      <input id="schedule-cron" type="text" autocomplete="off" spellcheck="false" />
+      <label for="schedule-timezone">Timezone</label>
+      <input id="schedule-timezone" type="text" autocomplete="off" spellcheck="false" />
+      <p id="schedule-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="schedule-submit" class="btn" type="button">Create schedule</button>
+        <button id="schedule-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="agent-create-dialog" class="app-help-dialog" aria-labelledby="agent-create-title">      <h2 id="agent-create-title">Create agent</h2>
       <p>Describe the agent, and the Weaver proposes a config for your review — or paste a config (or choose a preset) directly.</p>
       <label for="agent-describe">Describe the agent</label>
       <textarea id="agent-describe" rows="3" spellcheck="false" placeholder="An agent that reviews markdown notes and proposes links…"></textarea>

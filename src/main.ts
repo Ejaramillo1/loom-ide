@@ -83,9 +83,22 @@ import {
   type AutonomyChange,
   type LoomStreamEvent,
   type McpServer,
+  type StreamEnvelope,
+  type WorkflowProgressEvent,
+  type AbTestEvent,
   askLoomStream,
   cancelLoomStream,
   answerClarification,
+  executeWorkflowStream,
+  sessionSubscribe,
+  providerAbtest,
+  listWorkflowSchedules,
+  createWorkflowSchedule,
+  updateWorkflowSchedule,
+  deleteWorkflowSchedule,
+  triggerWorkflowSchedule,
+  workflowScheduleHistory,
+  resolveSessionGap,
   listMcpServers,
   addMcpServer,
   deleteMcpServer,
@@ -221,6 +234,22 @@ let artifacts: Artifact[] = [];
     the work's session when it has one, otherwise the global list. */
 let workArtifacts: Artifact[] = [];
 let runningWorkflow: string | null = null;
+/** The streamed workflow run in flight, and its last progress snapshot
+    (live progress instead of one blocking wait, §14.2). */
+let workflowStreamActive: string | null = null;
+let workflowStreamState: { progress: number; message: string; executionId: string | null } | null = null;
+/** The active session subscription (GET /v1/sessions/{id}:subscribe). */
+let sessionSubId: string | null = null;
+/** Workflow schedules (HTTP-bound; no transport decision needed). */
+let workflowSchedules: unknown[] = [];
+let schedulesLoadError: string | null = null;
+/** The provider A/B run in flight, keyed per provider. */
+let abtestState: {
+  requestId: string;
+  per: Map<string, { text: string; finished: boolean; score?: number; latencyMs?: number; costUsd?: number }>;
+  winner?: string;
+  error?: string;
+} | null = null;
 /** Mutation errors shown next to the section they belong to, never only
     in a conversation that may be closed. */
 let workArtifactsError: string | null = null;
@@ -1615,6 +1644,12 @@ function buildWorkflowsSection(): HTMLElement {
       run.disabled = runningWorkflow !== null;
       run.addEventListener("click", () => runWorkflow(wf.name));
       li.append(info, run);
+      if (runningWorkflow === wf.name && workflowStreamState) {
+        const progress = document.createElement("p");
+        progress.className = "workflow-progress";
+        progress.textContent = `${workflowStreamState.progress}%${workflowStreamState.message ? ` — ${workflowStreamState.message}` : ""}`;
+        li.append(progress);
+      }
 
       // Cancel/dismiss: stops polling and clears the running state.
       // The server-side execution continues (no cancel endpoint exists),
@@ -1694,6 +1729,25 @@ function buildWorkflowsSection(): HTMLElement {
       section.append(note);
     }
   }
+
+  // Workflow schedules (§13): HTTP-bound, so no transport decision is
+  // needed. Listed beside the workflows they run.
+  const schedHead = document.createElement("div");
+  schedHead.className = "wd-section-head";
+  const schedH = document.createElement("h4");
+  schedH.textContent = "Schedules";
+  const schedNew = document.createElement("button");
+  schedNew.type = "button";
+  schedNew.className = "btn ghost";
+  schedNew.textContent = "New schedule";
+  schedNew.addEventListener("click", openScheduleDialog);
+  schedHead.append(schedH, schedNew);
+  section.append(schedHead);
+  const schedList = document.createElement("div");
+  schedList.id = "schedules-list";
+  section.append(schedList);
+  if (workflowSchedules.length === 0 && !schedulesLoadError) void refreshSchedules();
+  renderSchedules();
   return section;
 }
 
@@ -1751,9 +1805,93 @@ async function runWorkflow(name: string) {
   runningWorkflow = name;
   cancelWorkflow = false;
   workflowError = null;
+  workflowStreamState = null;
   const startedFromWork = selectedWorkId;
   renderWorkDetail();
   setSphereState("executing");
+  // Streaming first (§14.2): live progress instead of one blocking wait.
+  // The stream's final event carries the execution id for the post-run
+  // polling; the unary path stays as the fallback.
+  const requestId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await executeWorkflowStream(requestId, name);
+  } catch {
+    await runWorkflowUnary(name, token, startedFromWork);
+    return;
+  }
+  workflowStreamActive = requestId;
+  renderWorkDetail();
+}
+
+function finishWorkflowRun(
+  token: number,
+  startedFromWork: string | null,
+  executionId: string | null,
+  error: string | null,
+) {
+  if (token !== currentRunSeq) return;
+  workflowStreamActive = null;
+  workflowStreamState = null;
+  void (async () => {
+    if (error === null) {
+      setLoomReachable(true);
+      if (executionId) {
+        executionWorkflowNames.set(executionId, runningWorkflow ?? "");
+        if (startedFromWork) executionWorkIds.set(executionId, startedFromWork);
+      }
+      try {
+        await refreshExecutionsList();
+        if (executionId) await pollWorkflowExecution(executionId);
+      } catch {
+        /* the executions list refresh is best-effort */
+      }
+      runningWorkflow = null;
+      cancelWorkflow = false;
+      renderWorkDetail();
+      renderEvidence();
+      setSphereState("completed");
+      window.setTimeout(() => {
+        if (sphereState === "completed") setSphereState("idle");
+      }, 3000);
+    } else {
+      try { await refreshExecutionsList(); } catch { /* best-effort */ }
+      runningWorkflow = null;
+      cancelWorkflow = false;
+      workflowError = `Workflow “${runningWorkflow ?? ""}” failed: ${error}`;
+      renderWorkDetail();
+      setSphereState("error");
+      if (isLoomConnectionError(new Error(error))) setLoomReachable(false);
+    }
+  })();
+}
+
+function handleWorkflowStreamEvent(p: StreamEnvelope<WorkflowProgressEvent>) {
+  if (!workflowStreamActive || p.requestId !== workflowStreamActive) return;
+  if (p.kind === "progress" && p.event) {
+    workflowStreamState = {
+      progress: p.event.progress ?? workflowStreamState?.progress ?? 0,
+      message: p.event.message ?? "",
+      executionId: p.event.execution_id ?? workflowStreamState?.executionId ?? null,
+    };
+    renderWorkDetail();
+    return;
+  }
+  const executionId = workflowStreamState?.executionId ?? null;
+  if (p.kind === "done") {
+    finishWorkflowRun(currentRunSeq, selectedWorkId, executionId, null);
+  } else if (p.kind === "cancelled") {
+    runningWorkflow = null;
+    cancelWorkflow = false;
+    workflowStreamActive = null;
+    workflowStreamState = null;
+    renderWorkDetail();
+    setSphereState("idle");
+  } else {
+    finishWorkflowRun(currentRunSeq, selectedWorkId, executionId, p.error ?? "stream failed");
+  }
+}
+
+async function runWorkflowUnary(name: string, token: number, startedFromWork: string | null) {
   try {
     // execute_workflow returns the run's own result, so the UI can show
     // the run's actual output instead of only re-listing executions.
@@ -1803,10 +1941,315 @@ async function runWorkflow(name: string) {
   }
 }
 
-// ---- Artifacts (real Loom server, attach to work item) ----
+// ---------------------------------------------------------------------------
+// Session subscription, provider A/B, and workflow schedules (Phase 3–4)
+// ---------------------------------------------------------------------------
 
-function buildArtifactsSection(item: WorkItem): HTMLElement {
-  const section = document.createElement("section");
+/** Live session state: the backend forwards SessionUpdate events while a
+    session is selected, so the detail pane reflects server-side changes
+    without polling. */
+async function ensureSessionSubscription() {
+  const id = selectedSessionId;
+  if (!id || !isTauri) return;
+  if (sessionSubId === `sess-${id}`) return;
+  sessionSubId = `sess-${id}`;
+  try {
+    await sessionSubscribe(sessionSubId, id);
+  } catch {
+    sessionSubId = null;
+  }
+}
+
+function handleSessionEvent(p: StreamEnvelope<unknown>) {
+  if (!sessionSubId || p.requestId !== sessionSubId) return;
+  if (p.kind === "progress") {
+    if (selectedSessionId) void refreshSessionDetail(selectedSessionId);
+  } else if (p.kind === "error" || p.kind === "done") {
+    // The server closed the stream (session deleted server-side, or the
+    // subscription window ended). A new selection re-subscribes.
+    sessionSubId = null;
+  }
+}
+
+/** Provider A/B: each provider's streamed answer plus its score, latency
+    and cost; the final event names the winner. */
+function handleAbtestEvent(p: StreamEnvelope<AbTestEvent>) {
+  if (!abtestState || p.requestId !== abtestState.requestId) return;
+  if (p.kind === "progress" && p.event) {
+    const e = p.event;
+    const name = e.provider_name ?? "provider";
+    const entry = abtestState.per.get(name) ?? { text: "", finished: false };
+    if (e.content_chunk) entry.text += e.content_chunk;
+    if (e.finished) {
+      entry.finished = true;
+      if (typeof e.score === "number") entry.score = e.score;
+      if (typeof e.latency_ms === "number") entry.latencyMs = e.latency_ms;
+      if (typeof e.cost_usd === "number") entry.costUsd = e.cost_usd;
+    }
+    abtestState.per.set(name, entry);
+    if (e.winner) abtestState.winner = e.winner;
+    renderAbtest();
+  } else if (p.kind === "done") {
+    renderAbtest();
+  } else if (p.kind === "error") {
+    abtestState.error = p.error ?? "stream failed";
+    renderAbtest();
+  } else if (p.kind === "cancelled") {
+    abtestState = null;
+    renderAbtest();
+  }
+}
+
+function renderAbtest() {
+  const body = document.querySelector<HTMLElement>("#abtest-body");
+  if (!body) return;
+  body.replaceChildren();
+  if (!abtestState) return;
+  if (abtestState.error) {
+    body.append(Object.assign(document.createElement("p"), { className: "field-error", textContent: `A/B test failed: ${abtestState.error}` }));
+  }
+  for (const [name, entry] of abtestState.per) {
+    const row = document.createElement("div");
+    row.className = "abtest-provider";
+    const head = document.createElement("strong");
+    head.textContent = `${name}${abtestState.winner === name ? " ★ winner" : ""}`;
+    const meta = document.createElement("span");
+    const parts: string[] = [];
+    if (typeof entry.score === "number") parts.push(`score ${entry.score.toFixed(2)}`);
+    if (typeof entry.latencyMs === "number") parts.push(`${Math.round(entry.latencyMs)} ms`);
+    if (typeof entry.costUsd === "number") parts.push(`$${entry.costUsd.toFixed(4)}`);
+    if (entry.finished) parts.push("done");
+    else parts.push("…");
+    meta.textContent = parts.join(" · ");
+    const text = document.createElement("p");
+    text.className = "abtest-text";
+    text.textContent = entry.text.slice(-400) || "no text yet";
+    row.append(head, meta, text);
+    body.append(row);
+  }
+}
+
+function openAbtestDialog() {
+  const dialog = $("#abtest-dialog") as HTMLDialogElement;
+  ($("#abtest-prompt") as HTMLTextAreaElement).value = "";
+  ($("#abtest-error") as HTMLElement).hidden = true;
+  const mode = $("#abtest-mode") as HTMLSelectElement;
+  mode.innerHTML = "";
+  for (const [value, label] of [
+    ["SIDE_BY_SIDE", "Side by side (all providers at once)"],
+    ["SEQUENTIAL_SCORED", "Sequential, judge-scored"],
+    ["SHADOW", "Shadow (primary answers, others run silently)"],
+  ] as const) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    mode.append(opt);
+  }
+  const box = $("#abtest-providers") as HTMLElement;
+  box.replaceChildren();
+  for (const p of providers) {
+    const label = document.createElement("label");
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.value = p.name;
+    label.append(check, document.createTextNode(` ${p.name}`));
+    box.append(label);
+  }
+  renderAbtest();
+  dialog.showModal();
+}
+
+async function startAbtest() {
+  const prompt = ($("#abtest-prompt") as HTMLTextAreaElement).value.trim();
+  if (!prompt) return;
+  const names = [...document.querySelectorAll<HTMLInputElement>("#abtest-providers input:checked")].map((c) => c.value);
+  const mode = ($("#abtest-mode") as HTMLSelectElement).value;
+  const requestId = `ab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  abtestState = { requestId, per: new Map(), winner: undefined };
+  renderAbtest();
+  try {
+    await providerAbtest(requestId, prompt, names.length ? names : undefined, mode);
+  } catch (err) {
+    abtestState.error = err instanceof Error ? err.message : String(err);
+    renderAbtest();
+  }
+}
+
+/** Workflow schedules: list, create (cron), pause/resume, trigger, delete —
+    all HTTP-bound, so no transport decision is needed. */
+async function refreshSchedules() {
+  try {
+    workflowSchedules = await listWorkflowSchedules();
+    schedulesLoadError = null;
+  } catch (err) {
+    workflowSchedules = [];
+    schedulesLoadError = err instanceof Error ? err.message : String(err);
+  }
+  renderSchedules();
+}
+
+function scheduleRow(raw: unknown): {
+  id: string; workflow: string; cron: string; timezone: string; enabled: boolean;
+} {
+  const s = raw as {
+    schedule_id?: string; id?: string; workflow_name?: string; name?: string;
+    schedule?: { cron?: string; timezone?: string; enabled?: boolean };
+    cron?: string; timezone?: string; enabled?: boolean;
+  };
+  return {
+    id: s.schedule_id ?? s.id ?? "?",
+    workflow: s.workflow_name ?? s.name ?? "?",
+    cron: s.schedule?.cron ?? s.cron ?? "?",
+    timezone: s.schedule?.timezone ?? s.timezone ?? "UTC",
+    enabled: s.schedule?.enabled ?? s.enabled ?? true,
+  };
+}
+
+function renderSchedules() {
+  const list = document.querySelector<HTMLElement>("#schedules-list");
+  if (!list) return;
+  list.replaceChildren();
+  if (schedulesLoadError) {
+    list.append(Object.assign(document.createElement("p"), { className: "field-error", textContent: `Could not list schedules: ${schedulesLoadError}` }));
+  } else if (workflowSchedules.length === 0) {
+    list.append(Object.assign(document.createElement("p"), { className: "empty", textContent: "No scheduled workflows." }));
+  }
+  for (const raw of workflowSchedules) {
+    const s = scheduleRow(raw);
+    const row = document.createElement("div");
+    row.className = "schedule-row";
+    const info = document.createElement("span");
+    info.textContent = `${s.workflow} · ${s.cron} · ${s.timezone}${s.enabled ? "" : " · paused"}`;
+    const actions = document.createElement("span");
+    actions.className = "schedule-actions";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "btn ghost small";
+    toggle.textContent = s.enabled ? "Pause" : "Resume";
+    toggle.addEventListener("click", async () => {
+      try {
+        await updateWorkflowSchedule(s.id, undefined, undefined, !s.enabled);
+        await refreshSchedules();
+      } catch (err) {
+        schedulesLoadError = err instanceof Error ? err.message : String(err);
+        renderSchedules();
+      }
+    });
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "btn ghost small";
+    trigger.textContent = "Run now";
+    trigger.addEventListener("click", async () => {
+      try {
+        await triggerWorkflowSchedule(s.id);
+        await refreshExecutionsList();
+        agentsNotice(`Triggered ${s.workflow}.`, false);
+      } catch (err) {
+        agentsNotice(`Could not trigger: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn ghost small danger";
+    del.textContent = "Delete";
+    del.addEventListener("click", async () => {
+      if (!window.confirm(`Delete the schedule for ${s.workflow}?`)) return;
+      try {
+        await deleteWorkflowSchedule(s.id);
+        await refreshSchedules();
+      } catch (err) {
+        schedulesLoadError = err instanceof Error ? err.message : String(err);
+        renderSchedules();
+      }
+    });
+    const history = document.createElement("button");
+    history.type = "button";
+    history.className = "btn ghost small";
+    history.textContent = "History";
+    history.addEventListener("click", async () => {
+      const dialog = $("#knowledge-dialog") as HTMLDialogElement;
+      dialog.replaceChildren();
+      const h2 = document.createElement("h2");
+      h2.textContent = `Schedule history — ${s.workflow}`;
+      dialog.append(h2);
+      const body = document.createElement("div");
+      body.className = "mcp-tools";
+      body.append(Object.assign(document.createElement("p"), { textContent: "Loading history…" }));
+      dialog.append(body);
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "btn ghost";
+      close.textContent = "Close";
+      close.addEventListener("click", () => dialog.close());
+      dialog.append(close);
+      dialog.showModal();
+      try {
+        const entries = await workflowScheduleHistory(s.id);
+        body.replaceChildren();
+        if (entries.length === 0) {
+          body.append(Object.assign(document.createElement("p"), { textContent: "No runs recorded for this schedule." }));
+        }
+        for (const e of entries) {
+          const run = e as { execution_id?: string; started_at?: number; completed_at?: number; status?: string };
+          const row = document.createElement("div");
+          row.className = "mcp-tool";
+          const when = run.started_at ? new Date(run.started_at * 1000).toLocaleString() : "—";
+          row.append(Object.assign(document.createElement("strong"), {
+            textContent: `${run.status ?? "run"} · ${when}`,
+          }));
+          if (run.execution_id) row.append(Object.assign(document.createElement("p"), { textContent: run.execution_id }));
+          body.append(row);
+        }
+      } catch (err) {
+        body.replaceChildren();
+        body.append(Object.assign(document.createElement("p"), {
+          textContent: `Could not load the history: ${err instanceof Error ? err.message : String(err)}`,
+        }));
+      }
+    });
+    actions.append(toggle, trigger, history, del);
+    row.append(info, actions);
+    list.append(row);
+  }
+}
+
+function openScheduleDialog() {
+  const dialog = $("#schedule-dialog") as HTMLDialogElement;
+  const sel = $("#schedule-workflow") as HTMLSelectElement;
+  sel.innerHTML = "";
+  for (const wf of workflows) {
+    const opt = document.createElement("option");
+    opt.value = wf.name;
+    opt.textContent = wf.name;
+    sel.append(opt);
+  }
+  ($("#schedule-cron") as HTMLInputElement).value = "0 */6 * * *";
+  ($("#schedule-timezone") as HTMLInputElement).value = "UTC";
+  ($("#schedule-error") as HTMLElement).hidden = true;
+  dialog.showModal();
+}
+
+async function submitSchedule() {
+  const name = ($("#schedule-workflow") as HTMLSelectElement).value;
+  const cron = ($("#schedule-cron") as HTMLInputElement).value.trim();
+  const timezone = ($("#schedule-timezone") as HTMLInputElement).value.trim();
+  if (!name || !cron) return;
+  try {
+    await createWorkflowSchedule(name, cron, timezone || undefined, true);
+    ($("#schedule-dialog") as HTMLDialogElement).close();
+    await refreshSchedules();
+  } catch (err) {
+    const el = $("#schedule-error") as HTMLElement;
+    el.textContent = err instanceof Error ? err.message : String(err);
+    el.hidden = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Artifacts (real Loom server, attach to work item)
+// ---------------------------------------------------------------------------
+
+function buildArtifactsSection(item: WorkItem): HTMLElement {  const section = document.createElement("section");
   section.className = "wd-section";
   const head = document.createElement("div");
   head.className = "wd-section-head";
@@ -3052,7 +3495,7 @@ async function openMcpTools(serverName: string) {
       body.append(Object.assign(document.createElement("p"), { textContent: "This server exposes no tools (or is not connected)." }));
     }
     for (const t of tools) {
-      const tool = t as { name?: string; description?: string };
+      const tool = t as { name?: string; description?: string; input_schema_json?: string; inputSchema?: unknown };
       const row = document.createElement("div");
       row.className = "mcp-tool";
       const name = document.createElement("strong");
@@ -3060,6 +3503,17 @@ async function openMcpTools(serverName: string) {
       const desc = document.createElement("p");
       desc.textContent = tool.description ?? "";
       row.append(name, desc);
+      const schema = tool.input_schema_json ?? (tool.inputSchema ? JSON.stringify(tool.inputSchema) : "");
+      if (schema) {
+        const params = document.createElement("details");
+        params.className = "mcp-tool-params";
+        const summary = document.createElement("summary");
+        summary.textContent = "Parameters";
+        const pre = document.createElement("pre");
+        pre.textContent = typeof schema === "string" ? schema : JSON.stringify(schema);
+        params.append(summary, pre);
+        row.append(params);
+      }
       body.append(row);
     }
   } catch (err) {
@@ -3346,6 +3800,35 @@ function renderSessionDetail(): HTMLElement {
     dl.append(dt, dd);
   }
   section.append(dl);
+
+  // Session completeness (§13): a crashed or interrupted turn can be
+  // resumed or its execution gap resolved from the detail surface.
+  if (sessionDetail.state === "interrupted" || sessionDetail.state === "error" || sessionDetail.state === "crashed") {
+    const actions = document.createElement("div");
+    actions.className = "session-actions";
+    const resume = document.createElement("button");
+    resume.type = "button";
+    resume.className = "btn";
+    resume.textContent = "Resume session";
+    resume.addEventListener("click", () => { void resumeSelectedSession(); });
+    const resolve = document.createElement("button");
+    resolve.type = "button";
+    resolve.className = "btn ghost";
+    resolve.textContent = "Resolve execution gap";
+    resolve.addEventListener("click", async () => {
+      const detail = sessionDetail;
+      if (!detail) return;
+      try {
+        await resolveSessionGap(detail.id);
+        await refreshSessionDetail(detail.id);
+        showSessionNote("Execution gap resolved — check the session state.");
+      } catch (err) {
+        showSessionNote(`Could not resolve the gap: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+    });
+    actions.append(resume, resolve);
+    section.append(actions);
+  }
 
   if (sessionDetail.metadata && Object.keys(sessionDetail.metadata).length > 0) {
     const metaH = document.createElement("h5");
@@ -6152,10 +6635,12 @@ async function init() {
     if (v) {
       loadChatForWork(selectedWorkId, v);
       void refreshSessionDetail(v);
+      void ensureSessionSubscription();
     } else {
       clearChat();
       sessionDetail = null;
       renderInspectorContext();
+      sessionSubId = null;
     }
   });
   $("#agent-select").addEventListener("change", async (e) => {
@@ -6219,6 +6704,15 @@ async function init() {
     await listen<LoomStreamEvent>("loom-stream", (event) => {
       handleStreamEvent(event.payload);
     });
+    await listen<StreamEnvelope<WorkflowProgressEvent>>("loom-workflow", (event) => {
+      handleWorkflowStreamEvent(event.payload);
+    });
+    await listen<StreamEnvelope<AbTestEvent>>("loom-abtest", (event) => {
+      handleAbtestEvent(event.payload);
+    });
+    await listen<StreamEnvelope<unknown>>("loom-session", (event) => {
+      handleSessionEvent(event.payload);
+    });
   }
   const stopBtn = $("#chat-stop") as HTMLButtonElement | null;
   if (stopBtn) stopBtn.addEventListener("click", () => {
@@ -6231,6 +6725,13 @@ async function init() {
   $("#session-delete").addEventListener("click", () => { void deleteSelectedSession(); });
   $("#session-resume").addEventListener("click", () => { void resumeSelectedSession(); });
   initAgentsView();
+
+  // Provider A/B and workflow schedules.
+  $("#abtest-btn").addEventListener("click", openAbtestDialog);
+  $("#abtest-start").addEventListener("click", () => { void startAbtest(); });
+  $("#abtest-cancel").addEventListener("click", () => ($("#abtest-dialog") as HTMLDialogElement).close());
+  $("#schedule-cancel").addEventListener("click", () => ($("#schedule-dialog") as HTMLDialogElement).close());
+  $("#schedule-submit").addEventListener("click", () => { void submitSchedule(); });
 
 }
 

@@ -1240,3 +1240,55 @@ export const resumeSession = (sessionId: string) =>
   invokeCmd<unknown>("session_resume", { sessionId });
 export const resolveSessionGap = (sessionId: string) =>
   invokeCmd<unknown>("session_resolve_gap", { sessionId });
+
+// ---- Workflow streaming, session subscribe, provider A/B (SSE bridges) ----
+
+export interface WorkflowProgressEvent {
+  execution_id?: string;
+  pattern_type?: string;
+  current_agent_id?: string;
+  progress?: number;
+  message?: string;
+}
+export interface AbTestEvent {
+  provider_name?: string;
+  content_chunk?: string;
+  finished?: boolean;
+  score?: number;
+  latency_ms?: number;
+  cost_usd?: number;
+  winner?: string;
+  ab_test_id?: string;
+}
+export interface StreamEnvelope<T> {
+  requestId: string;
+  kind: "progress" | "done" | "error" | "cancelled";
+  event?: T;
+  error?: string | null;
+}
+
+export const executeWorkflowStream = (requestId: string, workflowRef: string) =>
+  invokeCmd<void>("execute_workflow_stream", { requestId, workflowRef });
+export const sessionSubscribe = (requestId: string, sessionId: string) =>
+  invokeCmd<void>("session_subscribe", { requestId, sessionId });
+export const providerAbtest = (
+  requestId: string, prompt: string, providerNames?: string[], mode?: string,
+) => invokeCmd<void>("provider_abtest", { requestId, prompt, providerNames, mode });
+
+// ---- Workflow scheduling ----
+
+export const listWorkflowSchedules = () => invokeCmd<unknown[]>("workflow_schedules_list");
+export const getWorkflowSchedule = (scheduleId: string) =>
+  invokeCmd<unknown>("workflow_schedule_get", { scheduleId });
+export const createWorkflowSchedule = (
+  workflowName: string, cron: string, timezone?: string, enabled?: boolean,
+) => invokeCmd<unknown>("workflow_schedule_create", { workflowName, cron, timezone, enabled });
+export const updateWorkflowSchedule = (
+  scheduleId: string, cron?: string, timezone?: string, enabled?: boolean,
+) => invokeCmd<unknown>("workflow_schedule_update", { scheduleId, cron, timezone, enabled });
+export const deleteWorkflowSchedule = (scheduleId: string) =>
+  invokeCmd<string>("workflow_schedule_delete", { scheduleId });
+export const triggerWorkflowSchedule = (scheduleId: string) =>
+  invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId });
+export const workflowScheduleHistory = (scheduleId: string) =>
+  invokeCmd<unknown[]>("workflow_schedule_history", { scheduleId });

@@ -3981,3 +3981,24 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 
 #mcp-dialog label, #agent-create-dialog label { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
 #mcp-dialog input, #mcp-dialog select, #agent-create-dialog input, #agent-create-dialog select, #agent-create-dialog textarea { width: 100%; margin-top: 4px; }
+
+/* ---------------------------------------------------------------------------
+ * Workflow streaming, schedules, provider A/B (build-plan phases 3–5)
+ * --------------------------------------------------------------------------- */
+
+.workflow-progress { font-size: 12px; color: var(--muted); margin: 4px 0 0; grid-column: 1 / -1; }
+.schedule-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line-subtle); font-size: 13px; }
+.schedule-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.session-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+.abtest-providers { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 6px 0 10px; font-size: 13px; }
+.abtest-body { margin-top: 12px; max-height: 40vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.abtest-provider { border: 1px solid var(--line-subtle); border-radius: var(--radius-card); padding: 10px 12px; font-size: 13px; }
+.abtest-provider strong { display: block; }
+.abtest-provider span { color: var(--muted); font-size: 12px; }
+.abtest-text { margin: 6px 0 0; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+.mcp-tool-params { margin-top: 6px; }
+.mcp-tool-params summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.mcp-tool-params pre { font-family: var(--mono); font-size: 11px; white-space: pre-wrap; word-break: break-word; margin: 4px 0 0; padding: 8px; background: var(--surface2); border-radius: 6px; max-height: 180px; overflow: auto; }
+#abtest-dialog label, #schedule-dialog label { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
+#abtest-dialog input, #abtest-dialog select, #abtest-dialog textarea, #schedule-dialog input, #schedule-dialog select { width: 100%; margin-top: 4px; }

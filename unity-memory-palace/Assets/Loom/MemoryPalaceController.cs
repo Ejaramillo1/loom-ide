@@ -47,8 +47,11 @@ namespace Loom.MemoryPalace
         static readonly Color RimWhite = Rgb(228, 236, 248);
         // Emission hero discipline (§5.4): the sphere glows at 2–4× HDR;
         // every other accent stays at 1–2 so only the state sphere blooms.
-        const float SphereEmission = 2.6f;
-        const float AccentEmission = 1.35f;
+        // Tuned to 2.0×: higher values blow the sphere into a flat white
+        // disc under ACES (the original complaint); at 2.0 the surface keeps
+        // its shading and bloom supplies the halo.
+        const float SphereEmission = 2.0f;
+        internal const float AccentEmission = 1.35f;
 
         static readonly Portal[] Portals =
         {
@@ -72,6 +75,7 @@ namespace Loom.MemoryPalace
         Light keyLight;
         Light fillLight;
         Light rimLight;
+        ParticleSystem dust;
         Color liveText = Text;
         Color liveMuted = Muted;
         Color liveReading = Reading;
@@ -246,6 +250,13 @@ namespace Loom.MemoryPalace
             MoveCamera();
             PickMemory();
 
+            // Reduced motion pauses ambient dust; normal motion keeps it slow.
+            if (dust)
+            {
+                if (reduceMotion && dust.isPlaying) dust.Pause();
+                else if (!reduceMotion && dust.isPaused) dust.Play();
+            }
+
             if (!reduceMotion)
             {
                 sphere.Rotate(0f, 1.2f * Time.deltaTime, 0f, Space.World);
@@ -275,7 +286,9 @@ namespace Loom.MemoryPalace
             RenderSettings.fog = true;
             RenderSettings.fogColor = Deep;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = 0.009f;
+            // Whisper density (§5.7): depth between the front objects and the
+            // back of the desk without a visible haze band.
+            RenderSettings.fogDensity = 0.005f;
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
             RenderSettings.ambientSkyColor = Rgb(226, 216, 208);
             RenderSettings.ambientEquatorColor = Rgb(238, 230, 224);
@@ -290,12 +303,22 @@ namespace Loom.MemoryPalace
             }
             sceneCamera.clearFlags = CameraClearFlags.SolidColor;
             sceneCamera.backgroundColor = Deep;
-            sceneCamera.fieldOfView = 48f;
+            // Product-shot framing (§5.8): a vertical FOV of ~35–45° reads
+            // like a desk photograph, with less distortion on the near props
+            // than a wide game FOV.
+            sceneCamera.fieldOfView = 42f;
             sceneCamera.nearClipPlane = 0.1f;
             sceneCamera.farClipPlane = 80f;
             // HDR is the prerequisite for bloom (§5.4): without it, emission
             // clamps at 1.0 and the sphere has nothing to threshold on.
             sceneCamera.allowHDR = true;
+            // The camera is created at runtime, so URP's additional camera
+            // data may never be attached by the pipeline — and without it
+            // post-processing and anti-aliasing silently no-op. Attach it
+            // explicitly and turn the grade on (MSAA comes from the asset).
+            var cameraData = sceneCamera.GetUniversalAdditionalCameraData();
+            cameraData.renderPostProcessing = true;
+            cameraData.antialiasing = AntialiasingMode.None;
 
             foreach (var light in FindObjectsByType<Light>())
                 Destroy(light.gameObject);
@@ -306,14 +329,14 @@ namespace Loom.MemoryPalace
             var key = keyLight = new GameObject("Warm key", typeof(Light)).GetComponent<Light>();
             key.type = LightType.Directional;
             key.color = Rgb(255, 240, 222);
-            key.intensity = 0.9f;
+            key.intensity = 1.15f;
             key.shadows = LightShadows.Soft;
             key.transform.rotation = Quaternion.Euler(44f, -38f, 0f);
 
             var fill = fillLight = new GameObject("Cool fill", typeof(Light)).GetComponent<Light>();
             fill.type = LightType.Directional;
             fill.color = FillCool;
-            fill.intensity = 0.32f;
+            fill.intensity = 0.42f;
             fill.shadows = LightShadows.None;
             fill.transform.rotation = Quaternion.Euler(30f, 118f, 0f);
 
@@ -373,14 +396,49 @@ namespace Loom.MemoryPalace
             var tonemapping = profile.Add<Tonemapping>(true);
             tonemapping.mode.Override(TonemappingMode.ACES);
             var adjustments = profile.Add<ColorAdjustments>(true);
-            adjustments.postExposure.Override(0.1f);
-            adjustments.contrast.Override(15f);
+            // §5.6: the scene has no baked indirect light, so the grade must
+            // lift, not darken — post-exposure well above neutral and a
+            // shadows lift keep the near-blacks separable instead of crushed.
+            adjustments.postExposure.Override(0.35f);
+            adjustments.contrast.Override(10f);
             adjustments.saturation.Override(-5f);
             adjustments.colorFilter.Override(new Color(1f, 0.95f, 0.9f));
+            var shadows = profile.Add<ShadowsMidtonesHighlights>(true);
+            shadows.shadows.Override(new Vector4(1f, 1f, 1f, 0.06f));
             var vignette = profile.Add<Vignette>(true);
             vignette.intensity.Override(0.25f);
             vignette.smoothness.Override(0.4f);
             grade.sharedProfile = profile;
+
+            // Dust motes (§5.7): a handful of tiny additive particles near
+            // the sphere — the cheapest perceived atmosphere per millisecond.
+            // Under reduced motion they are paused, not hidden.
+            var dustObject = new GameObject("Dust motes", typeof(ParticleSystem));
+            dustObject.transform.position = new Vector3(0f, 1.7f, 0f);
+            dust = dustObject.GetComponent<ParticleSystem>();
+            var dustMain = dust.main;
+            dustMain.loop = true;
+            dustMain.maxParticles = 80;
+            dustMain.startLifetime = 16f;
+            dustMain.startSpeed = 0.05f;
+            dustMain.startSize = 0.012f;
+            dustMain.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.97f, 0.9f, 0.22f));
+            dustMain.simulationSpace = ParticleSystemSimulationSpace.World;
+            var dustEmission = dust.emission;
+            dustEmission.rateOverTime = 5f;
+            var dustShape = dust.shape;
+            dustShape.shapeType = ParticleSystemShapeType.Sphere;
+            dustShape.radius = 1.55f;
+            var dustRenderer = dustObject.GetComponent<ParticleSystemRenderer>();
+            var dustShader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (dustShader)
+            {
+                var dustMaterial = new Material(dustShader) { name = "Dust mote" };
+                dustMaterial.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.45f));
+                dustRenderer.material = dustMaterial;
+            }
+            dustRenderer.shadowCastingMode = ShadowCastingMode.Off;
+            dustRenderer.receiveShadows = false;
 
             var placements = new[] {
                 new Vector3(0, 0.36f, -2.65f), new Vector3(-2.85f, 0.36f, 1.35f),
@@ -481,31 +539,36 @@ namespace Loom.MemoryPalace
         {
             // PBR signatures per surface (§5.2): paper matte, metal bright,
             // wood in between — so each reads under the same light instead
-            // of six grey primitives.
+            // of six grey primitives. Base + normal maps are generated
+            // tileable at 256 px (no imported assets; values documented in
+            // docs/BENCH_MATERIALS.md).
             var paper = Material("Ivory paper", Rgb(229, 218, 195), 0.25f, 0f);
+            paper.SetTexture("_BaseMap", PaperTexture(256));
+            paper.SetTexture("_BumpMap", PaperNormal(256));
+            paper.EnableKeyword("_NORMALMAP");
             var ink = Material("Graphite", Rgb(47, 51, 54), 0.3f, 0f);
             var metal = Material("Brushed nickel", Rgb(150, 159, 162), 0.72f, 0f);
             metal.SetFloat("_Metallic", 0.88f);
+            metal.SetTexture("_BaseMap", BrushedMetalTexture(256));
+            metal.SetTexture("_BumpMap", BrushedMetalNormal(256));
+            metal.EnableKeyword("_NORMALMAP");
             var wood = Material("Oiled walnut", Rgb(105, 66, 39), 0.37f, 0f);
-            var grain = new Texture2D(128, 64) { wrapMode = TextureWrapMode.Repeat };
-            for (var y = 0; y < grain.height; y++)
-                for (var x = 0; x < grain.width; x++)
-                {
-                    var line = Mathf.Sin(y * 1.9f + Mathf.Sin(x * 0.065f) * 1.3f);
-                    grain.SetPixel(x, y, Color.Lerp(Rgb(150, 125, 99), Color.white, (line + 1f) * 0.5f));
-                }
-            grain.Apply();
-            wood.SetTexture("_BaseMap", grain);
+            wood.SetTexture("_BaseMap", WoodGrainTexture(256));
+            wood.SetTexture("_BumpMap", WoodGrainNormal(256));
+            wood.EnableKeyword("_NORMALMAP");
             var glassTemplate = Resources.Load<Material>("LoomGlass");
             if (!glassTemplate) throw new InvalidOperationException("Loom glass material resource is missing");
             var glass = new Material(glassTemplate) { name = "Optical glass" };
-            // Faked-glass discipline (§5.3): one transparent in a fixed slot —
-            // after the contact shadows (3000), before nothing else. Both the
-            // flask and the lens share it, so they never sort against each
-            // other's geometry.
+            // Faked-glass discipline (§5.3): the flask is the only large
+            // transparent, fixed in the sort order after the contact shadows
+            // (3000). The magnifier lens uses the opaque fallback instead —
+            // at this size a high-smoothness tinted lens reads as glass with
+            // no sorting cost and no self-intersection flicker.
             glass.SetFloat("_Metallic", 0.1f);
             glass.SetFloat("_Smoothness", 0.85f);
             glass.renderQueue = 3010;
+            var lensGlass = Material("Optical lens", Rgb(148, 166, 178), 0.95f, 0f);
+            lensGlass.SetFloat("_Metallic", 0.05f);
 
             Renderer Box(string name, Transform parent, Vector3 p, Vector3 size, Material mat) => Part(name, parent, PrimitiveType.Cube, p, size, mat);
             Renderer Ball(string name, Transform parent, Vector3 p, Vector3 size, Material mat) => Part(name, parent, PrimitiveType.Sphere, p, size, mat);
@@ -611,11 +674,24 @@ namespace Loom.MemoryPalace
                     var magnifier = new GameObject("Magnifying glass").transform; magnifier.SetParent(root, false);
                     magnifier.localPosition = new Vector3(-0.12f, 0.22f, 0.15f); magnifier.localRotation = Quaternion.Euler(-12, -28, 0);
                     Ring("Brass lens rim", magnifier, Vector3.zero, 0.45f, 0.045f, metal);
-                    Part("Glass lens", magnifier, PrimitiveType.Sphere, Vector3.zero, new Vector3(0.86f, 0.055f, 0.86f), glass);
+                    Part("Glass lens", magnifier, PrimitiveType.Sphere, Vector3.zero, new Vector3(0.86f, 0.055f, 0.86f), lensGlass);
                     var ferrule = Part("Handle ferrule", magnifier, PrimitiveType.Cylinder, new Vector3(0, 0, -0.54f), new Vector3(0.12f, 0.12f, 0.12f), metal);
                     ferrule.transform.localRotation = Quaternion.Euler(90, 0, 0);
                     var grip = Part("Magnifier handle", magnifier, PrimitiveType.Capsule, new Vector3(0, 0, -0.9f), new Vector3(0.15f, 0.26f, 0.15f), accent);
                     grip.transform.localRotation = Quaternion.Euler(90, 0, 0);
+                    // The documents are a legibility surface (§5.5/§6): a
+                    // dedicated soft "reading light" keeps them the highest
+                    // local luminance after the sphere.
+                    var readingLight = new GameObject("Reading light", typeof(Light)).GetComponent<Light>();
+                    readingLight.type = LightType.Spot;
+                    readingLight.color = Rgb(255, 240, 216);
+                    readingLight.intensity = 0.5f;
+                    readingLight.range = 4.5f;
+                    readingLight.spotAngle = 62f;
+                    readingLight.shadows = LightShadows.None;
+                    readingLight.transform.SetParent(root, false);
+                    readingLight.transform.localPosition = new Vector3(0.4f, 1.05f, 0.3f);
+                    readingLight.transform.localRotation = Quaternion.Euler(72f, -18f, 0f);
                     Box("Document clip", root, new Vector3(0.47f, 0.14f, 0.59f), new Vector3(0.25f, 0.04f, 0.18f), metal);
                     return grip;
                 }
@@ -799,6 +875,81 @@ namespace Loom.MemoryPalace
             return material;
         }
 
+        // ------------------------------------------------------------------
+        // Generated tileable PBR maps (§5.2, no imported assets): 256 px
+        // base + normal pairs for wood, paper and brushed metal. Multi-sine
+        // fields tile by construction; normals come from the analytic height
+        // gradient so they match the colour maps exactly.
+        // ------------------------------------------------------------------
+
+        static Texture2D TileableTexture(int size, System.Func<float, float, float> height, Color low, Color high)
+        {
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat };
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    var u = (x + 0.5f) / size;
+                    var v = (y + 0.5f) / size;
+                    var h = Mathf.InverseLerp(-1.15f, 1.15f, height(u, v));
+                    texture.SetPixel(x, y, Color.Lerp(low, high, h));
+                }
+            }
+            texture.Apply();
+            return texture;
+        }
+
+        static Texture2D NormalFromHeight(int size, System.Func<float, float, float> height)
+        {
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat };
+            var step = 1f / size;
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    var u = (x + 0.5f) / size;
+                    var v = (y + 0.5f) / size;
+                    var dhdu = (height(u + step, v) - height(u - step, v)) / (2f * step);
+                    var dhdv = (height(u, v + step) - height(u, v - step)) / (2f * step);
+                    var n = new Vector3(-dhdu, -dhdv, 1f).normalized;
+                    texture.SetPixel(x, y, new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1f));
+                }
+            }
+            texture.Apply();
+            return texture;
+        }
+
+        static float WoodHeight(float u, float v)
+        {
+            var grain = Mathf.Sin(v * Mathf.PI * 2f * 4f + Mathf.Sin(u * Mathf.PI * 2f * 2f) * 2.2f);
+            var fine = 0.35f * Mathf.Sin(v * Mathf.PI * 2f * 17f + u * 3.1f);
+            var knots = 0.25f * Mathf.Sin(u * Mathf.PI * 2f * 3f + v * 1.7f) * Mathf.Sin(v * Mathf.PI * 2f * 5f);
+            return grain + fine + knots;
+        }
+
+        static Texture2D WoodGrainTexture(int size) => TileableTexture(size, WoodHeight, Rgb(96, 60, 34), Rgb(178, 142, 104));
+        static Texture2D WoodGrainNormal(int size) => NormalFromHeight(size, WoodHeight);
+
+        static float PaperHeight(float u, float v)
+        {
+            var fibre = Mathf.Sin(u * Mathf.PI * 2f * 37f + v * 9f) * Mathf.Sin(v * Mathf.PI * 2f * 41f + u * 7f);
+            var speckle = Mathf.Sin((u * 53f + v * 71f) * Mathf.PI * 2f);
+            return fibre * 0.55f + speckle * 0.12f;
+        }
+
+        static Texture2D PaperTexture(int size) => TileableTexture(size, PaperHeight, Rgb(214, 203, 180), Rgb(243, 236, 220));
+        static Texture2D PaperNormal(int size) => NormalFromHeight(size, PaperHeight);
+
+        static float BrushedHeight(float u, float v)
+        {
+            var streaks = Mathf.Sin(u * Mathf.PI * 2f * 46f + Mathf.Sin(v * 2.1f) * 4f);
+            var wobble = 0.3f * Mathf.Sin(v * Mathf.PI * 2f * 9f + u * 5f);
+            return streaks * 0.7f + wobble;
+        }
+
+        static Texture2D BrushedMetalTexture(int size) => TileableTexture(size, BrushedHeight, Rgb(128, 136, 142), Rgb(178, 186, 192));
+        static Texture2D BrushedMetalNormal(int size) => NormalFromHeight(size, BrushedHeight);
+
         static Texture2D MakeTexture(Color color, int radius)
         {
             var size = radius * 2 + 2;
@@ -922,7 +1073,14 @@ namespace Loom.MemoryPalace
                 label.position = transform.position + new Vector3(0f, 0.08f, -0.96f);
                 label.rotation = Quaternion.LookRotation(label.position - Camera.main.transform.position);
             }
-            accent.sharedMaterial.SetColor("_EmissionColor", color * (selected ? 0.10f : hovered ? 0.055f : 0.015f));
+            // Selection is an accent emissive pulse, not an outline alone
+            // (§5.5): idle accents sit at 1.35× HDR, hover lifts to ~1.75,
+            // and the selected object pulses around 2× — always under the
+            // sphere's 2.6 so the state hero stays dominant.
+            var accentGlow = MemoryPalaceController.AccentEmission;
+            if (hovered || selected) accentGlow = 1.75f;
+            if (selected && !reduceMotion) accentGlow += Mathf.Sin(Time.time * 2.2f) * 0.25f;
+            accent.sharedMaterial.SetColor("_EmissionColor", color * accentGlow);
         }
     }
 }

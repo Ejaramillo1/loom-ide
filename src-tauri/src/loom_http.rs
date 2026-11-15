@@ -405,6 +405,135 @@ pub async fn apps_list() -> Result<Vec<Value>, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Workflow scheduling (HTTP-bound; no transport decision needed)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn workflow_schedules_list() -> Result<Vec<Value>, String> {
+    let value = loom_get("/v1/workflows/schedules".into()).await?;
+    Ok(list_field(&value, &["schedules"]).to_vec())
+}
+
+#[tauri::command]
+pub async fn workflow_schedule_get(schedule_id: String) -> Result<Value, String> {
+    if schedule_id.trim().is_empty() {
+        return Err("No schedule selected.".into());
+    }
+    loom_get(format!(
+        "/v1/workflows/schedules/{}",
+        percent_encode(&schedule_id)
+    ))
+    .await
+}
+
+#[tauri::command]
+pub async fn workflow_schedule_create(
+    workflow_name: String,
+    cron: String,
+    timezone: Option<String>,
+    enabled: Option<bool>,
+) -> Result<Value, String> {
+    if workflow_name.trim().is_empty() || cron.trim().is_empty() {
+        return Err("A workflow name and a cron expression are required.".into());
+    }
+    let mut schedule = serde_json::Map::new();
+    schedule.insert("cron".into(), Value::String(cron.trim().to_string()));
+    if let Some(tz) = timezone {
+        if !tz.trim().is_empty() {
+            schedule.insert("timezone".into(), Value::String(tz));
+        }
+    }
+    if let Some(e) = enabled {
+        schedule.insert("enabled".into(), Value::Bool(e));
+    }
+    let body = serde_json::json!({
+        "workflowName": workflow_name.trim(),
+        "schedule": Value::Object(schedule),
+    });
+    loom_send("POST", "/v1/workflows/schedules".into(), Some(body)).await
+}
+
+#[tauri::command]
+pub async fn workflow_schedule_update(
+    schedule_id: String,
+    cron: Option<String>,
+    timezone: Option<String>,
+    enabled: Option<bool>,
+) -> Result<Value, String> {
+    if schedule_id.trim().is_empty() {
+        return Err("No schedule selected.".into());
+    }
+    let mut schedule = serde_json::Map::new();
+    if let Some(c) = cron {
+        if !c.trim().is_empty() {
+            schedule.insert("cron".into(), Value::String(c));
+        }
+    }
+    if let Some(tz) = timezone {
+        if !tz.trim().is_empty() {
+            schedule.insert("timezone".into(), Value::String(tz));
+        }
+    }
+    if let Some(e) = enabled {
+        schedule.insert("enabled".into(), Value::Bool(e));
+    }
+    let body = serde_json::json!({ "schedule": Value::Object(schedule) });
+    loom_send(
+        "PATCH",
+        format!("/v1/workflows/schedules/{}", percent_encode(&schedule_id)),
+        Some(body),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn workflow_schedule_delete(schedule_id: String) -> Result<String, String> {
+    if schedule_id.trim().is_empty() {
+        return Err("No schedule selected.".into());
+    }
+    let value = loom_send(
+        "DELETE",
+        format!("/v1/workflows/schedules/{}", percent_encode(&schedule_id)),
+        None,
+    )
+    .await?;
+    Ok(value
+        .get("message")
+        .and_then(|m| m.as_str())
+        .unwrap_or("Deleted.")
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn workflow_schedule_trigger(schedule_id: String) -> Result<Value, String> {
+    if schedule_id.trim().is_empty() {
+        return Err("No schedule selected.".into());
+    }
+    loom_send(
+        "POST",
+        format!(
+            "/v1/workflows/schedules/{}:trigger",
+            percent_encode(&schedule_id)
+        ),
+        Some(serde_json::json!({})),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn workflow_schedule_history(schedule_id: String) -> Result<Vec<Value>, String> {
+    if schedule_id.trim().is_empty() {
+        return Err("No schedule selected.".into());
+    }
+    let value = loom_get(format!(
+        "/v1/workflows/schedules/{}/history",
+        percent_encode(&schedule_id)
+    ))
+    .await?;
+    Ok(list_field(&value, &["history", "executions"]).to_vec())
+}
+
+// ---------------------------------------------------------------------------
 // Session completeness (delete / resume / resolve-gap)
 // ---------------------------------------------------------------------------
 

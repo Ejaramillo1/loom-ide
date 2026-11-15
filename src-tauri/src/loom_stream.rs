@@ -27,6 +27,48 @@ fn cancels() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
     CANCELS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Start one SSE stream from Loom. `method`/`path`/`body` describe the
+/// endpoint, `event_name` is the Tauri event the frontend listens to, and
+/// the terminal payload carries the request id so listeners can correlate.
+fn start_stream(
+    app: AppHandle,
+    request_id: String,
+    event_name: &'static str,
+    method: &'static str,
+    path: String,
+    body: Value,
+) -> Result<(), String> {
+    let rid = request_id.trim().to_string();
+    if rid.is_empty() {
+        return Err("A request id is required.".into());
+    }
+    let body = body.to_string();
+    let cancel = Arc::new(AtomicBool::new(false));
+    if let Ok(mut map) = cancels().lock() {
+        map.insert(rid.clone(), cancel.clone());
+    }
+    let rid2 = rid.clone();
+    std::thread::spawn(move || {
+        let result = run_stream(&app, &rid2, method, &path, &body, &cancel, event_name);
+        let terminal = match result {
+            Ok(()) => serde_json::json!({ "requestId": rid2, "kind": "done" }),
+            Err(e) => {
+                let cancelled = cancel.load(Ordering::SeqCst);
+                serde_json::json!({
+                    "requestId": rid2,
+                    "kind": if cancelled { "cancelled" } else { "error" },
+                    "error": if cancelled { Value::Null } else { Value::String(e) },
+                })
+            }
+        };
+        let _ = app.emit(event_name, terminal);
+        if let Ok(mut map) = cancels().lock() {
+            map.remove(&rid2);
+        }
+    });
+    Ok(())
+}
+
 /// Start a streaming weave. Returns immediately; progress arrives as
 /// `loom-stream` events carrying `{ requestId, kind, event? , error? }`
 /// where kind is `progress` | `done` | `error` | `cancelled`.
@@ -42,10 +84,6 @@ pub fn ask_loom_stream(
     if message.is_empty() {
         return Err("Enter a message first.".into());
     }
-    let rid = request_id.trim().to_string();
-    if rid.is_empty() {
-        return Err("A request id is required.".into());
-    }
     let mut obj = serde_json::Map::new();
     obj.insert("query".into(), Value::String(message.to_string()));
     if let Some(s) = session_id {
@@ -60,31 +98,14 @@ pub fn ask_loom_stream(
     }
     // Tracing on so the completed turn has an observability record.
     obj.insert("enableTrace".into(), Value::Bool(true));
-    let body = Value::Object(obj).to_string();
-    let cancel = Arc::new(AtomicBool::new(false));
-    if let Ok(mut map) = cancels().lock() {
-        map.insert(rid.clone(), cancel.clone());
-    }
-    let rid2 = rid.clone();
-    std::thread::spawn(move || {
-        let result = run_stream(&app, &rid2, &body, &cancel);
-        let terminal = match result {
-            Ok(()) => serde_json::json!({ "requestId": rid2, "kind": "done" }),
-            Err(e) => {
-                let cancelled = cancel.load(Ordering::SeqCst);
-                serde_json::json!({
-                    "requestId": rid2,
-                    "kind": if cancelled { "cancelled" } else { "error" },
-                    "error": if cancelled { Value::Null } else { Value::String(e) },
-                })
-            }
-        };
-        let _ = app.emit("loom-stream", terminal);
-        if let Ok(mut map) = cancels().lock() {
-            map.remove(&rid2);
-        }
-    });
-    Ok(())
+    start_stream(
+        app,
+        request_id,
+        "loom-stream",
+        "POST",
+        "/v1/weave:stream".into(),
+        Value::Object(obj),
+    )
 }
 
 /// Ask the stream thread to stop. The stream ends with kind `cancelled`.
@@ -96,6 +117,93 @@ pub fn cancel_loom_stream(request_id: String) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Stream a workflow run (POST /v1/workflows:stream) as `loom-workflow`
+/// events so long runs report live progress instead of one blocking wait.
+#[tauri::command]
+pub fn execute_workflow_stream(
+    app: AppHandle,
+    request_id: String,
+    workflow_ref: String,
+) -> Result<(), String> {
+    if workflow_ref.trim().is_empty() {
+        return Err("No workflow selected.".into());
+    }
+    start_stream(
+        app,
+        request_id,
+        "loom-workflow",
+        "POST",
+        "/v1/workflows:stream".into(),
+        serde_json::json!({ "workflowRef": workflow_ref.trim() }),
+    )
+}
+
+/// Subscribe to a session's live updates (GET /v1/sessions/{id}:subscribe)
+/// as `loom-session` events, so the session surface reflects server-side
+/// changes without polling.
+#[tauri::command]
+pub fn session_subscribe(
+    app: AppHandle,
+    request_id: String,
+    session_id: String,
+) -> Result<(), String> {
+    if session_id.trim().is_empty() {
+        return Err("No session selected.".into());
+    }
+    start_stream(
+        app,
+        request_id,
+        "loom-session",
+        "GET",
+        format!(
+            "/v1/sessions/{}:subscribe",
+            percent_encode(session_id.trim())
+        ),
+        serde_json::Value::Null,
+    )
+}
+
+/// Run a provider A/B test (POST /v1/providers:abtest) as `loom-abtest`
+/// events: each provider's streamed answer plus score/latency/cost and the
+/// winner on the final event.
+#[tauri::command]
+pub fn provider_abtest(
+    app: AppHandle,
+    request_id: String,
+    prompt: String,
+    provider_names: Option<Vec<String>>,
+    mode: Option<String>,
+) -> Result<(), String> {
+    if prompt.trim().is_empty() {
+        return Err("Enter a prompt to compare.".into());
+    }
+    let mut obj = serde_json::Map::new();
+    obj.insert("prompt".into(), Value::String(prompt.trim().to_string()));
+    if let Some(names) = provider_names {
+        let names: Vec<Value> = names
+            .into_iter()
+            .filter(|n| !n.trim().is_empty())
+            .map(Value::String)
+            .collect();
+        if !names.is_empty() {
+            obj.insert("providerNames".into(), Value::Array(names));
+        }
+    }
+    if let Some(m) = mode {
+        if !m.trim().is_empty() {
+            obj.insert("mode".into(), Value::String(m.trim().to_string()));
+        }
+    }
+    start_stream(
+        app,
+        request_id,
+        "loom-abtest",
+        "POST",
+        "/v1/providers:abtest".into(),
+        Value::Object(obj),
+    )
 }
 
 /// Answer a clarification question raised mid-turn (POST
@@ -134,7 +242,15 @@ pub fn answer_clarification(
 /// Consume the SSE stream. Each `data:` JSON payload is re-emitted as a
 /// `loom-stream` progress event verbatim; the frontend interprets
 /// WeaveProgress fields (partial_content, tool lifecycle, hitl_request).
-fn run_stream(app: &AppHandle, rid: &str, body: &str, cancel: &AtomicBool) -> Result<(), String> {
+fn run_stream(
+    app: &AppHandle,
+    rid: &str,
+    method: &str,
+    path: &str,
+    body: &str,
+    cancel: &AtomicBool,
+    event_name: &'static str,
+) -> Result<(), String> {
     let mut stream =
         TcpStream::connect_timeout(&"127.0.0.1:5006".parse().unwrap(), Duration::from_secs(2))
             .map_err(|e| format!("Loom is unavailable. Start looms serve --http-port 5006. {e}"))?;
@@ -148,7 +264,7 @@ fn run_stream(app: &AppHandle, rid: &str, body: &str, cancel: &AtomicBool) -> Re
         .set_write_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
     let request = format!(
-        "POST /v1/weave:stream HTTP/1.1\r\nHost: localhost:5006\r\nContent-Type: application/json\r\nAccept: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "{method} {path} HTTP/1.1\r\nHost: localhost:5006\r\nContent-Type: application/json\r\nAccept: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         body.len(),
         body
     );
@@ -204,7 +320,7 @@ fn run_stream(app: &AppHandle, rid: &str, body: &str, cancel: &AtomicBool) -> Re
                 if payload != "[DONE]" {
                     if let Ok(value) = serde_json::from_str::<Value>(&payload) {
                         let _ = app.emit(
-                            "loom-stream",
+                            event_name,
                             serde_json::json!({ "requestId": rid, "kind": "progress", "event": value }),
                         );
                     }

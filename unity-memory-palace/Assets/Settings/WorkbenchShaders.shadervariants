@@ -18,5 +18,10 @@ ShaderVariantCollection:
       variants:
       - keywords: 
         passType: 13
-      - keywords: _ALPHAPREMULTIPLY_ON _EMISSION _SURFACE_TYPE_TRANSPARENT
+      - keywords: _ALPHAPREMULTIPLY_ON _EMISSION _NORMALMAP _SURFACE_TYPE_TRANSPARENT
+        passType: 13
+  - first: {fileID: 4800000, guid: 0406db5a14f94604a8c57ccfbc9f3b46, type: 3}
+    second:
+      variants:
+      - keywords: 
         passType: 13
