@@ -138,3 +138,12 @@ harness MCP connection, and every decision in `docs/DECISIONS.md`.
   data files, identical hashes).
 - Release binary rebuilt at head (see below; ~24 MB, grown with the new
   backend surfaces).
+
+## Judge tooling status (§6.7)
+
+- `judge/JUDGE_PROMPT_TEMPLATE.md` and `judge/run-judge.sh` are in the repo
+  (Eduardo's draft; the script is now executable).
+- `/home/ed/judge/` exists with `runs/` and `verdicts/`; the `opencode`
+  CLI reports v2.2.7. A real short pass is Eduardo's to run from the
+  laptop terminal — the script itself warns against running it through
+  the harness shell.
