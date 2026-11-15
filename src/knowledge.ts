@@ -41,11 +41,14 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   const dialog = document.querySelector<HTMLDialogElement>("#knowledge-dialog")!;
   const benchGraph = document.querySelector<HTMLElement>("#spatial-graph")!;
   const benchCanvas = document.querySelector<HTMLElement>("#spatial-canvas")!;
+  const benchGraphTab = document.querySelector<HTMLButtonElement>("#spatial-tab-graph")!;
+  const benchCanvasTab = document.querySelector<HTMLButtonElement>("#spatial-tab-canvas")!;
   let loadFailed = false;
   let data: KnowledgeListing | null = null;
   let tab: Tab = "graph", query = "", kind = "", folder = "";
   let focus: string | null = null;
   let showArchived = false;
+  let benchTab: "graph" | "canvas" = "graph";
   let dirty = false, busy = false, loading = false;
   let request = 0;
   // shortcut: canvas positions last for this application session; persist only if durable layouts are requested.
@@ -79,15 +82,21 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     }
   }
   function renderBench() {
-    for (const parent of [benchGraph, benchCanvas]) {
+    const graphActive = benchTab === "graph";
+    for (const [parent, active] of [[benchGraph, graphActive], [benchCanvas, !graphActive]] as const) {
       parent.replaceChildren();
+      parent.hidden = !active;
       if (loadFailed || !data) parent.append(el("p", loadFailed
         ? "Vault unavailable. Open Knowledge to retry loading your notes."
         : "Loading your vault…", "knowledge-empty"));
     }
+    for (const [btn, active] of [[benchGraphTab, graphActive], [benchCanvasTab, !graphActive]] as const) {
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", String(active));
+    }
     if (loadFailed || !data) return;
-    renderGraph(benchGraph, true);
-    renderCanvas(benchCanvas, true);
+    if (graphActive) renderGraph(benchGraph, true);
+    else renderCanvas(benchCanvas, true);
   }
   function render() {
     renderBench();
@@ -153,7 +162,9 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     if (!compact) parent.append(button("Export JSON Canvas", () => { void exportKnowledgeCanvas().then(path => showNotice(`Exported to ${path}`)).catch(fail); }));
     if (!data.notes.length) { parent.append(el("p", "No notes yet. Open Knowledge to begin your canvas.", "knowledge-empty")); return; }
     const stage = el("div", "", "knowledge-canvas"), plane = el("div", "", "knowledge-plane");
-    const scale = compact ? 0.62 : 1;
+    // The compact preview keeps text at its real reading size; the plane
+    // scrolls instead of shrinking (the old 0.62 scale made 13px text ~8px).
+    const scale = 1;
     const bounds = el("div", "", "knowledge-canvas-bounds");
     bounds.append(plane);
     plane.style.transform = `scale(${scale})`;
@@ -282,8 +293,9 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     try { const count = await syncKnowledge(); await refresh(); showNotice(`Synced ${count} new notes from Loom.`); }
     catch (error) { await refresh(); fail(error); } finally { b.disabled = false; }
   });
-  document.querySelector("#spatial-open-graph")!.addEventListener("click", () => openTab("graph"));
-  document.querySelector("#spatial-open-canvas")!.addEventListener("click", () => openTab("canvas"));
+  document.querySelector("#spatial-open-full")!.addEventListener("click", () => openTab(benchTab));
+  benchGraphTab.addEventListener("click", () => { benchTab = "graph"; renderBench(); });
+  benchCanvasTab.addEventListener("click", () => { benchTab = "canvas"; renderBench(); });
   renderBench();
   bell.addEventListener("click", () => openTab("review"));
   void refresh();

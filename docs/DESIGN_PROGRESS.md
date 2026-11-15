@@ -34,3 +34,21 @@ Implementation underway. Verification and local phase commits follow.
 - D12 verified by inspection, no fix needed: `.scene` is `100dvh` with the middle row `minmax(0, 1fr)`; `.center` and `.view` are full-height flex columns; `#spatial-frame` is `flex: 1`; the player canvas is `width/height 100%`. No fixed height or aspect box anywhere in the chain, so the bench fills the Spatial center column. Pixel-level confirmation remains blocked (see DESIGN_BLOCKERS.md).
 - Frontend re-verified with the D9 edits: vitest 58/58 (8 files), npm build clean. Rust: lib 89 passed / 2 ignored, native-app 22/22, fmt clean.
 - Final WebGL rebuild with the LoomGlass fix succeeded 16:38 (`spatial.wasm` 35,049,618 bytes). Tauri release build running; dist asset check and local commits follow.
+
+## Portal click bug (assistant, 14 Nov ~19:45, Eduardo: agents/experiments/notes/evidence don't navigate)
+
+- Symptom: clicking the bench portals for Agents, Experiments, Evidence and Notes did not navigate the app.
+- Root cause: `stripEngineCode` is enabled and IL2CPP's managed stripper removes the `SphereCollider` and `CapsuleCollider` types. `GameObject.CreatePrimitive` adds those colliders through an `AddComponent` call the stripper cannot see, so the physical parts rendered but had no colliders to raycast against (WebGL console: 21 "SphereCollider doesn't exist", 12 "CapsuleCollider doesn't exist"). The robot is built almost entirely of Sphere/Capsule parts, so it was unclickable; the flask, magnifier, and notebook lost their prominent parts too.
+- Fix: added `Assets/link.xml` preserving `BoxCollider`, `SphereCollider`, `CapsuleCollider` and `MeshCollider` (all primitive collider types). Editor Play Mode never stripped these, so the existing CheckWorkbench self-check could not catch it — verification is the WebGL console after rebuild.
+
+## Rotation + resolution (assistant, 14 Nov ~20:00, Eduardo: assets should rotate for selection, and the render is blurry)
+
+- Rotation: the six portals now orbit the sphere (12°/s) so each can be brought to the front to select. The ring pauses when a portal is hovered or selected, and under reduced motion. Each portal faces outward from the sphere (a gentle yaw offset remains), and the existing hover/selection lift and scale are preserved. `Animate` gained an `orbitAngle` parameter; `CheckWorkbench.cs` call sites updated.
+- Resolution (blur): the WebGL build defaults to the "Mobile" quality level (`m_PerPlatformDefaultQuality.WebGL: 0`), whose renderer (`Mobile_RPAsset`) rendered at `m_RenderScale: 0.8` — 80% resolution upscaled, the main cause of the blur. Set both renderers to `m_RenderScale: 1` and `m_MSAA: 4` (the editor also synced `QualitySettings.antiAliasing` to 4). Unity already follows the display's pixel density, so no `devicePixelRatio` override was needed.
+
+## Critique pass (assistant, 14 Nov ~21:00, Eduardo: apply the UI critique)
+
+- Removed the compact Canvas `scale(0.62)` (13px text had become ~8px); the bench canvas now scrolls at full reading size.
+- Combined the two stacked bench panels (Graph + Canvas) into one pane with a Graph/Canvas toggle, so the landing screen no longer duplicates the same knowledge twice.
+- The bench starts on the Experiment view (not Spatial) so the app opens on the experiment question/variants; Spatial remains a bottom-nav destination.
+- Recorded but deferred in this pass: the full "AI experimentation workbench" layout restructure (slim experiment sidebar, main question/variants/run workspace), moving the Unity IMGUI title/instructions/note editor into HTML, and reducing the decorative shell chrome — each is larger than a point fix and will be separate commits.

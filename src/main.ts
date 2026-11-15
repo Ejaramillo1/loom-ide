@@ -142,7 +142,7 @@ let pendingCreatedIntent: { id: string; statement: string } | null = null;
 /** Last intents-load failure, kept so the header can say so instead of
     showing the empty state. Never clears the previously loaded intents. */
 let intentsLoadError: string | null = null;
-let mode: Mode = "spatial";
+let mode: Mode = "experiment";
 let sphereState: SphereState = "idle";
 let knowledge: ReturnType<typeof installKnowledge> | null = null;
 let pendingKnowledge = 0;
@@ -5106,7 +5106,7 @@ async function init() {
   window.addEventListener("resize", () => {
     if (!isLeftDrawer()) {
       document.body.classList.remove("left-open"); closeKnowledgeDrawer(false);
-      if (document.activeElement?.id === "spatial-knowledge-close") $("#spatial-open-graph").focus();
+      if (document.activeElement?.id === "spatial-knowledge-close") $("#spatial-open-full").focus();
     } else if (mode === "spatial" && !document.body.classList.contains("knowledge-open") && $("#spatial-knowledge").contains(document.activeElement)) {
       $("#spatial-knowledge-toggle").focus();
     }

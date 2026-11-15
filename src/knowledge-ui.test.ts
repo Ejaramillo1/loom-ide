@@ -38,7 +38,7 @@ const note = (id: string): KnowledgeNote => ({ meta: { id, title: id, kind: "not
 const listing = (notes = [note("Alpha"), note("Beta")], archived: KnowledgeNote[] = []): KnowledgeListing => ({ notes, archived, edges: [{ from: "Alpha", to: "Beta", kind: "supports" }], activity: [], pending: 0, revision: "test", root: "/test", kinds: ["note"], folders: ["10 Fleeting Notes"], relations: ["supports"] });
 async function mount(data = listing()) {
   const root = new Node();
-  const ids = ["view-knowledge", "knowledge-content", "knowledge-notice", "knowledge-tabs", "knowledge-bell", "knowledge-dialog", "knowledge-search-slot", "knowledge-new", "knowledge-refresh", "knowledge-sync", "spatial-graph", "spatial-canvas", "spatial-open-graph", "spatial-open-canvas"];
+  const ids = ["view-knowledge", "knowledge-content", "knowledge-notice", "knowledge-tabs", "knowledge-bell", "knowledge-dialog", "knowledge-search-slot", "knowledge-new", "knowledge-refresh", "knowledge-sync", "spatial-graph", "spatial-canvas", "spatial-tab-graph", "spatial-tab-canvas", "spatial-open-full"];
   const nodes = Object.fromEntries(ids.map(id => { const n = new Node(); n.id = id; return [id, n]; }));
   root.append(nodes["view-knowledge"]);
   nodes["view-knowledge"].append(...ids.slice(1).map(id => nodes[id]));
@@ -61,55 +61,58 @@ it("renders the same vault notes and edges in both graphs and the bench canvas w
     expect(nodes[id].querySelectorAll("line")).toHaveLength(1);
     expect(nodes[id].text()).toContain("Alpha");
   }
-  expect(nodes["spatial-canvas"].querySelectorAll("button")).toHaveLength(2);
-  expect(nodes["spatial-canvas"].querySelectorAll("line")).toHaveLength(1);
   const full = nodes["knowledge-content"].querySelector("marker")!.attrs.id;
   const compact = nodes["spatial-graph"].querySelector("marker")!.attrs.id;
   expect(full).not.toBe(compact);
   expect(nodes["spatial-graph"].querySelector("line")!.attrs["marker-end"]).toBe(`url(#${compact})`);
+  // The bench shows one view at a time; Canvas is reached through the toggle.
+  expect(nodes["spatial-canvas"].querySelectorAll("button")).toHaveLength(0);
+  nodes["spatial-tab-canvas"].fire("click");
+  expect(nodes["spatial-canvas"].querySelectorAll("button")).toHaveLength(2);
+  expect(nodes["spatial-canvas"].querySelectorAll("line")).toHaveLength(1);
 });
 
 it("opens the full tools and retains canvas positions across the two surfaces", async () => {
   const { nodes, navigate } = await mount();
+  nodes["spatial-tab-canvas"].fire("click");
   const card = nodes["spatial-canvas"].querySelector("button")!;
   card.fire("pointerdown", { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
   card.fire("pointermove", { clientX: 62, clientY: 31 });
   card.fire("pointerup");
-  expect(card.style.left).toBe("100px");
-  expect(card.style.top).toBe("50px");
+  expect(card.style.left).toBe("62px");
+  expect(card.style.top).toBe("31px");
   card.fire("click");
   expect(readKnowledge).not.toHaveBeenCalled();
-  nodes["spatial-open-canvas"].fire("click");
+  nodes["spatial-open-full"].fire("click");
   expect(navigate).toHaveBeenCalledTimes(1);
   const full = nodes["knowledge-content"].querySelector(".knowledge-canvas-card")!;
-  expect(full.style.left).toBe("100px");
+  expect(full.style.left).toBe("62px");
   full.fire("keydown", { key: "ArrowRight" });
-  expect(full.style.left).toBe("120px");
-  nodes["spatial-open-graph"].fire("click");
-  expect(nodes["spatial-canvas"].querySelector("button")!.style.left).toBe("120px");
+  expect(full.style.left).toBe("82px");
+  nodes["spatial-tab-graph"].fire("click");
+  nodes["spatial-open-full"].fire("click");
   expect(nodes["knowledge-content"].querySelectorAll("g")).toHaveLength(2);
 });
 
 it("never invents content for an empty vault and replaces stale previews on a load failure", async () => {
   const { nodes, instance } = await mount(listing([]));
-  for (const id of ["spatial-graph", "spatial-canvas"]) {
-    expect(nodes[id].text()).toContain("No notes yet");
-    expect(nodes[id].querySelectorAll("g")).toHaveLength(0);
-  }
+  expect(nodes["spatial-graph"].text()).toContain("No notes yet");
+  expect(nodes["spatial-graph"].querySelectorAll("g")).toHaveLength(0);
+  expect(nodes["spatial-canvas"].querySelectorAll(".knowledge-canvas-card")).toHaveLength(0);
   vi.mocked(listKnowledge).mockResolvedValueOnce(listing()); await instance.refresh();
   expect(nodes["spatial-graph"].querySelectorAll("g")).toHaveLength(2);
   vi.mocked(listKnowledge).mockRejectedValueOnce(new Error("disk unavailable")); await instance.refresh();
-  for (const id of ["spatial-graph", "spatial-canvas"]) {
-    expect(nodes[id].text()).toContain("Vault unavailable");
-    expect(nodes[id].querySelectorAll("g")).toHaveLength(0);
-    expect(nodes[id].querySelectorAll(".knowledge-canvas-card")).toHaveLength(0);
-  }
+  expect(nodes["spatial-graph"].text()).toContain("Vault unavailable");
+  expect(nodes["spatial-graph"].querySelectorAll("g")).toHaveLength(0);
+  expect(nodes["spatial-canvas"].querySelectorAll(".knowledge-canvas-card")).toHaveLength(0);
 });
 
 it("drops dangling canvas edges after a note disappears from the refreshed vault", async () => {
   const { nodes, instance } = await mount();
+  nodes["spatial-tab-canvas"].fire("click");
   vi.mocked(listKnowledge).mockResolvedValueOnce(listing([note("Alpha")])); await instance.refresh();
   expect(nodes["spatial-canvas"].querySelectorAll("line")).toHaveLength(0);
+  nodes["spatial-tab-graph"].fire("click");
   expect(nodes["spatial-graph"].querySelectorAll("line")).toHaveLength(0);
 });
 

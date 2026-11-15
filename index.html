@@ -12,7 +12,7 @@
            (Experiment overview only), translucent panels above it.
            The window is opaque; depth comes from layering, not from
            seeing the desktop through the app. -->
-      <div class="scene" data-mode="spatial">
+      <div class="scene" data-mode="experiment">
         <div class="scene-light" aria-hidden="true"></div>
 
         <!-- ======================= Header (row 1) ======================= -->
@@ -73,14 +73,14 @@
 
           <!-- Center: workspace -->
           <section class="center" aria-label="Workspace">
-            <div id="view-spatial" class="view">
+            <div id="view-spatial" class="view" hidden>
               <div id="spatial-load-error" hidden>
                 <p id="spatial-status" role="status"></p>
                 <button id="spatial-load" class="btn" type="button">Retry loading Unity</button>
               </div>
               <iframe id="spatial-frame" title="Resolute Spatial Workbench" allow="fullscreen"></iframe>
             </div>
-            <div id="view-experiment" class="view view-experiment" hidden>
+            <div id="view-experiment" class="view view-experiment">
               <div class="mode-head">
                 <div>
                   <h2>Experiment</h2>
@@ -309,14 +309,17 @@
           </aside>
 
           <aside id="spatial-knowledge" class="spatial-knowledge" aria-label="Knowledge at the bench" hidden>
-            <div class="spatial-knowledge-heading"><span>Your knowledge</span><button id="spatial-knowledge-close" class="icon-btn small drawer-close" type="button" aria-label="Close Graph and Canvas">✕</button></div>
-            <section class="spatial-knowledge-panel" aria-labelledby="spatial-graph-title">
-              <header><h2 id="spatial-graph-title">Knowledge Graph</h2><button class="btn ghost" id="spatial-open-graph" type="button" aria-label="Open full Knowledge Graph">Open ↗</button></header>
+            <div class="spatial-knowledge-heading"><span>Your knowledge</span><button id="spatial-knowledge-close" class="icon-btn small drawer-close" type="button" aria-label="Close knowledge">✕</button></div>
+            <section class="spatial-knowledge-panel">
+              <header class="spatial-knowledge-tabs">
+                <div class="knowledge-tools" role="tablist" aria-label="Bench knowledge view">
+                  <button id="spatial-tab-graph" type="button" role="tab" aria-selected="true">Graph</button>
+                  <button id="spatial-tab-canvas" type="button" role="tab" aria-selected="false">Canvas</button>
+                </div>
+                <button class="btn ghost" id="spatial-open-full" type="button" aria-label="Open the full Knowledge view">Open full ↗</button>
+              </header>
               <div id="spatial-graph" class="spatial-knowledge-content"></div>
-            </section>
-            <section class="spatial-knowledge-panel" aria-labelledby="spatial-canvas-title">
-              <header><h2 id="spatial-canvas-title">Canvas</h2><button class="btn ghost" id="spatial-open-canvas" type="button" aria-label="Open full Knowledge Canvas">Open ↗</button></header>
-              <div id="spatial-canvas" class="spatial-knowledge-content"></div>
+              <div id="spatial-canvas" class="spatial-knowledge-content" hidden></div>
             </section>
           </aside>
 
@@ -328,12 +331,12 @@
         <!-- ======================= Footer (row 3) ======================= -->
         <footer class="app-footer">
           <nav class="mode-nav" aria-label="Workspace mode">
-            <button class="mode-btn active" data-mode="spatial" type="button" aria-current="page">Spatial</button>
+            <button class="mode-btn" data-mode="spatial" type="button">Spatial</button>
             <button class="mode-btn" data-mode="work" type="button">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></svg>
               <span class="mode-label">Work</span>
             </button>
-            <button class="mode-btn" data-mode="experiment" type="button">
+            <button class="mode-btn active" data-mode="experiment" type="button" aria-current="page">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6" /><path d="M10 3v5.5L4.5 18a2.4 2.4 0 0 0 2.1 3.5h10.8a2.4 2.4 0 0 0 2.1-3.5L14 8.5V3" /><path d="M7.5 14h9" /></svg>
               <span class="mode-label">Experiment</span>
             </button>
