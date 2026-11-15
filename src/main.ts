@@ -5823,7 +5823,7 @@ async function init() {
       case "Notes": setMode("knowledge"); break;
       default: break;
     }
-  }, () => ({ work: workItems.length, experiments: experiments.length }), currentLoomState, () => { void knowledge?.refresh(); });
+  }, () => ({ work: workItems.length, experiments: experiments.length }), currentLoomState);
   // The footer provides the primary mode navigation.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
