@@ -1,0 +1,18 @@
+[
+  {
+    "path": "/v1/sessions/audit-nonexistent-session:switch-model",
+    "status": 400,
+    "body": {
+      "code": 3,
+      "message": "provider is required (or use provider_name for pool-based switch)"
+    }
+  },
+  {
+    "path": "/v1/apps",
+    "status": 400,
+    "body": {
+      "code": 3,
+      "message": "proto: (line 1:33): unknown field \"html\""
+    }
+  }
+]

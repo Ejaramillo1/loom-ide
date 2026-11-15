@@ -1,0 +1,8 @@
+$ node docs/audits/quiet-complexity-loom/contract-audit/evidence/frontend_contract_probe.mjs
+CONFIRMED: live-shaped failed progress marks Loom verified; EOF follows the done path
+CONFIRMED: workflow completion associates execution with work selected at completion
+CONFIRMED: a slow old artifact search overwrites the newer query results
+(node:231501) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+EXIT_CODE=0

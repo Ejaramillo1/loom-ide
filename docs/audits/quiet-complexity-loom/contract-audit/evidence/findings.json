@@ -1,0 +1,584 @@
+[
+  {
+    "id": "QC-01",
+    "severity": "P0",
+    "title": "Autonomy changes do not constrain Loom execution",
+    "problem": "A work item can be Manual or Paused while chat, experiment arms, workflows and session resume still invoke Loom. Lowering autonomy updates local records, not the permissions of an in-flight run.",
+    "evidence": [
+      "[src-tauri/src/lib.rs:225](/home/ed/loom-ide-tauri/src-tauri/src/lib.rs:225) (`fn set_work_autonomy(`)",
+      "[src-tauri/src/lib.rs:355](/home/ed/loom-ide-tauri/src-tauri/src/lib.rs:355) (`fn update_intent(`)",
+      "[src/main.ts:4867](/home/ed/loom-ide-tauri/src/main.ts:4867) (`function buildChatContext(`)",
+      "[src-tauri/src/loom_stream.rs:86](/home/ed/loom-ide-tauri/src-tauri/src/loom_stream.rs:86) (`pub fn ask_loom_stream(`)",
+      "[src/main.ts:1834](/home/ed/loom-ide-tauri/src/main.ts:1834) (`async function runWorkflow(`)"
+    ],
+    "root_cause": "Local rank validation and inheritance are real, but no execution boundary reads these stores. A context string such as active_work_autonomy is advisory and is not a capability policy.",
+    "expected": "The visible autonomy setting must bound every consequential entry point, including resume, schedules and tools; tightening it must affect active work.",
+    "correction": "First make the advisory status explicit and reject disallowed runs at the Rust boundary. Define and map the four shipped levels to Loom admission/tool permissions, enforce them in the runtime, and propagate tightening/cancellation. Do not implement permissions through prompt text.",
+    "components": "Intent/work stores; all executing Tauri commands; Loom runtime admission and tool hooks.",
+    "contracts": "WeaveRequest has no IDE autonomy policy field. Loom pkg/shuttle/admission_ask.go and HumanRequestStore implement real held calls; they are not driven by the IDE dial.",
+    "acceptance": [
+      "Manual work cannot cause agent/tool execution through any entry point.",
+      "Lowering a running intent prevents subsequent forbidden tool actions; UI reports the server acknowledgement.",
+      "Four shipped levels have documented, tested semantics; do not silently add a fifth."
+    ],
+    "verification": "Use an isolated agent with a counted tool; exercise chat, arm, workflow, resume and scheduled execution under every level. Assert actual invocation counts and tightening during a hold.",
+    "dependencies": "Agree a runtime enforcement contract; QC-07 supplies the held-request answer path. Existing transport decisions remain recorded, not bypassed.",
+    "regression_risks": "Fail closed without disabling manual file/note work. Existing workflows must not silently gain privileges.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-01-autonomy-changes-do-not-constrain-loom-execution.md"
+  },
+  {
+    "id": "QC-02",
+    "severity": "P0",
+    "title": "The live Loom gateway exceeds the stated localhost trust boundary",
+    "problem": "The running gateway listens on all interfaces without TLS, accepts unauthenticated API reads, and returns Access-Control-Allow-Origin: * to an unrelated Origin. Localhost-only client documentation does not restrict the server.",
+    "evidence": [
+      "[loom/pkg/server/http.go:105](/home/ed/work/loom/pkg/server/http.go:105) (`func (h *HTTPServer) Start(`)",
+      "[loom/pkg/server/http.go:316](/home/ed/work/loom/pkg/server/http.go:316) (`func (h *HTTPServer) handleStreamWeaveSSE(`)",
+      "[src-tauri/src/lib.rs:1209](/home/ed/loom-ide-tauri/src-tauri/src/lib.rs:1209) (`pub(crate) fn loom_addr()`)"
+    ],
+    "root_cause": "The running server configuration binds 0.0.0.0; the HTTP stack defaults to permissive CORS. The custom SSE route calls grpcServer directly rather than going through the gateway gRPC call. No IDE connection authentication is supplied.",
+    "expected": "A local deployment must enforce loopback binding and explicit trusted origins. A nonlocal deployment needs authenticated, authorized transport on every route, including custom SSE.",
+    "correction": "Use the existing Loom bind/CORS configuration to contain the local service; verify auth on SSE and gateway routes before supporting remote LOOM_ADDR. Do not weaken TLS/auth to make the client connect. This audit changes no running configuration.",
+    "components": "Loom serve configuration and HTTP middleware; IDE connection model.",
+    "contracts": "evidence/network-boundary.json and live-contract-probes.json; ss observed *:5006; /v1/agents accepted without credentials. External network reachability/firewall and browser exploitation were not tested.",
+    "acceptance": [
+      "Local profile listens only on loopback.",
+      "An untrusted Origin receives no usable cross-origin API response.",
+      "Authenticated deployments enforce the same identity on unary and custom SSE routes."
+    ],
+    "verification": "In an isolated deployment test allowed/disallowed origins and absent/invalid credentials; inspect bound addresses. Never test unauthorized tool execution on user data.",
+    "dependencies": "Operational configuration review; no frontend redesign required.",
+    "regression_risks": "Do not break legitimate Tauri origins. LAN exploitability depends on firewall and browser policy; the observed exposure is confirmed, exploitation is not.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-02-the-live-loom-gateway-exceeds-the-stated-localhost-trust-boundary.md"
+  },
+  {
+    "id": "QC-03",
+    "severity": "P1",
+    "title": "Streaming chat loses the selected session and agent",
+    "problem": "The normal chat path sends sessionId, agentId and enableTrace to the custom SSE handler. Its Go encoding/json decoder ignores these names, so turns may start a new session on the default agent.",
+    "evidence": [
+      "[src-tauri/src/loom_stream.rs:86](/home/ed/loom-ide-tauri/src-tauri/src/loom_stream.rs:86) (`pub fn ask_loom_stream(`)",
+      "[loom/pkg/server/http.go:324](/home/ed/work/loom/pkg/server/http.go:324) (`json.NewDecoder(r.Body).Decode(&req)`)",
+      "[loom/gen/go/loom/v1/loom.pb.go:397](/home/ed/work/loom/gen/go/loom/v1/loom.pb.go:397) (`json:\"session_id,omitempty\"`)"
+    ],
+    "root_cause": "The hand-written SSE handler uses generated Go JSON tags, unlike grpc-gateway protojson. Both formats exist in this server.",
+    "expected": "The selected session and immutable agent identity reach StreamWeave unchanged.",
+    "correction": "Use snake_case for this custom SSE endpoint, or deliberately change its decoder to accept protojson aliases while preserving its documented output. Keep unary gateway requests distinct.",
+    "components": "Rust chat stream request builder; Loom custom SSE handler.",
+    "contracts": "WeaveRequest.session_id / agent_id / enable_trace; evidence/contract_probe.go demonstrates loss using the exact generated type.",
+    "acceptance": [
+      "Two turns reuse the chosen session.",
+      "A non-default chosen agent actually executes both turns.",
+      "Conflicting session-owner/agent requests surface the server error rather than rerouting."
+    ],
+    "verification": "Run the committed Go contract probe, then a contained two-agent/two-turn UI test and inspect persisted session ownership.",
+    "dependencies": "QC-04 must also correctly surface routing errors.",
+    "regression_risks": "Do not change response naming: SSE progress is snake_case while gateway JSON uses camelCase.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-03-streaming-chat-loses-the-selected-session-and-agent.md"
+  },
+  {
+    "id": "QC-04",
+    "severity": "P1",
+    "title": "Failed or truncated chat streams are reported as completed",
+    "problem": "Loom emits an error inside HTTP 200 SSE. The UI treats that event as progress, marks Loom verified, then takes EOF as done and shows completion. An abrupt close is also not distinguished from a successful terminal event.",
+    "evidence": [
+      "[src/main.ts:5043](/home/ed/loom-ide-tauri/src/main.ts:5043) (`function handleStreamEvent(`)",
+      "[src/main.ts:5176](/home/ed/loom-ide-tauri/src/main.ts:5176) (`function finishStream(`)",
+      "[src-tauri/src/loom_stream.rs:312](/home/ed/loom-ide-tauri/src-tauri/src/loom_stream.rs:312) (`fn run_stream(`)",
+      "[loom/pkg/server/http.go:467](/home/ed/work/loom/pkg/server/http.go:467) (`func (s *sseStreamWrapper) writeError(`)"
+    ],
+    "root_cause": "The Rust reader returns Ok on EOF regardless of application stage; the frontend ignores event.error and failed stage. The unary fallback only handles invoke/start rejection, not asynchronous endpoint rejection.",
+    "expected": "Success requires an explicit successful terminal application event; failures preserve partial output as partial, restore drafts when needed, and never mark completion.",
+    "correction": "Track terminal state and structured errors in the existing stream path. Fail incomplete streams and validate framing/content type. Register request state before events can arrive. Only use fallback when it cannot duplicate an already accepted operation.",
+    "components": "Stream transport, chat handler, state pill/sphere and draft handling.",
+    "contracts": "WeaveProgress.stage; custom SSE error payload. Empty-query live probe returned HTTP 200 with EXECUTION_STAGE_FAILED. Extracted current handler reproduces the false completion route.",
+    "acceptance": [
+      "Server error, invalid JSON, EOF before completion and a rejected endpoint never show completed.",
+      "A real completed stream shows its final answer.",
+      "Stop and partial output stay distinct from failure/success."
+    ],
+    "verification": "Replay evidence/live-contract-probes.json through the production handlers, plus early-close, malformed-frame and cancellation tests; repeat through Tauri against an isolated server.",
+    "dependencies": "None.",
+    "regression_risks": "Do not automatically replay a POST after uncertain execution; preserve partial replies and drafts.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-04-failed-or-truncated-chat-streams-are-reported-as-completed.md"
+  },
+  {
+    "id": "QC-05",
+    "severity": "P1",
+    "title": "Non-chat subscriptions use the wrong streaming protocol",
+    "problem": "Workflow, provider comparison, session, pattern and task/skill streams all use the SSE-only reader. Loom registers only weave:stream as custom SSE; gateway streams use newline JSON envelopes instead.",
+    "evidence": [
+      "[src-tauri/src/loom_stream.rs:154](/home/ed/loom-ide-tauri/src-tauri/src/loom_stream.rs:154) (`pub fn execute_workflow_stream(`)",
+      "[src-tauri/src/loom_stream.rs:312](/home/ed/loom-ide-tauri/src-tauri/src/loom_stream.rs:312) (`fn run_stream(`)",
+      "[loom/pkg/server/http.go:133](/home/ed/work/loom/pkg/server/http.go:133) (`rootMux.HandleFunc(\"/v1/weave:stream\"`)",
+      "[loom/gen/go/loom/v1/loom.pb.gw.go:7113](/home/ed/work/loom/gen/go/loom/v1/loom.pb.gw.go:7113) (`forward_LoomService_StreamWorkflow_0              = runtime.ForwardResponseStream`)"
+    ],
+    "root_cause": "The reader accepts only data: lines and discards other body lines. Consumers also expect unwrapped snake_case fields rather than gateway result envelopes and protojson fields.",
+    "expected": "Each supported stream delivers actual progress, application errors and terminal state to its existing UI.",
+    "correction": "Retain one small shared transport but decode HTTP chunking, choose SSE versus gateway newline JSON by the response contract, unwrap result/error, and normalize only at the existing feature boundary. Verify workflow, session, A/B, pattern and later task/skill contracts individually.",
+    "components": "loom_stream.rs; all stream handlers and event interfaces in api.ts/main.ts.",
+    "contracts": "Loom generated ForwardResponseStream bindings; WorkflowProgress, SessionUpdate, ABTestEvent and PatternUpdate. Live validation replies from workflows:stream and providers:abtest are application/json error envelopes, not SSE.",
+    "acceptance": [
+      "Workflow progress and execution ID arrive.",
+      "A/B responses display real provider output, score/cost and winner using actual event fields.",
+      "Session and pattern updates refresh the intended objects; gateway stream errors are visible."
+    ],
+    "verification": "Capture safe isolated gateway streams and replay byte-split/chunked frames, both JSON naming formats and result/error envelopes. Then exercise each UI feature.",
+    "dependencies": "QC-04 for terminal semantics; QC-10 before task/skill live streams exist.",
+    "regression_risks": "Do not repair this by treating all unknown lines as success or by inventing empty results.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-05-non-chat-subscriptions-use-the-wrong-streaming-protocol.md"
+  },
+  {
+    "id": "QC-06",
+    "severity": "P1",
+    "title": "Clarification acknowledgements always fail decoding",
+    "problem": "A successfully delivered answer has success and accepted booleans. The IDE instead requires a status string, reports failure after delivery, and enables retry even though the question may already be consumed.",
+    "evidence": [
+      "[src-tauri/src/loom_stream.rs:278](/home/ed/loom-ide-tauri/src-tauri/src/loom_stream.rs:278) (`pub fn answer_clarification(`)",
+      "[loom/proto/loom/v1/loom.proto:1370](/home/ed/work/loom/proto/loom/v1/loom.proto:1370) (`message AnswerClarificationResponse`)",
+      "[src/main.ts:5127](/home/ed/loom-ide-tauri/src/main.ts:5127) (`await answerClarification(sid, hitl.request_id, answer)`)"
+    ],
+    "root_cause": "The response decoder implements a field absent from the actual proto. HTTP 200 can also contain an application rejection.",
+    "expected": "Accepted answers close their card once; rejected/expired answers display the server reason.",
+    "correction": "Decode success, accepted and error explicitly, require both positive booleans, and return the actual rejection. Keep acceptance separate from subsequent agent progress.",
+    "components": "Rust clarification command and chat HITL cards.",
+    "contracts": "AnswerClarificationResponse; Go contract probe asserts an accepted response has no status. Live nonexistent-question response is HTTP 200 with an error.",
+    "acceptance": [
+      "Accepted answer is shown as delivered.",
+      "Unknown, expired or duplicate question remains a visible rejection.",
+      "Retry cannot claim acceptance after the original answer was already consumed."
+    ],
+    "verification": "Contract fixtures generated from actual protobuf responses; contained pending-question test through the UI.",
+    "dependencies": "QC-07 for stored approval requests; legacy clarification is a separate route.",
+    "regression_risks": "An accepted answer must not be resent just because local rendering or refresh fails.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-06-clarification-acknowledgements-always-fail-decoding.md"
+  },
+  {
+    "id": "QC-07",
+    "severity": "P1",
+    "title": "Approval cards answer the wrong Loom request store",
+    "problem": "Every HITL card sends request_id through AnswerClarificationQuestion. Hook-held and parked approval IDs belong to HumanRequestStore, while that RPC only searches the legacy pendingQuestions map.",
+    "evidence": [
+      "[src/main.ts:5104](/home/ed/loom-ide-tauri/src/main.ts:5104) (`function renderHitlCard(`)",
+      "[loom/pkg/server/multi_agent.go:3873](/home/ed/work/loom/pkg/server/multi_agent.go:3873) (`question, exists := s.pendingQuestions[req.QuestionId]`)",
+      "[loom/pkg/shuttle/human_store_sqlite.go:459](/home/ed/work/loom/pkg/shuttle/human_store_sqlite.go:459) (`func (s *SQLiteHumanRequestStore) RespondToRequest(`)"
+    ],
+    "root_cause": "The IDE conflates legacy questions with stored requests. The existing store resolves approved/rejected/responded statuses; an HTTP answer adapter for that store was not found in the inspected LoomService.",
+    "expected": "Approve/Deny must resolve the exact server-held request and show its tools, arguments, reasons and expiry before continuing. Legacy questions retain their own question_id path.",
+    "correction": "Classify the producer/request type and expose the existing store operation through the approved transport. Send its actual status vocabulary and identities. Until that exists, label these cards unanswerable here and provide honest recovery; do not pretend clarification routing grants approval.",
+    "components": "Chat approval cards; Loom held-request store and API adapter.",
+    "contracts": "HITLRequestInfo.request_id/question_id/kind/context_json; HumanRequestStore.RespondToRequest. Runtime support exists; an IDE-accessible answer transport is missing.",
+    "acceptance": [
+      "A held counted tool cannot execute before approval.",
+      "Approve executes it once; Deny never executes it.",
+      "Expired and mixed parked batches show the real store state; per-item reasons remain inspectable."
+    ],
+    "verification": "Use Loom parked-card and HumanRequestStore test patterns in an isolated backend, then UI approve/deny/expire/restart workflows.",
+    "dependencies": "Loom-side transport exposure and QC-06. Do not modify Loom during this audit.",
+    "regression_risks": "Never map arbitrary text approve/deny to a generic permission grant. Preserve server-owned expiry and exactly-once decisions.",
+    "confidence": "Strongly supported: separate stores and wrong route confirmed; live pending approvals were not modified.",
+    "file": "10-implementation-issues/qc-07-approval-cards-answer-the-wrong-loom-request-store.md"
+  },
+  {
+    "id": "QC-08",
+    "severity": "P1",
+    "title": "Agent creation posts a bare config instead of CreateAgentRequest",
+    "problem": "The JSON editor produces an agent configuration; Rust posts that object directly to /v1/agents. Loom requires a config envelope or configPath, so a normal named configuration is rejected.",
+    "evidence": [
+      "[src/main.ts:4214](/home/ed/loom-ide-tauri/src/main.ts:4214) (`async function submitAgentCreate(`)",
+      "[src-tauri/src/loom_http.rs:278](/home/ed/loom-ide-tauri/src-tauri/src/loom_http.rs:278) (`pub async fn agent_create(`)",
+      "[loom/proto/loom/v1/loom.proto:2054](/home/ed/work/loom/proto/loom/v1/loom.proto:2054) (`message CreateAgentRequest`)",
+      "[loom/pkg/server/agent_lifecycle.go:170](/home/ed/work/loom/pkg/server/agent_lifecycle.go:170) (`if req.Config == nil && req.ConfigPath == \"\"`)"
+    ],
+    "root_cause": "Tauri invoke arguments and Loom request JSON were treated as the same object. The describe-to-create prompt also asks the default agent to act as Weaver rather than selecting a proven Weaver capability.",
+    "expected": "Reviewed valid AgentConfig reaches the runtime once and returns the created immutable ID; invalid config remains a visible validation error.",
+    "correction": "Wrap the reviewed object as {config: ...} at the Rust HTTP boundary. Generate/review actual AgentConfig fields, including its nested LLM/tools schema. Do not call a default-agent prompt a verified Weaver integration.",
+    "components": "Agent creation dialog and HTTP command.",
+    "contracts": "CreateAgentRequest.config; AgentConfig; CreateAgentFromConfig validation. Go protojson probe confirms rejection of a bare name and acceptance of its envelope.",
+    "acceptance": [
+      "A minimally valid reviewed config creates one agent and refreshes its row.",
+      "Malformed or unknown config fields produce a visible error.",
+      "Description proposals identify which real agent produced them."
+    ],
+    "verification": "Generated contract fixture and isolated create/list/start/stop/restart round trip.",
+    "dependencies": "None.",
+    "regression_risks": "Creating an agent may configure executable tools; retain review and server validation.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-08-agent-creation-posts-a-bare-config-instead-of-createagentrequest.md"
+  },
+  {
+    "id": "QC-09",
+    "severity": "P1",
+    "title": "The advertised context pack never reaches agent chat",
+    "problem": "The IDE sends work, intent and up to 4000 characters of the open file in WeaveRequest.context. In both inspected multi-agent execution paths the server calls Chat/ChatWithProgress with req.Query only and never consumes req.Context.",
+    "evidence": [
+      "[src/main.ts:4867](/home/ed/loom-ide-tauri/src/main.ts:4867) (`function buildChatContext(`)",
+      "[src-tauri/src/lib.rs:1732](/home/ed/loom-ide-tauri/src-tauri/src/lib.rs:1732) (`async fn ask_loom(`)",
+      "[loom/pkg/server/multi_agent.go:1163](/home/ed/work/loom/pkg/server/multi_agent.go:1163) (`resp, err := ag.Chat(ctx, sessionID, req.Query)`)",
+      "[loom/pkg/server/multi_agent.go:1399](/home/ed/work/loom/pkg/server/multi_agent.go:1399) (`resp, err := ag.ChatWithProgress(ctx, sessionID, req.Query, progressCallback)`)"
+    ],
+    "root_cause": "A schema field and serialized payload were mistaken for runtime context delivery. The single-agent server paths also were searched; no Weave context consumption was found.",
+    "expected": "The agent receives the explicitly scoped work/intent/file context and the human can inspect what was supplied.",
+    "correction": "Use an existing supported context-input path that reaches the model, or explicitly include bounded context in the actual query until a server context mapping is implemented. Make selection and truncation visible; do not equate context text with authorization.",
+    "components": "Chat context builder, unary/stream adapters, Loom server-to-agent calls.",
+    "contracts": "WeaveRequest.context is documented as prompt interpolation data; actual runtime use must be implemented or proven. No local vault retrieval is attached automatically.",
+    "acceptance": [
+      "A contained echo/context test proves exact intent/work/file values reach the model in both paths.",
+      "An unrelated file is never included.",
+      "Truncation and unsaved editor content handling are explicit."
+    ],
+    "verification": "Instrument an isolated provider to capture its actual input; assert selected context and absent unrelated content, then a real model/UI workflow.",
+    "dependencies": "QC-03 for streaming identity.",
+    "regression_risks": "Avoid sending sensitive editor text without clear scope; context must never widen tool authority.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-09-the-advertised-context-pack-never-reaches-agent-chat.md"
+  },
+  {
+    "id": "QC-10",
+    "severity": "P1",
+    "title": "Task and skill annotations are not registered HTTP services",
+    "problem": "The IDE calls /v1/boards, /v1/tasks and /v1/skills. The local Loom HTTP Start registers only LoomService; TaskService and SkillsImportService are peer services, despite their HTTP annotations.",
+    "evidence": [
+      "[src-tauri/src/loom_tasks.rs:41](/home/ed/loom-ide-tauri/src-tauri/src/loom_tasks.rs:41) (`pub async fn task_boards_list(`)",
+      "[src-tauri/src/loom_http.rs:589](/home/ed/loom-ide-tauri/src-tauri/src/loom_http.rs:589) (`pub async fn skills_add(`)",
+      "[loom/pkg/server/http.go:113](/home/ed/work/loom/pkg/server/http.go:113) (`loomv1.RegisterLoomServiceHandlerFromEndpoint`)",
+      "[loom/proto/loom/v1/skills_import.proto:35](/home/ed/work/loom/proto/loom/v1/skills_import.proto:35) (`service SkillsImportService`)",
+      "[loom/proto/loom/v1/task.proto:22](/home/ed/work/loom/proto/loom/v1/task.proto:22) (`service TaskService`)"
+    ],
+    "root_cause": "Schema-level HTTP bindings were taken as proof of running gateway registration. Safe live board/task probes return 404.",
+    "expected": "Supported configured services are registered and feature availability is based on real service capabilities.",
+    "correction": "Register the existing generated TaskService/SkillsImportService gateway handlers in Loom when those services are available, or use the explicitly chosen transport. Gate UI availability honestly until then; do not invent new task or skill infrastructure.",
+    "components": "Loom HTTP gateway bootstrap; IDE task board and skills surfaces.",
+    "contracts": "task.proto and skills_import.proto; their server implementations exist. The running gateway binary version is 1.4.0; its exact source commit was not established.",
+    "acceptance": [
+      "Configured board/task and skills validation routes no longer return unimplemented-route 404.",
+      "Unavailable services show a service-specific state instead of generic Loom offline.",
+      "No silent migration of local work occurs."
+    ],
+    "verification": "Isolated gateway service-registration tests plus read/create/update/restart round trips against a contained store.",
+    "dependencies": "Loom-side change authorization/transport decision; QC-11 before task mutation tests.",
+    "regression_risks": "Keep local work data independent; adding service reachability does not prove its caller schemas.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-10-task-and-skill-annotations-are-not-registered-http-services.md"
+  },
+  {
+    "id": "QC-11",
+    "severity": "P1",
+    "title": "Task updates and ready/blocked lists use incompatible shapes",
+    "problem": "loom_task_update sends the task fields at top level although UpdateTaskRequest expects task. Ready/blocked responses use readyTasks/blockedTasks; tasks_of instead wraps an unrecognized response object as one task.",
+    "evidence": [
+      "[src-tauri/src/loom_tasks.rs:143](/home/ed/loom-ide-tauri/src-tauri/src/loom_tasks.rs:143) (`pub async fn loom_task_update(`)",
+      "[src-tauri/src/loom_tasks.rs:73](/home/ed/loom-ide-tauri/src-tauri/src/loom_tasks.rs:73) (`fn tasks_of(`)",
+      "[loom/proto/loom/v1/task.proto:430](/home/ed/work/loom/proto/loom/v1/task.proto:430) (`message UpdateTaskRequest`)",
+      "[loom/proto/loom/v1/task.proto:536](/home/ed/work/loom/proto/loom/v1/task.proto:536) (`message GetReadyFrontResponse`)"
+    ],
+    "root_cause": "Several distinct protobuf envelopes are normalized using a permissive generic JSON fallback, concealing invalid response shapes.",
+    "expected": "Task updates validate an UpdateTaskRequest; ready/blocked lists contain actual tasks or an honest empty list.",
+    "correction": "Use the actual task envelope and optional update mask. Decode tasks, readyTasks and blockedTasks at their individual boundaries; reject unknown object shapes. Check dependency envelopes and response status booleans while adding contract fixtures.",
+    "components": "Task command module; task board detail/actions.",
+    "contracts": "UpdateTaskRequest.task/update_mask; GetReadyFrontResponse.ready_tasks; GetBlockedTasksResponse.blocked_tasks. These defects are latent behind QC-10 on the current live gateway.",
+    "acceptance": [
+      "Updating a task persists the selected fields.",
+      "Ready/blocked lists preserve task IDs and render no blank response-object row.",
+      "Unknown response shapes surface a contract error."
+    ],
+    "verification": "Use generated protojson fixtures for every task endpoint, then an isolated board dependency/transition scenario.",
+    "dependencies": "QC-10 for live HTTP verification.",
+    "regression_risks": "Never interpret absent or malformed task data as a successful empty result.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-11-task-updates-and-ready-blocked-lists-use-incompatible-shapes.md"
+  },
+  {
+    "id": "QC-12",
+    "severity": "P1",
+    "title": "MCP add, test and health decode different contracts as server rows",
+    "problem": "Add returns an envelope containing server; Test returns success/error rather than a server; Health returns a map. parse_mcp/list_field flatten or drop these shapes. The exact test request also sends an unsupported name field and is rejected by the live gateway.",
+    "evidence": [
+      "[src-tauri/src/loom_http.rs:125](/home/ed/loom-ide-tauri/src-tauri/src/loom_http.rs:125) (`pub async fn mcp_server_add(`)",
+      "[src-tauri/src/loom_http.rs:239](/home/ed/loom-ide-tauri/src-tauri/src/loom_http.rs:239) (`pub async fn mcp_server_test(`)",
+      "[src-tauri/src/loom_http.rs:230](/home/ed/loom-ide-tauri/src-tauri/src/loom_http.rs:230) (`pub async fn mcp_servers_health_check(`)",
+      "[src/main.ts:4124](/home/ed/loom-ide-tauri/src/main.ts:4124) (`async function testMcpConfig(`)",
+      "[loom/proto/loom/v1/loom.proto:2888](/home/ed/work/loom/proto/loom/v1/loom.proto:2888) (`message TestMCPServerConnectionResponse`)"
+    ],
+    "root_cause": "One server-row parser is reused for unrelated RPC responses. The UI declares a test passed whenever invoke resolves, without checking the application success flag.",
+    "expected": "Add uses the actual returned server; Test reports its real result; Health updates status by name without replacing configured server rows with an empty list.",
+    "correction": "Remove unsupported name from Test, decode its success/error fields, unwrap Add.server, and merge the health map into the existing list. Preserve server errors and configuration fields.",
+    "components": "MCP Rust wrappers, test/add dialog and health list.",
+    "contracts": "AddMCPServerResponse.server; TestMCPServerConnectionResponse.success/error; HealthCheckMCPServersResponse.servers map. Live probe: with name HTTP 400; without name a missing executable returns HTTP 200 with error.",
+    "acceptance": [
+      "Missing command never displays passed.",
+      "Successful add reports the real server name.",
+      "Health check retains existing rows and updates their actual health."
+    ],
+    "verification": "Run captured validation fixtures; test a harmless isolated MCP server only after explicit configuration review.",
+    "dependencies": "None.",
+    "regression_risks": "Do not launch arbitrary executables during tests; preserve env/arguments and existing server identities.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-12-mcp-add-test-and-health-decode-different-contracts-as-server-rows.md"
+  },
+  {
+    "id": "QC-13",
+    "severity": "P1",
+    "title": "Workflow completion can attach output to the wrong work",
+    "problem": "Start captures startedFromWork, but the streaming completion handler passes the current selectedWorkId. Switching from work A to B during a run attributes A's execution to B.",
+    "evidence": [
+      "[src/main.ts:1834](/home/ed/loom-ide-tauri/src/main.ts:1834) (`async function runWorkflow(`)",
+      "[src/main.ts:1901](/home/ed/loom-ide-tauri/src/main.ts:1901) (`function handleWorkflowStreamEvent(`)",
+      "[src/main.ts:1859](/home/ed/loom-ide-tauri/src/main.ts:1859) (`function finishWorkflowRun(`)"
+    ],
+    "root_cause": "Streaming run state retains progress but not its originating work ID. Unary execution correctly uses its captured origin.",
+    "expected": "Every result remains tied to the work/intent that started it, independent of navigation.",
+    "correction": "Keep startedFromWork in the existing per-run state and use it for completion and errors. Keep cancellation/request identity bound to that same run.",
+    "components": "Workflow stream state and evidence association maps.",
+    "contracts": "WorkflowProgress.execution_id and local WorkItem ID. Extracted current handler test demonstrates selection-at-completion behavior.",
+    "acceptance": [
+      "Start under A, select B, finish: output belongs only to A.",
+      "A second run cannot adopt the previous run's origin or completion."
+    ],
+    "verification": "Run the committed extracted-handler probe, then add a regression using the actual state path and a delayed contained workflow.",
+    "dependencies": "QC-05 for live stream delivery.",
+    "regression_risks": "Do not infer origin from current view or newest execution.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-13-workflow-completion-can-attach-output-to-the-wrong-work.md"
+  },
+  {
+    "id": "QC-14",
+    "severity": "P1",
+    "title": "Work evidence and execution provenance vanish on restart",
+    "problem": "Evidence filtering relies on executionWorkIds and experimentWorkIds Maps populated only during the current process. Reloading preserves the underlying experiments and Loom executions but removes their work relationships. Chat caching also stores only who/text, dropping trace handles.",
+    "evidence": [
+      "[src/main.ts:291](/home/ed/loom-ide-tauri/src/main.ts:291) (`const executionWorkIds = new Map`)",
+      "[src/main.ts:292](/home/ed/loom-ide-tauri/src/main.ts:292) (`const experimentWorkIds = new Map`)",
+      "[src/main.ts:5688](/home/ed/loom-ide-tauri/src/main.ts:5688) (`function cacheChatMessage(`)",
+      "[src/main.ts:2798](/home/ed/loom-ide-tauri/src/main.ts:2798) (`experimentWorkIds.get(e.id) !== workId`)"
+    ],
+    "root_cause": "Persistent work/session/artifact stores do not persist execution/experiment ownership or per-reply evidence identifiers. Streamed replies do not adopt a returned trace/session handle and fall back to newest sessions.",
+    "expected": "Intent \u2192 work \u2192 execution \u2192 artifact/trace relationships remain inspectable after navigation, process restart and backend reconnect.",
+    "correction": "Persist these identifiers with the existing work/experiment records or a minimal relation record; retain trace/session metadata in reply caching. Obtain authoritative stream identity from the backend, never newestSessionId inference.",
+    "components": "Work/experiment models, evidence feed, chat cache and Loom completion response.",
+    "contracts": "WeaveResponse.session_id/trace_id exist on unary. WeaveProgress lacks those completion fields at this snapshot; a transport contract change or authoritative precreated session is needed.",
+    "acceptance": [
+      "Restart retains work-scoped execution/experiment evidence.",
+      "Trace links survive reopening the conversation.",
+      "Concurrent sessions cannot be associated by newest timestamp."
+    ],
+    "verification": "Create a contained work/run/artifact chain, restart both client and server, inspect exact IDs and traces, and repeat with two concurrent sessions.",
+    "dependencies": "QC-03, QC-04 and QC-13; server stream identity exposure if needed.",
+    "regression_risks": "Use backward-compatible optional fields; do not migrate or overwrite existing user records silently.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-14-work-evidence-and-execution-provenance-vanish-on-restart.md"
+  },
+  {
+    "id": "QC-15",
+    "severity": "P2",
+    "title": "Artifact search can display results for an older query",
+    "problem": "Two debounced artifact searches can overlap. If the older query returns last, searchArtifactsView replaces the current results with the older result set even though the search input still shows the newer query.",
+    "evidence": [
+      "[src/main.ts:4595](/home/ed/loom-ide-tauri/src/main.ts:4595) (`searchArtifactsView`)",
+      "[Executed reversed-order handler probe](../evidence/frontend-contract-probe.log)"
+    ],
+    "root_cause": "The asynchronous search handler has no generation counter or query identity check; global list refreshes can race the same state.",
+    "expected": "Visible artifact rows correspond to the current query and tab; stale requests do not overwrite newer results.",
+    "correction": "Use one request generation counter shared by search and list refresh. Apply rows/errors only when the response still owns the current query/tab. Follow the existing documentRequest pattern used by file opening.",
+    "components": "Artifact search, global artifact list refresh and tab changes.",
+    "contracts": "SearchArtifactsRequest.query and SearchArtifactsResponse.artifacts. This is a frontend sequencing defect; server artifact content/search wrappers and View actions DO exist.",
+    "acceptance": [
+      "Resolve query B before older query A: B remains visible.",
+      "Clearing the query or changing tabs invalidates pending search responses.",
+      "Only the current request can publish an error."
+    ],
+    "verification": "The committed extracted-handler probe reproduces an older response overwriting the newer one. Add a production-handler regression for reversed completion order and search-clear/tab-change races.",
+    "dependencies": "None.",
+    "regression_risks": "Preserve the previous visible rows on a current-request failure and retain the real server content preview.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-15-artifact-search-can-display-results-for-an-older-query.md"
+  },
+  {
+    "id": "QC-16",
+    "severity": "P2",
+    "title": "The shared vault path is compiled to the checkout",
+    "problem": "knowledge::default_root uses CARGO_MANIFEST_DIR and native-app/Research Vault. A packaged binary on another machine therefore targets its build-time checkout rather than a selected or packaged writable vault.",
+    "evidence": [
+      "[src-tauri/src/knowledge.rs:71](/home/ed/loom-ide-tauri/src-tauri/src/knowledge.rs:71) (`pub fn default_root()`)",
+      "[src-tauri/src/knowledge.rs:947](/home/ed/loom-ide-tauri/src-tauri/src/knowledge.rs:947) (`pub fn knowledge_list(`)"
+    ],
+    "root_cause": "A development repository location is embedded as a runtime data location; no user-selected portable vault setting is passed to with_vault.",
+    "expected": "The packaged IDE opens a documented writable persistent vault independent of the build machine, while this checkout's existing vault stays preserved.",
+    "correction": "Persist an explicit vault location using the existing settings pattern. Preserve the current checkout path as a legacy choice without copying/moving files automatically.",
+    "components": "Knowledge adapter/bootstrap; packaging documentation; spatial knowledge surface.",
+    "contracts": "Local vault capability, not a Loom memory RPC. Source path behavior is confirmed; fresh-machine packaging was not executed.",
+    "acceptance": [
+      "Binary runs with the build checkout absent and opens its selected vault.",
+      "Existing notes, ledger/history and canvas remain unchanged.",
+      "Unavailable vault is visible and recoverable without silent seeding."
+    ],
+    "verification": "Run a packaged binary in an isolated data directory with no checkout path; open a contained vault, restart and inspect it.",
+    "dependencies": "Product choice of default location; no user-data migration during the audit.",
+    "regression_risks": "Never relocate private vault content or replace the existing folder automatically.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-16-the-shared-vault-path-is-compiled-to-the-checkout.md"
+  },
+  {
+    "id": "QC-17",
+    "severity": "P2",
+    "title": "Changing sessions leaks live subscriptions",
+    "problem": "ensureSessionSubscription overwrites sessionSubId when selection changes and returns immediately for no selection. It never cancels the previous stream. Its ignored events still consume server work and a Rust thread until closure or the 30-minute timeout.",
+    "evidence": [
+      "[src/main.ts:1984](/home/ed/loom-ide-tauri/src/main.ts:1984) (`async function ensureSessionSubscription(`)",
+      "[src/main.ts:2340](/home/ed/loom-ide-tauri/src/main.ts:2340) (`async function refreshLoomBoardTasks(`)",
+      "[src-tauri/src/loom_stream.rs:33](/home/ed/loom-ide-tauri/src-tauri/src/loom_stream.rs:33) (`pub fn start_loom_stream(`)"
+    ],
+    "root_cause": "The selected-session lifecycle lacks the cleanup already implemented for task-board subscriptions.",
+    "expected": "At most one selected-session subscription survives; clearing selection or closing its owner stops it.",
+    "correction": "Cancel the previous session stream before replacing/clearing its ID, following the existing task-board pattern. Ensure completion of an old stream cannot clear the new subscription.",
+    "components": "Session selection/subscription frontend; Rust stream registry.",
+    "contracts": "SubscribeToSession and cancel_loom_stream; source confirms cleanup omission. Resource impact was not benchmarked.",
+    "acceptance": [
+      "Switch A \u2192 B \u2192 none leaves zero subscriptions.",
+      "Old terminal events cannot invalidate the new subscription."
+    ],
+    "verification": "Count stream starts/cancels with delayed terminal events, then observe contained server subscription counts.",
+    "dependencies": "QC-05 for functional subscriptions.",
+    "regression_risks": "Do not cancel a conversation turn when only its read-only session subscription changes.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-17-changing-sessions-leaks-live-subscriptions.md"
+  },
+  {
+    "id": "QC-18",
+    "severity": "P2",
+    "title": "The vault change signature misses relation-only edits",
+    "problem": "The watcher compares note/pending counts and the maximum visible-file mtime. The ledger under .loom is excluded. External edge/activity changes that do not alter notes or pending counts leave Graph/Canvas stale indefinitely.",
+    "evidence": [
+      "[src-tauri/src/knowledge.rs:1015](/home/ed/loom-ide-tauri/src-tauri/src/knowledge.rs:1015) (`pub fn knowledge_signature()`)",
+      "[src-tauri/src/knowledge.rs:463](/home/ed/loom-ide-tauri/src-tauri/src/knowledge.rs:463) (`pub fn changed_at_ms(`)",
+      "[src/knowledge.ts:105](/home/ed/loom-ide-tauri/src/knowledge.ts:105) (`sig.changed_at_ms !== lastSignature.changed_at_ms`)"
+    ],
+    "root_cause": "A maximum visible-note timestamp is not a vault revision. It also misses an edited file whose mtime remains below another future-dated file.",
+    "expected": "Relevant external note, relation, review and activity changes refresh all knowledge surfaces without overwriting drafts.",
+    "correction": "Include the existing ledger revision and a reliable bounded per-file change signature. Preserve the 3-second poll and draft guards; avoid rereading all note bodies just to detect changes.",
+    "components": "Knowledge signature command, poller, graph/canvas/activity and bench refresh.",
+    "contracts": "Local vault ledger is authoritative for edges/activity; no Loom event supplies these local changes.",
+    "acceptance": [
+      "Editing only ledger edges refreshes Graph/Canvas.",
+      "A future-dated unrelated note cannot hide another edit.",
+      "An open dirty editor is preserved and refresh happens after safe completion."
+    ],
+    "verification": "Use a contained vault and external ledger/note writes; assert signature and UI changes. Measure scan cost at a documented note count.",
+    "dependencies": "None.",
+    "regression_risks": "Vault open currently reparses notes and recovery journal; retain symlink, validation and recovery safeguards.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-18-the-vault-change-signature-misses-relation-only-edits.md"
+  },
+  {
+    "id": "QC-19",
+    "severity": "P2",
+    "title": "Canvas layout persistence can silently lose saved positions",
+    "problem": "Canvas layouts use fs::write directly. A crash or disk failure during overwrite can truncate the file; frontend load/save catches discard the error, so the arrangement disappears without explanation.",
+    "evidence": [
+      "[src-tauri/src/knowledge.rs:1044](/home/ed/loom-ide-tauri/src-tauri/src/knowledge.rs:1044) (`pub fn knowledge_canvas_layout_save(`)",
+      "[src/knowledge.ts:72](/home/ed/loom-ide-tauri/src/knowledge.ts:72) (`void saveCanvasLayout(rows).catch`)",
+      "[src/knowledge.ts:87](/home/ed/loom-ide-tauri/src/knowledge.ts:87) (`a missing or unreadable layout file is not an error state`)"
+    ],
+    "root_cause": "This persistence path bypasses the atomic-write pattern used elsewhere and treats unreadable content like absence.",
+    "expected": "The last good layout survives failed saves; corruption/save failure is visible without discarding notes or drafts.",
+    "correction": "Use the existing atomic-write approach and report layout load/save errors in the existing Knowledge status area. Preserve invalid bytes for recovery.",
+    "components": "Canvas layout command and debounced frontend save/load.",
+    "contracts": "Local CanvasPosition[] JSON; no Loom API. Crash/disk-failure scenario is source-confirmed, not destructively tested.",
+    "acceptance": [
+      "Injected write failure preserves the previous valid JSON.",
+      "Unreadable layout reports an error while notes remain usable.",
+      "Normal restart retains positions."
+    ],
+    "verification": "Contained filesystem failure injection and round-trip test; no real-vault corruption.",
+    "dependencies": "None.",
+    "regression_risks": "Never delete the last layout or overwrite it with an empty fallback after a failed load.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-19-canvas-layout-persistence-can-silently-lose-saved-positions.md"
+  },
+  {
+    "id": "QC-20",
+    "severity": "P2",
+    "title": "Current feature documentation contradicts the shipped architecture",
+    "problem": "The root README still advertises the retired second window and spatial note-writing bridge, while newer progress notes call streaming/HITL/tasks integrated without end-to-end evidence. IDE_CRITIQUE still calls Monaco absent even though it is installed and wired.",
+    "evidence": [
+      "[README.md:8](/home/ed/loom-ide-tauri/README.md:8) (`All three surfaces are active`)",
+      "[docs/IDE_CRITIQUE.md:33](/home/ed/loom-ide-tauri/docs/IDE_CRITIQUE.md:33) (`not Monaco`)",
+      "[docs/DESIGN_PROGRESS.md:62](/home/ed/loom-ide-tauri/docs/DESIGN_PROGRESS.md:62) (`clarification answers and tool approvals both deliver`)",
+      "[src/monaco.ts:34](/home/ed/loom-ide-tauri/src/monaco.ts:34) (`monaco.editor`)"
+    ],
+    "root_cause": "Historical implementation statements have accumulated as current capability claims without a verified contract/release ledger.",
+    "expected": "Setup instructions and feature claims reflect current reachable behavior and distinguish source implementation, tests and live verification.",
+    "correction": "After functional remediation, update the current README and relevant report status blocks; keep historical snapshots explicitly historical. Link this audit and a per-capability acceptance ledger rather than rewriting history.",
+    "components": "README; design/progress/connection documentation.",
+    "contracts": "No API change; compare reports 02, 03 and 08 with the pinned source.",
+    "acceptance": [
+      "Current setup describes one active Tauri shell and Monaco.",
+      "No claim of full streaming/approval/task integration without its workflow evidence.",
+      "Historical reports remain intact and clearly dated."
+    ],
+    "verification": "Check every current capability claim against the integration matrix and an executed acceptance workflow.",
+    "dependencies": "Functional issue completion determines which claims can be promoted.",
+    "regression_risks": "Do not remove important capabilities or deferred design decisions to make the documentation look complete.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-20-current-feature-documentation-contradicts-the-shipped-architecture.md"
+  },
+  {
+    "id": "QC-21",
+    "severity": "P1",
+    "title": "Model switching omits the provider and does not target the session owner",
+    "problem": "The session model selector calls switchModel(detail.id, undefined, modelSel.value). Loom requires provider+model on this path and returns HTTP 400. The Rust command also has no agent ID; the multi-agent implementation selects the default agent when agent_id is absent rather than deriving it from session_id.",
+    "evidence": [
+      "[src/main.ts:4420](/home/ed/loom-ide-tauri/src/main.ts:4420) (`await switchModel(detail.id, undefined, modelSel.value)`)",
+      "[src-tauri/src/lib.rs:1601](/home/ed/loom-ide-tauri/src-tauri/src/lib.rs:1601) (`async fn switch_model(`)",
+      "[/home/ed/work/loom/pkg/server/multi_agent.go:3658](/home/ed/work/loom/pkg/server/multi_agent.go:3658) (`// Legacy switch: require session_id, provider, and model.`)"
+    ],
+    "root_cause": "The UI treats a model ID and session URL as a complete per-session switch contract; the actual server requires provider and agent ownership and changes an agent provider, which can affect multiple sessions.",
+    "expected": "Selecting a model changes the intended agent/provider under explicitly stated scope, returns the effective model and preserves session context as promised.",
+    "correction": "Carry the selected ModelInfo provider and authoritative session owner agent ID to the existing command, validate the full request and read SwitchModelResponse.success/newModel. Clarify that this backend changes agent-level provider state; do not promise isolation per session without backend support.",
+    "components": "Session model selector, API/Rust switch command, Loom SwitchModel routing.",
+    "contracts": "SwitchModelRequest.provider/model/agent_id/preserve_context; SwitchModelResponse.success/new_model. Safe live missing-provider request returns 400 before any agent lookup/mutation; see management-validation-probes.json.",
+    "acceptance": [
+      "A normal UI selection sends provider/model and the correct owner ID.",
+      "Two agents are present: switching one never changes the default/other agent.",
+      "Any sharing across sessions is explicit and effective model is read back."
+    ],
+    "verification": "Generated request contract tests; contained two-agent model switch/readback with a retained conversation. No live model switch was performed in this audit.",
+    "dependencies": "QC-01 for runtime authority and QC-02 for live deployment containment.",
+    "regression_risks": "Do not silently reset context, change other agents, or imply agent-wide settings are private to one session.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-21-model-switching-omits-the-provider-and-does-not-target-the-session-owner.md"
+  },
+  {
+    "id": "QC-22",
+    "severity": "P1",
+    "title": "App creation sends HTML to a declarative-spec API",
+    "problem": "The Add app dialog submits {name, html}. CreateUIAppRequest defines name/display_name/description/spec/overwrite and no html field. The normal request is rejected by the live gateway before any app is created.",
+    "evidence": [
+      "[src/main.ts:3962](/home/ed/loom-ide-tauri/src/main.ts:3962) (`await createApp({ name, html })`)",
+      "[src-tauri/src/loom_http.rs:663](/home/ed/loom-ide-tauri/src-tauri/src/loom_http.rs:663) (`pub async fn apps_create(`)",
+      "[/home/ed/work/loom/proto/loom/v1/apps.proto:113](/home/ed/work/loom/proto/loom/v1/apps.proto:113) (`message CreateUIAppRequest`)",
+      "[/home/ed/work/loom/pkg/server/apps_rpc.go:118](/home/ed/work/loom/pkg/server/apps_rpc.go:118) (`func (s *MultiAgentServer) CreateUIApp(`)"
+    ],
+    "root_cause": "The UI implements a raw HTML uploader while Loom creates/compiles UI apps from UIAppSpec. The wrappers pass arbitrary JSON without validating the supported schema.",
+    "expected": "A reviewed app specification is compiled by Loom, returned with its actual metadata/content, and appears in the app list with honest errors.",
+    "correction": "Replace the HTML textarea contract with the existing UIAppSpec shape, reuse component types for schema help, and submit a typed CreateUIAppRequest. Preserve read-only list/open behavior. Do not add another HTML app service.",
+    "components": "Apps creation dialog, create/update wrappers and Loom app compiler.",
+    "contracts": "apps.proto::CreateUIAppRequest.spec and CreateUIAppResponse.app/content; safe live request returns HTTP 400 unknown field html. Existing update requests also require spec.",
+    "acceptance": [
+      "Valid contained spec compiles and lists the created app.",
+      "Unknown component/missing spec/duplicate name gives a visible error.",
+      "Open displays actual backend output without fabricated preview content."
+    ],
+    "verification": "Protojson request fixtures plus an isolated compiler/app-provider create/list/get/update test; no real app was saved during audit.",
+    "dependencies": "QC-01 for runtime authority and QC-02 for live deployment containment.",
+    "regression_risks": "Do not execute arbitrary HTML or overwrite an existing app unless overwrite is explicit and authorized.",
+    "confidence": "Confirmed",
+    "file": "10-implementation-issues/qc-22-app-creation-sends-html-to-a-declarative-spec-api.md"
+  }
+]
