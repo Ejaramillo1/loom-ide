@@ -46,15 +46,6 @@ pub struct WorkItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CollabStep {
-    pub id: String,
-    pub label: String,
-    /// "done" | "active" | "pending"
-    pub state: String,
-    pub progress: Option<u8>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttentionItem {
     pub id: String,
     /// "decision" | "finding"

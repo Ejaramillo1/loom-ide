@@ -8,6 +8,7 @@ use std::{
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
+use tauri::Manager;
 
 pub const FOLDERS: &[&str] = &[
     "00 Inbox/Agent Proposals",
@@ -455,6 +456,31 @@ impl Vault {
             .iter()
             .find(|n| n.meta.id == id)
             .ok_or_else(|| "Note not found; refresh knowledge".into())
+    }
+    /// Newest file modification time under the vault root, in unix
+    /// milliseconds — the watcher's change fingerprint. Hidden folders are
+    /// skipped (notes never live there).
+    pub fn changed_at_ms(&self) -> i64 {
+        fn newest(path: &Path, best: &mut i64) {
+            let Ok(read) = fs::read_dir(path) else { return };
+            for entry in read.flatten() {
+                let p = entry.path();
+                let Ok(meta) = fs::metadata(&p) else { continue };
+                if meta.is_dir() {
+                    if entry.file_name().to_string_lossy().starts_with('.') {
+                        continue;
+                    }
+                    newest(&p, best);
+                } else if let Ok(t) = meta.modified() {
+                    if let Ok(ms) = t.duration_since(UNIX_EPOCH) {
+                        *best = (*best).max(ms.as_millis() as i64);
+                    }
+                }
+            }
+        }
+        let mut best: i64 = 0;
+        newest(&self.root, &mut best);
+        best
     }
     fn visible_edges(&self) -> Vec<Edge> {
         self.ledger
@@ -955,10 +981,6 @@ pub fn knowledge_review(
     with_vault(|v| v.review(&id, approved, &reason, &original, &revision, Actor::Human))
 }
 #[tauri::command]
-pub fn knowledge_pending_count() -> Result<usize, String> {
-    with_vault(|v| Ok(v.list("").pending))
-}
-#[tauri::command]
 pub fn knowledge_archive(id: String, original: String, revision: String) -> Result<(), String> {
     with_vault(|v| v.archive(&id, &original, &revision, Actor::Human))
 }
@@ -969,6 +991,74 @@ pub fn knowledge_restore(id: String, original: String, revision: String) -> Resu
 #[tauri::command]
 pub fn knowledge_export_canvas() -> Result<String, String> {
     with_vault(|v| v.export_canvas())
+}
+
+// ---------------------------------------------------------------------------
+// Vault freshness + durable canvas layout
+// ---------------------------------------------------------------------------
+//
+// The disk watcher (frontend polling) needs a cheap fingerprint of the vault:
+// note count, pending count and the newest file mtime. Canvas card positions
+// are the knowledge surface's one layout state; they persist in the app data
+// dir (not the vault — the vault holds notes only) so arrangements survive
+// restarts instead of resetting each session.
+
+/// A cheap vault fingerprint for the frontend's disk watcher.
+#[derive(Debug, Clone, Serialize)]
+pub struct VaultSignature {
+    pub notes: usize,
+    pub pending: usize,
+    pub changed_at_ms: i64,
+}
+
+#[tauri::command]
+pub fn knowledge_signature() -> Result<VaultSignature, String> {
+    with_vault(|v| {
+        let list = v.list("");
+        Ok(VaultSignature {
+            notes: list.notes.len(),
+            pending: list.pending,
+            changed_at_ms: v.changed_at_ms(),
+        })
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasPosition {
+    pub id: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+fn canvas_layout_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("No app data dir: {e}"))?
+        .join("loom-ide");
+    fs::create_dir_all(&dir).map_err(|e| format!("Cannot create {}: {e}", dir.display()))?;
+    Ok(dir.join("canvas-layout.json"))
+}
+
+#[tauri::command]
+pub fn knowledge_canvas_layout_save(
+    app: tauri::AppHandle,
+    positions: Vec<CanvasPosition>,
+) -> Result<(), String> {
+    let path = canvas_layout_path(&app)?;
+    let json = serde_json::to_string(&positions).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("Cannot save layout: {e}"))
+}
+
+#[tauri::command]
+pub fn knowledge_canvas_layout_load(app: tauri::AppHandle) -> Result<Vec<CanvasPosition>, String> {
+    let path = canvas_layout_path(&app)?;
+    let raw = match std::fs::read(&path) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("Cannot read layout: {e}")),
+    };
+    serde_json::from_slice(&raw).map_err(|e| format!("Layout file invalid: {e}"))
 }
 #[tauri::command]
 pub async fn knowledge_sync_from_loom() -> Result<usize, String> {

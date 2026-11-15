@@ -27,6 +27,8 @@ mod knowledge;
 #[path = "../../shared/navigation.rs"]
 mod navigation;
 use experiment::{Experiment, ExperimentStore};
+mod loom_http;
+mod loom_stream;
 mod spatial;
 mod store;
 mod workspace;
@@ -42,8 +44,7 @@ fn read_spatial_memory(object: String) -> Result<String, String> {
     spatial::read(&root, &object)
 }
 use store::{
-    AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem, WorkStore,
-    autonomy_rank,
+    AcceptanceCriterion, AttentionItem, Intent, IntentStore, WorkItem, WorkStore, autonomy_rank,
 };
 use workspace::{WorkspaceInfo, WorkspaceStore};
 
@@ -535,14 +536,8 @@ fn clear_experiment_decision(id: String, state: State<AppState>) -> Result<Exper
 }
 
 // ---------------------------------------------------------------------------
-// Collaboration + attention (empty until the Loom server exposes them)
+// Attention (derived locally until the Loom server exposes attention items)
 // ---------------------------------------------------------------------------
-
-#[tauri::command]
-fn get_collaboration() -> Vec<CollabStep> {
-    // The Loom server does not expose step-by-step execution yet.
-    Vec::new()
-}
 
 #[tauri::command]
 fn get_attention(state: State<AppState>) -> Vec<AttentionItem> {
@@ -1113,6 +1108,9 @@ struct ChatReply {
     // The session the reply belongs to; set when the server reports one
     // (so a first message without a session adopts the auto-created one).
     session_id: Option<String>,
+    // The trace id the server reports, when tracing is enabled — the
+    // handle for the observability surface (GetTrace).
+    trace_id: Option<String>,
 }
 
 /// Summarize the non-healthy components of a /v1/health body, if any.
@@ -1719,6 +1717,7 @@ async fn ask_loom(
             obj.insert("agentId".into(), a.into());
         }
     }
+    obj.insert("enableTrace".into(), serde_json::Value::Bool(true));
     let body = serde_json::Value::Object(obj).to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let value = loom_request("POST", "/v1/weave", Some(body))?;
@@ -1737,11 +1736,18 @@ async fn ask_loom(
             .and_then(|v| v.as_str())
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.to_string());
+        let trace_id = value
+            .get("trace_id")
+            .or_else(|| value.get("traceId"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string());
         Ok(ChatReply {
             text: text.into(),
             source: "live".into(),
             card: None,
             session_id,
+            trace_id,
         })
     })
     .await
@@ -1999,9 +2005,11 @@ pub fn run() {
             knowledge::knowledge_review,
             knowledge::knowledge_archive,
             knowledge::knowledge_restore,
-            knowledge::knowledge_pending_count,
             knowledge::knowledge_export_canvas,
             knowledge::knowledge_sync_from_loom,
+            knowledge::knowledge_signature,
+            knowledge::knowledge_canvas_layout_save,
+            knowledge::knowledge_canvas_layout_load,
             save_spatial_memory,
             read_spatial_memory,
             get_work_items,
@@ -2017,10 +2025,37 @@ pub fn run() {
             set_intent_acceptance,
             set_active_intent,
             delete_intent,
-            get_collaboration,
             get_attention,
             get_loom_status,
             ask_loom,
+            loom_stream::ask_loom_stream,
+            loom_stream::cancel_loom_stream,
+            loom_stream::answer_clarification,
+            loom_http::mcp_servers_list,
+            loom_http::mcp_server_get,
+            loom_http::mcp_server_add,
+            loom_http::mcp_server_update,
+            loom_http::mcp_server_delete,
+            loom_http::mcp_server_restart,
+            loom_http::mcp_servers_health_check,
+            loom_http::mcp_server_test,
+            loom_http::mcp_server_tools,
+            loom_http::agent_create,
+            loom_http::agent_start,
+            loom_http::agent_stop,
+            loom_http::agent_reload,
+            loom_http::agent_delete,
+            loom_http::agent_presets_list,
+            loom_http::workflow_templates_list,
+            loom_http::patterns_list,
+            loom_http::pattern_get,
+            loom_http::pattern_create,
+            loom_http::patterns_load,
+            loom_http::apps_list,
+            loom_http::session_delete,
+            loom_http::session_resume,
+            loom_http::session_resolve_gap,
+            loom_http::tool_permission_request,
             list_sessions,
             create_session,
             list_agents,
