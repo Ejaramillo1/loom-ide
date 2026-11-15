@@ -126,26 +126,33 @@ Trace lookup awaits a completing turn; the GetTrace endpoint exists in the
 proto and the trace view is wired, but no live trace id was obtainable
 from a streamed turn (WeaveProgress carries no trace id).
 
-Still open, all registered: D14 real-window captures (permission), Q2
-fallback, Monaco/benchmark dependencies, the gRPC-only services, the
-harness MCP connection, and every decision in `docs/DECISIONS.md`.
+Still open: D14 real-window captures (permission) and the implementation
+of the 15 Nov decisions — the benchmark (promptfoo + Docling first), the
+Rust gRPC client (Judge first), the static Q2 fallback panel, the
+two-direction harness MCP connection, full task migration, the avatar
+wiring, and workflow streaming before ABTest. Every decision is now
+recorded in `docs/DECISIONS.md`; nothing there awaits Eduardo's call.
 
 ## Build sizes at head (15 Nov ~01:00)
 
-- `public/spatial/Build/spatial.wasm`: 25,530,368 bytes (was 35,049,618 —
-  a 27% drop). Cause, verified in `ProjectSettings/ProjectSettings.asset`
-  (commit `3b2d4a1`): `il2cppCodeGeneration: WebGL: 1` (= OptimizeSize in
-  this Unity version), `managedStrippingLevel: WebGL: 3` (= High),
-  `webGLExceptionSupport: 0` (None), `webGLDebugSymbols: 0`,
-  `webGLDataCaching: 1`. The wasm-size question is closed.
+- `public/spatial/Build/spatial.wasm`: 25,530,904 bytes (was 35,066,162 at
+  14 Nov 23:26 — a 27% drop). Cause, verified in
+  `ProjectSettings/ProjectSettings.asset` (commit `3b2d4a1`):
+  `il2cppCodeGeneration: WebGL: 1` (= OptimizeSize in this Unity version),
+  `managedStrippingLevel: WebGL: 3` (= High), `webGLExceptionSupport: 0`
+  (None), `webGLDebugSymbols: 0`, `webGLDataCaching: 1`. The wasm-size
+  question is closed.
 - `dist/spatial/Build` matches `public/spatial/Build` (`cmp` on wasm and
   data files, identical hashes).
 - Release binary rebuilt at head (see below; ~24 MB, grown with the new
   backend surfaces).
-- Headless browser check: recorded as `docs/headless-check.json` (the
-  check READS the console — default mode, view visibility, collider-strip
-  errors and console/page errors are all captured, not just HTTP 200).
-- Monaco bundle: `dist/assets/index-*.js` 4,155.25 kB raw / 1,069.05 kB
+- Headless preview smoke: `src-tauri/target/fold-preview-smoke.mjs`
+  verifies HTTP 200 plus built entry assets and player resources over
+  plain `fetch`. It cannot observe the browser console (no
+  browser-automation dependency), so "0 console errors" is not a claim
+  the smoke can make; `docs/headless-check.json` records mode, view
+  visibility, collider errors and HTTP status only.
+- Monaco bundle: `dist/assets/index-*.js` 4,156.42 kB raw / 1,069.22 kB
   gzip (the heavy-dependency tradeoff for the Code-mode editor, now that
   Eduardo's decision made Monaco the editor).
 
