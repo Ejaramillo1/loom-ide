@@ -92,21 +92,42 @@ pub fn ask_loom_stream(
     context: Option<std::collections::HashMap<String, String>>,
 ) -> Result<(), String> {
     validate_stream_inputs(&request_id, &message)?;
-    let message = message.trim();
+    let body = weave_stream_body(
+        message.trim(),
+        session_id.as_deref(),
+        agent_id.as_deref(),
+        context.as_ref(),
+    );
+    start_loom_stream(
+        app,
+        request_id,
+        "loom-stream",
+        "POST",
+        "/v1/weave:stream".into(),
+        Value::Object(body),
+    )
+}
+
+/// Build the weave-stream request body. The custom SSE handler decodes
+/// with `encoding/json`, so these keys are snake_case by wire contract
+/// (`pkg/server/http.go` pins the format: "Do not switch to protojson").
+/// camelCase keys here would silently drop the selected session and agent
+/// (QC-03). The vault context pack travels as `context`; blank optionals
+/// are omitted rather than sent empty.
+fn weave_stream_body(
+    message: &str,
+    session_id: Option<&str>,
+    agent_id: Option<&str>,
+    context: Option<&std::collections::HashMap<String, String>>,
+) -> serde_json::Map<String, Value> {
     let mut obj = serde_json::Map::new();
     obj.insert("query".into(), Value::String(message.to_string()));
-    if let Some(s) = session_id {
-        if !s.trim().is_empty() {
-            obj.insert("session_id".into(), Value::String(s));
-        }
+    if let Some(s) = session_id.filter(|s| !s.trim().is_empty()) {
+        obj.insert("session_id".into(), Value::String(s.to_string()));
     }
-    if let Some(a) = agent_id {
-        if !a.trim().is_empty() {
-            obj.insert("agent_id".into(), Value::String(a));
-        }
+    if let Some(a) = agent_id.filter(|a| !a.trim().is_empty()) {
+        obj.insert("agent_id".into(), Value::String(a.to_string()));
     }
-    // The vault context pack (§2.4): active work, intent and the open file
-    // travel with the query so the model answers with the real context.
     if let Some(c) = context {
         if !c.is_empty() {
             obj.insert("context".into(), serde_json::json!(c));
@@ -114,14 +135,7 @@ pub fn ask_loom_stream(
     }
     // Tracing on so the completed turn has an observability record.
     obj.insert("enable_trace".into(), Value::Bool(true));
-    start_loom_stream(
-        app,
-        request_id,
-        "loom-stream",
-        "POST",
-        "/v1/weave:stream".into(),
-        Value::Object(obj),
-    )
+    obj
 }
 
 /// Ask the stream thread to stop. The stream ends with kind `cancelled`.
@@ -538,5 +552,41 @@ mod tests {
         assert!(validate_stream_inputs("", "hello").is_err());
         assert!(validate_stream_inputs("   ", "hello").is_err());
         assert!(validate_stream_inputs("r1", "hello").is_ok());
+    }
+
+    #[test]
+    fn weave_stream_body_uses_the_sse_snake_case_contract() {
+        let body = weave_stream_body("hi", Some("sess-1"), Some("agent-2"), None);
+        assert_eq!(body.get("query"), Some(&Value::String("hi".into())));
+        assert_eq!(
+            body.get("session_id"),
+            Some(&Value::String("sess-1".into()))
+        );
+        assert_eq!(body.get("agent_id"), Some(&Value::String("agent-2".into())));
+        assert_eq!(body.get("enable_trace"), Some(&Value::Bool(true)));
+        // The SSE handler's encoding/json decoder ignores protojson keys:
+        // asserting their absence pins the wire contract (QC-03).
+        assert!(body.get("sessionId").is_none());
+        assert!(body.get("agentId").is_none());
+        assert!(body.get("enableTrace").is_none());
+    }
+
+    #[test]
+    fn weave_stream_body_omits_blank_optional_fields() {
+        let body = weave_stream_body("hi", Some("  "), Some(""), None);
+        assert!(body.get("session_id").is_none());
+        assert!(body.get("agent_id").is_none());
+        assert!(body.get("context").is_none());
+    }
+
+    #[test]
+    fn weave_stream_body_carries_the_context_pack_when_present() {
+        let mut ctx = std::collections::HashMap::new();
+        ctx.insert("active_work".into(), "w1".into());
+        let body = weave_stream_body("hi", None, None, Some(&ctx));
+        assert_eq!(
+            body.get("context").and_then(|v| v.get("active_work")),
+            Some(&Value::String("w1".into()))
+        );
     }
 }

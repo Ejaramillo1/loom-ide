@@ -5173,16 +5173,25 @@ function renderHitlCard(
   scrollChat();
 }
 
+/** Settle one streamed request exactly once. Every registered stream owns
+    exactly one in-flight decrement, so overlapping sends settle correctly
+    and a repeated or racing terminal event is a no-op (issue 016). */
+function settleStreamState(requestId: string, st: StreamReplyState): boolean {
+  if (st.finished) return false;
+  st.finished = true;
+  activeStreams.delete(requestId);
+  if (activeStreamId === requestId) activeStreamId = null;
+  return true;
+}
+
 function finishStream(
   st: StreamReplyState,
   requestId: string,
   kind: "done" | "error" | "cancelled",
   error?: string,
 ) {
-  st.finished = true;
-  activeStreams.delete(requestId);
-  if (activeStreamId === requestId) activeStreamId = null;
-  if (activeStreams.size === 0) chatInFlight--;
+  if (!settleStreamState(requestId, st)) return;
+  chatInFlight--;
   renderChatControls();
   renderStatusPill();
 
@@ -5212,11 +5221,24 @@ function finishStream(
     note.className = "chat-stopped error";
     note.textContent = `Loom stopped answering: ${error ?? "unknown error"}.`;
     st.msg.append(note);
-    if (!st.text) addChatError(`Could not reach Loom: ${error ?? "unknown error"}. Start the Loom service and send your message again.`);
+    if (st.text.trim()) {
+      // A partial reply is real content: keep it for the conversation,
+      // marked partial, instead of discarding it with the error.
+      const partial = document.createElement("p");
+      partial.className = "chat-partial-note";
+      partial.textContent = "The reply above is partial — the stream ended before completion.";
+      st.msg.append(partial);
+      cacheChatMessage(st.cacheKey, "loom", st.text);
+      setSphereState("error");
+      return;
+    }
+    addChatError(`Could not reach Loom: ${error ?? "unknown error"}. Start the Loom service and send your message again.`);
     setSphereState("error");
-    // A failed send returns the text to the composer so it survives a close.
-    if (!st.text) {
-      ($("#chat-text") as HTMLInputElement).value = st.clean;
+    // Return the failed text to the composer so it survives a close —
+    // but never overwrite text the human typed while the request ran.
+    const composer = $("#chat-text") as HTMLInputElement;
+    if (!composer.value.trim()) {
+      composer.value = st.clean;
       localStorage.setItem(CHAT_DRAFT_KEY, st.clean);
     }
     return;
@@ -5234,9 +5256,16 @@ function finishStream(
     if (st.sessionId && !sessions.some((s) => s.id === st.sessionId)) {
       await refreshSessions();
     }
-    const sessionId = st.sessionId ?? (selectedSessionId ?? newestSessionId());
-    if (sessionId && !st.sessionId && !selectedSessionId) {
-      st.sessionId = sessionId;
+    // Ownership comes only from the session captured at send time (or
+    // resolved mid-stream by the clarification flow). Never adopt the
+    // newest session or the current selection as proof of ownership
+    // (issue 007): if the stream reports no session id, the turn ran in
+    // an auto-created session the wire doesn't identify.
+    if (!st.sessionId) {
+      const missing = document.createElement("p");
+      missing.className = "chat-identity-note";
+      missing.textContent = "Loom created a session for this turn but the stream doesn't report its id — send with a session selected to keep the conversation linked to this work.";
+      st.msg.append(missing);
     }
     if (st.sessionId && st.workId) {
       try {
@@ -5346,11 +5375,15 @@ async function sendChatUnary(
 async function sendChat(text: string) {
   const clean = text.trim();
   if (!clean) return;
-  // Capture the work at send time: the user may switch work while the
-  // reply is in flight, and the reply (and the session link) belongs to
-  // the work it was sent from.
+  // Capture everything the reply belongs to at send time: the user may
+  // switch work, session or agent while the reply is in flight, and the
+  // stream must address exactly what was selected when it was sent.
   const workId = selectedWorkId;
+  const sessionId = selectedSessionId;
+  const agentId = selectedAgentId;
+  const context = buildChatContext();
   const cacheKey = workId ?? UNASSIGNED_KEY;
+  const requestId = `r-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   addChatMessage("user", clean);
   cacheChatMessage(cacheKey, "user", clean);
   chatInFlight++;
@@ -5361,27 +5394,12 @@ async function sendChat(text: string) {
   typing.className = "typing";
   typing.textContent = "Loom is thinking…";
   log.append(typing);
-  log.scrollTop = log.scrollHeight;
 
-  // Streaming first: incremental tokens, tool calls in flight, a Stop
-  // button, and inline clarification answers. The unary path is the
-  // fallback for a server that doesn't stream.
-  const requestId = `r-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  try {
-    await askLoomStream(
-      requestId,
-      clean,
-      selectedSessionId ?? undefined,
-      selectedAgentId ?? undefined,
-      buildChatContext(),
-    );
-  } catch {
-    chatInFlight--;
-    await sendChatUnary(clean, workId, cacheKey, typing);
-    return;
-  }
-
-  typing.remove();
+  // Register the reply state BEFORE invoking: the Rust side spawns the
+  // emitting thread and returns immediately, so a progress or terminal
+  // event can arrive before the invoke resolves. Early events must never
+  // be discarded (issue 016), and each registered stream owns exactly
+  // one in-flight settle.
   const msg = document.createElement("div");
   msg.className = "chat-msg loom";
   const bubble = document.createElement("div");
@@ -5398,14 +5416,33 @@ async function sendChat(text: string) {
     clean,
     toolLines: new Map(),
     clarifications: new Set(),
-    sessionId: selectedSessionId,
+    sessionId,
     finished: false,
   };
   activeStreams.set(requestId, state);
   activeStreamId = requestId;
-  activeStreamSessionId = selectedSessionId;
+  activeStreamSessionId = sessionId;
   renderChatControls();
   log.scrollTop = log.scrollHeight;
+
+  try {
+    await askLoomStream(requestId, clean, sessionId ?? undefined, agentId ?? undefined, context);
+  } catch {
+    typing.remove();
+    // ask_loom_stream only rejects before any network work (validation),
+    // so a rejection means no POST was accepted — the unary fallback is
+    // safe here and only here. If a terminal event raced the rejection
+    // and already settled the stream, skip the fallback entirely.
+    if (state.finished) return;
+    activeStreams.delete(requestId);
+    if (activeStreamId === requestId) activeStreamId = null;
+    // The empty stream bubble gives way to the unary reply.
+    msg.remove();
+    await sendChatUnary(clean, workId, cacheKey, typing);
+    return;
+  }
+
+  typing.remove();
 }
 
 // ---------------------------------------------------------------------------
