@@ -39,6 +39,9 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   const tabs = host.querySelector<HTMLElement>("#knowledge-tabs")!;
   const bell = document.querySelector<HTMLButtonElement>("#knowledge-bell")!;
   const dialog = document.querySelector<HTMLDialogElement>("#knowledge-dialog")!;
+  const benchGraph = document.querySelector<HTMLElement>("#spatial-graph")!;
+  const benchCanvas = document.querySelector<HTMLElement>("#spatial-canvas")!;
+  let loadFailed = false;
   let data: KnowledgeListing | null = null;
   let tab: Tab = "graph", query = "", kind = "", folder = "";
   let focus: string | null = null;
@@ -52,8 +55,8 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   async function refresh() {
     if (loading) return;
     loading = true;
-    try { data = await listKnowledge(); showNotice(); changed(); render(); }
-    catch (error) { pendingChanged(data?.pending ?? 0, true); fail(error); if (!data) content.replaceChildren(el("p", "Knowledge is unavailable. Open the desktop app or retry loading the vault.", "knowledge-empty")); }
+    try { data = await listKnowledge(); loadFailed = false; showNotice(); changed(); render(); }
+    catch (error) { loadFailed = true; renderBench(); pendingChanged(data?.pending ?? 0, true); fail(error); if (!data) content.replaceChildren(el("p", "Knowledge is unavailable. Open the desktop app or retry loading the vault.", "knowledge-empty")); }
     finally { loading = false; }
   }
   function empty(text: string) { content.append(el("p", text, "knowledge-empty")); }
@@ -74,7 +77,19 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       row.append(el("strong", `${a.action} · ${data?.notes.find(n => n.meta.id === a.object)?.meta.title ?? a.object}`), el("p", `${a.actor} · ${time(a.at)} · ${a.detail}`)); parent.append(row);
     }
   }
+  function renderBench() {
+    for (const parent of [benchGraph, benchCanvas]) {
+      parent.replaceChildren();
+      if (loadFailed || !data) parent.append(el("p", loadFailed
+        ? "Vault unavailable. Open Knowledge to retry loading your notes."
+        : "Loading your vault…", "knowledge-empty"));
+    }
+    if (loadFailed || !data) return;
+    renderGraph(benchGraph, true);
+    renderCanvas(benchCanvas, true);
+  }
   function render() {
+    renderBench();
     for (const b of tabs.querySelectorAll<HTMLButtonElement>("button")) { b.classList.toggle("active", b.dataset.tab === tab); b.setAttribute("aria-pressed", String(b.dataset.tab === tab)); }
     document.querySelector<HTMLElement>("#knowledge-search-slot")!.hidden = tab !== "notes";
     content.replaceChildren();
@@ -104,20 +119,21 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
     return node;
   }
-  function renderGraph() {
+  function renderGraph(parent = content, compact = false) {
     if (!data) return;
-    if (!data.notes.length) { empty("No notes yet. Use New note or Sync from Loom to build your graph."); return; }
+    if (!data.notes.length) { parent.append(el("p", "No notes yet. Open Knowledge to create a note or sync from Loom.", "knowledge-empty")); return; }
     const nodes = graphLayout(data.notes, data.edges, focus);
     const edges = data.edges.filter(e => nodes.some(n => n.note.meta.id === e.from) && nodes.some(n => n.note.meta.id === e.to));
     const tools = el("div", "", "knowledge-tools"); tools.append(el("span", `${nodes.length} objects · ${edges.length} relationships`));
-    if (focus) tools.append(button("Show all knowledge", () => { focus = null; render(); })); content.append(tools);
+    if (focus) tools.append(button("Show all knowledge", () => { focus = null; render(); })); parent.append(tools);
     const svg = svgNode("svg", { viewBox: "0 0 900 560", class: "knowledge-graph", role: "group", "aria-label": "Knowledge graph" });
-    const defs = svgNode("defs", {}), marker = svgNode("marker", { id: "knowledge-arrow", markerWidth: "8", markerHeight: "8", refX: "7", refY: "4", orient: "auto" });
+    const arrow = compact ? "bench-knowledge-arrow" : "knowledge-arrow";
+    const defs = svgNode("defs", {}), marker = svgNode("marker", { id: arrow, markerWidth: "8", markerHeight: "8", refX: "7", refY: "4", orient: "auto" });
     marker.append(svgNode("path", { d: "M0,0 L8,4 L0,8 Z", fill: "var(--muted)" })); defs.append(marker); svg.append(defs);
     for (const edge of edges) {
       const a = nodes.find(n => n.note.meta.id === edge.from)!, b = nodes.find(n => n.note.meta.id === edge.to)!;
       const dx = b.x - a.x, dy = b.y - a.y, distance = Math.hypot(dx, dy) || 1;
-      const line = svgNode("line", { x1: `${a.x + dx / distance * 21}`, y1: `${a.y + dy / distance * 21}`, x2: `${b.x - dx / distance * 24}`, y2: `${b.y - dy / distance * 24}`, stroke: "var(--muted)", "marker-end": "url(#knowledge-arrow)" });
+      const line = svgNode("line", { x1: `${a.x + dx / distance * 21}`, y1: `${a.y + dy / distance * 21}`, x2: `${b.x - dx / distance * 24}`, y2: `${b.y - dy / distance * 24}`, stroke: "var(--muted)", "marker-end": `url(#${arrow})` });
       const title = svgNode("title", {}); title.textContent = edge.kind; line.append(title); svg.append(line);
     }
     for (const { note, x, y } of nodes) {
@@ -128,32 +144,40 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       const open = () => { focus = note.meta.id; render(); void openNote(note.meta.id); };
       g.addEventListener("click", open); g.addEventListener("keydown", e => { if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") { e.preventDefault(); open(); } }); svg.append(g);
     }
-    content.append(svg);
+    parent.append(svg);
   }
-  function renderCanvas() {
+  function renderCanvas(parent = content, compact = false) {
     if (!data) return;
-    content.append(button("Export JSON Canvas", () => { void exportKnowledgeCanvas().then(path => showNotice(`Exported to ${path}`)).catch(fail); }));
-    if (!data.notes.length) { empty("No notes yet. Use New note to begin your canvas."); return; }
+    if (!compact) parent.append(button("Export JSON Canvas", () => { void exportKnowledgeCanvas().then(path => showNotice(`Exported to ${path}`)).catch(fail); }));
+    if (!data.notes.length) { parent.append(el("p", "No notes yet. Open Knowledge to begin your canvas.", "knowledge-empty")); return; }
     const stage = el("div", "", "knowledge-canvas"), plane = el("div", "", "knowledge-plane");
-    const lines = svgNode("svg", { class: "knowledge-lines", "aria-hidden": "true" }); plane.append(lines); stage.append(plane); content.append(stage);
+    const scale = compact ? 0.62 : 1;
+    const bounds = el("div", "", "knowledge-canvas-bounds");
+    bounds.append(plane);
+    plane.style.transform = `scale(${scale})`;
+    const lines = svgNode("svg", { class: "knowledge-lines", "aria-hidden": "true" }); plane.append(lines); stage.append(bounds); parent.append(stage);
     for (const [i, n] of data.notes.entries()) if (!positions.has(n.meta.id)) positions.set(n.meta.id, { x: (i % 4) * 240, y: Math.floor(i / 4) * 148 });
     function drawLines() {
       lines.replaceChildren();
       const ps = data!.notes.map(n => positions.get(n.meta.id)!);
       plane.style.width = `${Math.max(960, ...ps.map(p => p.x + 240))}px`; plane.style.height = `${Math.max(440, ...ps.map(p => p.y + 148))}px`;
+      bounds.style.width = `${parseFloat(plane.style.width) * scale}px`;
+      bounds.style.height = `${parseFloat(plane.style.height) * scale}px`;
+      const ids = new Set(data!.notes.map(n => n.meta.id));
       for (const e of data!.edges) {
-        const a = positions.get(e.from), b = positions.get(e.to); if (!a || !b) continue;
+        const a = positions.get(e.from), b = positions.get(e.to); if (!a || !b || !ids.has(e.from) || !ids.has(e.to)) continue;
         lines.append(svgNode("line", { x1: `${a.x + 110}`, y1: `${a.y + 64}`, x2: `${b.x + 110}`, y2: `${b.y + 64}`, stroke: "var(--muted)" }));
       }
     }
     for (const n of data.notes) {
       const card = button("", () => { if (!moved) void openNote(n.meta.id); }, "knowledge-card knowledge-canvas-card");
+      card.dataset.kind = kindColour(n.meta.kind);
       card.append(el("strong", n.meta.title), el("span", n.meta.kind));
       card.title = "Drag to move; arrow keys move the card; Enter opens the note";
       const p = positions.get(n.meta.id)!; let start: { x: number; y: number; left: number; top: number } | null = null, moved = false;
       const place = () => { card.style.left = `${p.x}px`; card.style.top = `${p.y}px`; }; place();
       card.addEventListener("pointerdown", e => { if (e.button !== 0) return; moved = false; start = { x: e.clientX, y: e.clientY, left: p.x, top: p.y }; card.setPointerCapture(e.pointerId); });
-      card.addEventListener("pointermove", e => { if (!start) return; const dx = e.clientX - start.x, dy = e.clientY - start.y; if (Math.hypot(dx, dy) > 4) moved = true; if (!moved) return; p.x = Math.max(0, start.left + dx); p.y = Math.max(0, start.top + dy); place(); drawLines(); });
+      card.addEventListener("pointermove", e => { if (!start) return; const dx = e.clientX - start.x, dy = e.clientY - start.y; if (Math.hypot(dx, dy) > 4) moved = true; if (!moved) return; p.x = Math.max(0, start.left + dx / scale); p.y = Math.max(0, start.top + dy / scale); place(); drawLines(); });
       card.addEventListener("pointerup", () => { start = null; }); card.addEventListener("pointercancel", () => { start = null; });
       card.addEventListener("keydown", e => { const delta: Record<string, [number, number]> = { ArrowLeft: [-20,0], ArrowRight: [20,0], ArrowUp: [0,-20], ArrowDown: [0,20] }; if (delta[e.key]) { e.preventDefault(); p.x = Math.max(0, p.x + delta[e.key][0]); p.y = Math.max(0, p.y + delta[e.key][1]); place(); drawLines(); } else moved = false; });
       plane.append(card);
@@ -161,6 +185,10 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     drawLines();
   }
   function close() { if (!busy && !dirty) dialog.close(); else dialog.querySelector<HTMLElement>(".knowledge-dialog-error")!.textContent = busy ? "Saving…" : "Save or discard your draft before closing."; }
+  dialog.addEventListener("close", () => {
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || active === document.body || active.closest("[hidden]")) tabs.querySelector<HTMLElement>(".active")?.focus();
+  });
   dialog.addEventListener("cancel", e => { e.preventDefault(); close(); });
   window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
   function frame(title: string) {
@@ -251,6 +279,9 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     try { const count = await syncKnowledge(); await refresh(); showNotice(`Synced ${count} new notes from Loom.`); }
     catch (error) { await refresh(); fail(error); } finally { b.disabled = false; }
   });
+  document.querySelector("#spatial-open-graph")!.addEventListener("click", () => openTab("graph"));
+  document.querySelector("#spatial-open-canvas")!.addEventListener("click", () => openTab("canvas"));
+  renderBench();
   bell.addEventListener("click", () => openTab("review"));
   void refresh();
   return { refresh, newNote, openNote, showNotes: () => openTab("notes"), search: (value: string) => { query = value; if (tab === "notes") render(); },

@@ -2598,12 +2598,15 @@ async function refreshAttention() {
 // work surface.
 // ---------------------------------------------------------------------------
 
-let rightTab: RightTab = "context";
-let rightOpen = window.matchMedia("(min-width: 1440px)").matches;
-let rightWasDrawer = !window.matchMedia("(min-width: 1440px)").matches;
+let rightTab: RightTab = "conversation";
+let rightOpen = window.matchMedia("(min-width: 1100px)").matches;
+let rightWasDrawer = isRightDrawer();
+let spatialPane: { tab: RightTab; open: boolean } = { tab: rightTab, open: rightOpen };
+let otherPane: { tab: RightTab; open: boolean } = { tab: "context", open: window.matchMedia("(min-width: 1440px)").matches };
+let knowledgeOpener: HTMLElement | null = null;
 
 function isRightDrawer(): boolean {
-  return !window.matchMedia("(min-width: 1440px)").matches;
+  return !window.matchMedia(mode === "spatial" ? "(min-width: 1100px)" : "(min-width: 1440px)").matches;
 }
 
 function isLeftDrawer(): boolean {
@@ -2613,9 +2616,18 @@ function isLeftDrawer(): boolean {
 
 function updateScrim() {
   const open =
+    document.body.classList.contains("knowledge-open") ||
     document.body.classList.contains("left-open") ||
     (isRightDrawer() && document.body.classList.contains("right-open"));
   $("#scrim").hidden = !open;
+}
+
+function closeKnowledgeDrawer(returnFocus = true) {
+  document.body.classList.remove("knowledge-open");
+  $("#spatial-knowledge-toggle").setAttribute("aria-expanded", "false");
+  updateScrim();
+  if (returnFocus) knowledgeOpener?.focus();
+  knowledgeOpener = null;
 }
 
 function applyRightPane() {
@@ -2643,6 +2655,7 @@ function applyRightPane() {
     that opens, and focus moves into it; the chat log and draft stay put
     when it closes. */
 function openRight(tab: RightTab, opener?: HTMLElement) {
+  closeKnowledgeDrawer(false);
   // One contextual surface at a time: opening the right drawer closes the
   // work catalogue drawer rather than stacking two modal panes.
   if (document.body.classList.contains("left-open")) closeLeftDrawer(false);
@@ -2708,6 +2721,7 @@ function closeLeftDrawer(returnFocus = true) {
 }
 
 function closeDrawers() {
+  if (document.body.classList.contains("knowledge-open")) { closeKnowledgeDrawer(); return; }
   // Only one drawer can be open. Close that one so its opener receives
   // focus, rather than routing the return through the other drawer.
   if (document.body.classList.contains("left-open")) {
@@ -4772,10 +4786,19 @@ function setMode(next: Mode) {
     return;
   }
   if (document.body.classList.contains("left-open")) closeLeftDrawer(false);
+  closeKnowledgeDrawer(false);
+  if (mode === "spatial") spatialPane = { tab: rightTab, open: rightOpen };
+  else otherPane = { tab: rightTab, open: rightOpen };
+  const previousDrawer = isRightDrawer();
+  const pane = next === "spatial" ? spatialPane : mode === "spatial" ? otherPane : { tab: rightTab, open: rightOpen };
   mode = next;
+  rightTab = pane.tab;
+  rightOpen = isRightDrawer() && !previousDrawer ? false : pane.open;
+  rightWasDrawer = isRightDrawer();
+  $("#spatial-knowledge").hidden = next !== "spatial";
   const search = document.querySelector<HTMLElement>(".search-wrap");
   if (search) $(next === "knowledge" ? "#knowledge-search-slot" : "#work-search-slot").append(search);
-  if (next === "knowledge") { void knowledge?.refresh(); }
+  if (next === "knowledge" || next === "spatial") { void knowledge?.refresh(); }
   // Keep the footer destination and its accessible state synchronized.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     const active = btn.dataset.mode === next;
@@ -4793,6 +4816,10 @@ function setMode(next: Mode) {
   // The scene follows the mode: water + full atmosphere only in Experiment.
   document.querySelector(".scene")?.setAttribute("data-mode", next);
   applyRightPane();
+  const active = document.activeElement as HTMLElement | null;
+  if (active?.closest("[hidden]") || (active?.closest("#right-col") && !rightOpen)) {
+    document.querySelector<HTMLElement>(`.mode-btn[data-mode="${next}"]`)?.focus();
+  }
   closeMenus();
 }
 
@@ -4956,7 +4983,7 @@ function initCodeEditor() {
 async function init() {
   loadLayers();
   applyLayerClasses();
-  rightOpen = window.matchMedia("(min-width: 1440px)").matches;
+  rightOpen = !isRightDrawer();
   rightWasDrawer = isRightDrawer();
   applyRightPane();
   initAppMenu();
@@ -5024,6 +5051,7 @@ async function init() {
     if (e.key === "Escape") {
       if (document.getElementById("decision-dialog-overlay")) return; // handled by its trap
       if (
+        document.body.classList.contains("knowledge-open") ||
         document.body.classList.contains("left-open") ||
         (isRightDrawer() && document.body.classList.contains("right-open"))
       ) {
@@ -5039,7 +5067,9 @@ async function init() {
     // Focus trap for the modal drawers: Tab cycles within the open pane
     // instead of moving into the page behind the scrim.
     if (e.key === "Tab") {
-      const openDrawer = document.body.classList.contains("left-open")
+      const openDrawer = document.body.classList.contains("knowledge-open")
+        ? $("#spatial-knowledge")
+        : document.body.classList.contains("left-open")
         ? $("#left-col")
         : isRightDrawer() && document.body.classList.contains("right-open")
           ? $("#right-col")
@@ -5068,11 +5098,28 @@ async function init() {
     if (rightOpen && rightTab === "conversation") closeRight();
     else openRight("conversation", e.currentTarget as HTMLElement);
   });
+  $("#spatial-knowledge").hidden = mode !== "spatial";
+  $("#spatial-knowledge-toggle").addEventListener("click", e => {
+    if (document.body.classList.contains("knowledge-open")) { closeKnowledgeDrawer(); return; }
+    if (rightOpen && isRightDrawer()) closeRight(false);
+    closeLeftDrawer(false);
+    knowledgeOpener = e.currentTarget as HTMLElement;
+    document.body.classList.add("knowledge-open");
+    knowledgeOpener.setAttribute("aria-expanded", "true");
+    updateScrim();
+    $("#spatial-knowledge-close").focus();
+  });
+  $("#spatial-knowledge-close").addEventListener("click", () => closeKnowledgeDrawer());
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
   $("#right-close").addEventListener("click", () => closeRight());
   $("#scrim").addEventListener("click", () => closeDrawers());
   window.addEventListener("resize", () => {
-    if (!isLeftDrawer()) document.body.classList.remove("left-open");
+    if (!isLeftDrawer()) {
+      document.body.classList.remove("left-open"); closeKnowledgeDrawer(false);
+      if (document.activeElement?.id === "spatial-knowledge-close") $("#spatial-open-graph").focus();
+    } else if (mode === "spatial" && !document.body.classList.contains("knowledge-open") && $("#spatial-knowledge").contains(document.activeElement)) {
+      $("#spatial-knowledge-toggle").focus();
+    }
     const nowDrawer = isRightDrawer();
     if (nowDrawer !== rightWasDrawer) {
       // Crossing into drawer widths must not turn the persistent column into
