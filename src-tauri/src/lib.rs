@@ -1206,7 +1206,7 @@ fn parse_content_length(head: &str) -> Option<usize> {
 /// "timed out" message instead of raw OS text.
 /// The Loom server address: `LOOM_ADDR` overrides the localhost default
 /// (§2.2.4 — configurable without recompiling).
-fn loom_addr() -> String {
+pub(crate) fn loom_addr() -> String {
     std::env::var("LOOM_ADDR")
         .ok()
         .map(|v| v.trim().to_string())

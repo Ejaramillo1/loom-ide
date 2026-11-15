@@ -1,3 +1,9 @@
+> **Partly historical.** This inventory predates the fold: "two windows
+> today" is gone (the second window was retired, Q1=b), the relation-type
+> count is nine (not ten), and the Tauri-side Canvas positions are durable
+> now. The vault-side behaviour it describes is still accurate; the living
+> state is `docs/DESIGN_PROGRESS.md`.
+
 # Native-app (eframe Living Workbench) inventory — fold into Tauri/Unity (audit Q1=b)
 
 **Scope:** read-only inventory of `native-app/` in `Ejaramillo1/loom-ide`, branch `tauri-prototype`, laptop copy written 2026-11-14. Purpose: plan folding ALL eframe features into the Tauri app and the Unity bench and retiring the second window (Eduardo's decision, 2026-11-14, Q1=b). Q2 deferred; Q3 the sphere STAYS; Q4 consolidate anything duplicated (including audit D1 one New-experiment button, D2 one work-creation entry). Full version lives on the assistant VM at `~/workspace/loom-ide-fix/native-app-inventory.md`; this laptop copy is condensed. The module code is the source of truth — re-read it before building.

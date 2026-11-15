@@ -66,9 +66,11 @@ bypassed. Earlier README screenshots are explicitly labeled as preceding this
 refinement. No visual parity, frame-rate or real-hardware performance claim is
 made. Supported window sizes and interactive appearance still need visual review.
 
-Unity and its loading screen use the warm palette independently of the shell's
-saved theme. Live theme synchronization would require a bridge change and was
-deferred. The sphere uses the existing opaque Lit material: true refraction,
+Unity and its loading screen follow the shell's saved theme: the spatial
+bridge forwards the theme to the bench (`ApplyTheme` via
+`spatial-player.js`), so live theme synchronization exists — the original
+"would require a bridge change" note is stale and removed. The sphere uses
+the existing opaque Lit material: true refraction,
 volumetric internal waves and water reflections would require additional effects
 and are outside this pass. The native workbench retains its existing procedural
 water atmosphere; Unity retains its existing floor without adding water.

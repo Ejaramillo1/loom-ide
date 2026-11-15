@@ -28,8 +28,10 @@ while (controller == null && (DateTime.UtcNow - started).TotalSeconds < 90)
 if (!controller) throw new Exception("Workbench controller is missing.");
 
 // The self-check runs with the SHIPPING tier (High, level 0), not the
-// editor's current level (§1.1.5/§1.7.6).
+// editor's current level (§1.1.5/§1.7.6). The tier is returned so the
+// run is verifiable.
 QualitySettings.SetQualityLevel(0, false);
+var tier = QualitySettings.names[QualitySettings.GetQualityLevel()];
 
 var errors = new List<string>();
 void Check(bool condition, string message) { if (!condition) errors.Add(message); }
@@ -101,4 +103,4 @@ controller.ApplyReducedMotion("false");
 
 EditorApplication.ExitPlaymode();
 if (errors.Count > 0) throw new Exception(string.Join(" | ", errors.Take(12)));
-return new { portals = anchors.Length, physicalParts = parts, colliderErrors, palette = true, themes = 2, cameraAspects = 3, glassVariant = true };
+return new { tier, portals = anchors.Length, physicalParts = parts, colliderErrors, palette = true, themes = 2, cameraAspects = 3, glassVariant = true };

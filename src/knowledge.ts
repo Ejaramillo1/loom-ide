@@ -508,5 +508,6 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   void patternUpdatesStream("patterns-shelf").catch(() => { /* no bridge */ });
   void refresh();
   return { refresh, newNote, openNote, showNotes: () => openTab("notes"), search: (value: string) => { query = value; if (tab === "notes") render(); },
-    searchResults: (value: string) => data ? matchingNotes(data.notes, value) : [], isDialogOpen: () => dialog.open };
+    searchResults: (value: string) => data ? matchingNotes(data.notes, value) : [], isDialogOpen: () => dialog.open,
+    notifySkillProgress: (text: string) => { showNotice(text); } };
 }

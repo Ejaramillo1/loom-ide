@@ -102,6 +102,7 @@ import {
   resolveSessionGap,
   listMcpServers,
   addMcpServer,
+  updateMcpServer,
   deleteMcpServer,
   restartMcpServer,
   healthCheckMcpServers,
@@ -2454,7 +2455,7 @@ function buildLoomBoardsSection(): HTMLElement {
   section.append(board);
   const src = document.createElement("p");
   src.className = "wd-sub-label";
-  src.textContent = "Tasks live in Loom; local work items stay local. Nothing is migrated silently.";
+  src.textContent = "Tasks live in Loom; local work items stay local. Nothing is migrated silently — migration (read-bridge vs full vs local) is an open decision in docs/DECISIONS.md.";
   section.append(src);
   return section;
 }
@@ -3573,6 +3574,8 @@ function agentDetail(a: Agent): string {
 }
 
 let mcpServers: McpServer[] = [];
+/** The server being edited in the MCP dialog; null = add mode. */
+let editingMcpName: string | null = null;
 let apps: unknown[] = [];
 let agentPresets: unknown[] = [];
 
@@ -4003,6 +4006,8 @@ async function openAgentDetail(agentId: string) {
 /** Edit an MCP server (§3.3.2): prefill from the server, save via update. */
 function openMcpEditDialog(serverName: string) {
   const dialog = $("#mcp-dialog") as HTMLDialogElement;
+  editingMcpName = serverName;
+  ($("#mcp-dialog-title") as HTMLElement).textContent = `Edit MCP server — ${serverName}`;
   ($("#mcp-dialog-error") as HTMLElement).hidden = true;
   dialog.showModal();
   void getMcpServer(serverName).then((s) => {
@@ -4074,6 +4079,8 @@ function initAgentsView() {
   $("#agent-create-btn").addEventListener("click", () => { void openAgentCreateDialog(); });
   $("#mcp-add-btn").addEventListener("click", () => {
     const d = $("#mcp-dialog") as HTMLDialogElement;
+    editingMcpName = null;
+    ($("#mcp-dialog-title") as HTMLElement).textContent = "Add MCP server";
     ($("#mcp-dialog-error") as HTMLElement).hidden = true;
     d.showModal();
   });
@@ -4131,12 +4138,21 @@ async function submitMcpServer() {
   if (!form.name) return showMcpDialogError("The server needs a name.");
   showMcpDialogError("");
   try {
-    const server = await addMcpServer(form.name, form.transport, form.command, form.args, form.url, true);
-    ($("#mcp-dialog") as HTMLDialogElement).close();
-    agentsNotice(`MCP server ${server.name} added.`);
+    // Edit mode saves through updateMcpServer — the add path is only for
+    // new servers, so editing can never create a duplicate (§3.3.2).
+    if (editingMcpName) {
+      const server = await updateMcpServer(editingMcpName, form.transport, form.command, form.args, form.url, true);
+      ($("#mcp-dialog") as HTMLDialogElement).close();
+      agentsNotice(`MCP server ${server.name} updated.`);
+    } else {
+      const server = await addMcpServer(form.name, form.transport, form.command, form.args, form.url, true);
+      ($("#mcp-dialog") as HTMLDialogElement).close();
+      agentsNotice(`MCP server ${server.name} added.`);
+    }
+    editingMcpName = null;
     await refreshMcpServers();
   } catch (err) {
-    showMcpDialogError(`Could not add the server: ${err instanceof Error ? err.message : String(err)}`);
+    showMcpDialogError(`Could not save the server: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -4826,6 +4842,20 @@ function handlePatternEvent(p: StreamEnvelope<unknown>) {
   // The Patterns shelf re-fetches on the next open; nothing else needs to
   // react to individual pattern events beyond refreshing the listing.
   if (p.kind === "progress" || p.kind === "error") knowledge?.refresh();
+}
+
+/** Bulk skill imports stream BulkImportProgress events; the skills shelf
+    shows them as they arrive (§6.4.1). */
+function handleSkillImportEvent(p: StreamEnvelope<unknown>) {
+  if (p.kind === "progress") {
+    const e = p.event as { message?: string; summary?: string; percent?: number } | undefined;
+    const text = e?.message ?? e?.summary ?? "Skill import in progress…";
+    knowledge?.notifySkillProgress?.(String(text).slice(0, 240));
+  } else if (p.kind === "error") {
+    knowledge?.notifySkillProgress?.(`Skill import failed: ${p.error ?? "unknown error"}`);
+  } else if (p.kind === "done") {
+    knowledge?.notifySkillProgress?.("Skill import finished.");
+  }
 }
 
 /** The vault context pack (§2.4): active work, intent and the open file
@@ -7393,6 +7423,9 @@ async function init() {
     await listen<StreamEnvelope<unknown>>("loom-patterns", (event) => {
       handlePatternEvent(event.payload);
     });
+    await listen<StreamEnvelope<unknown>>("loom-skills", (event) => {
+      handleSkillImportEvent(event.payload);
+    });
   }
   const stopBtn = $("#chat-stop") as HTMLButtonElement | null;
   if (stopBtn) stopBtn.addEventListener("click", () => {
@@ -7405,6 +7438,14 @@ async function init() {
   $("#session-delete").addEventListener("click", () => { void deleteSelectedSession(); });
   $("#session-resume").addEventListener("click", () => { void resumeSelectedSession(); });
   initAgentsView();
+
+  // Continuous re-probe while offline (§2.2.3): the connection state
+  // revalidates itself every 10 s instead of staying stale. The one-shot
+  // re-check after a stream error stays for its faster first response.
+  window.setInterval(() => {
+    if (document.hidden || !loomStatusKnown || loomReachable) return;
+    void getLoomStatus().then((s) => setLoomReachable(s.online));
+  }, 10000);
 
   // Provider A/B and workflow schedules.
   $("#abtest-btn").addEventListener("click", openAbtestDialog);

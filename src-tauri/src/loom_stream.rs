@@ -318,9 +318,11 @@ fn run_stream(
     cancel: &AtomicBool,
     event_name: &'static str,
 ) -> Result<(), String> {
-    let mut stream =
-        TcpStream::connect_timeout(&"127.0.0.1:5006".parse().unwrap(), Duration::from_secs(2))
-            .map_err(|e| format!("Loom is unavailable. Start looms serve --http-port 5006. {e}"))?;
+    let addr = super::loom_addr();
+    let mut stream = TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(2))
+        .map_err(|e| {
+            format!("Loom is unavailable at {addr}. Start looms serve --http-port 5006. {e}")
+        })?;
     // A short read timeout is what makes Stop actually stop: the cancel flag
     // is re-checked on every wake, so a silent stream cancels within ~20 s
     // instead of waiting out a 310 s read. The server's heartbeats keep the

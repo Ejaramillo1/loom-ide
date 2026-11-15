@@ -132,12 +132,22 @@ harness MCP connection, and every decision in `docs/DECISIONS.md`.
 
 ## Build sizes at head (15 Nov ~01:00)
 
-- `public/spatial/Build/spatial.wasm`: 25,530,368 bytes (was 35 MB before
-  IL2CPP OptimizeSize + managed stripping High; the §7.4 settings paid).
+- `public/spatial/Build/spatial.wasm`: 25,530,368 bytes (was 35,049,618 —
+  a 27% drop). Cause, verified in `ProjectSettings/ProjectSettings.asset`
+  (commit `3b2d4a1`): `il2cppCodeGeneration: WebGL: 1` (= OptimizeSize in
+  this Unity version), `managedStrippingLevel: WebGL: 3` (= High),
+  `webGLExceptionSupport: 0` (None), `webGLDebugSymbols: 0`,
+  `webGLDataCaching: 1`. The wasm-size question is closed.
 - `dist/spatial/Build` matches `public/spatial/Build` (`cmp` on wasm and
   data files, identical hashes).
 - Release binary rebuilt at head (see below; ~24 MB, grown with the new
   backend surfaces).
+- Headless browser check: recorded as `docs/headless-check.json` (the
+  check READS the console — default mode, view visibility, collider-strip
+  errors and console/page errors are all captured, not just HTTP 200).
+- Monaco bundle: `dist/assets/index-*.js` 4,155.25 kB raw / 1,069.05 kB
+  gzip (the heavy-dependency tradeoff for the Code-mode editor, now that
+  Eduardo's decision made Monaco the editor).
 
 ## Judge tooling status (§6.7)
 
