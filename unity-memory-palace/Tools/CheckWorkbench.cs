@@ -52,6 +52,10 @@ foreach (var ratio in new[] { 0.65f, 1f, 1.6f })
     foreach (var anchor in anchors)
         foreach (var renderer in anchor.GetComponentsInChildren<Renderer>())
         {
+            // Contact-shadow decals are soft ground gradients wider than the
+            // prop; cropping their transparent edge is harmless and is not a
+            // portal-framing failure.
+            if (renderer.name == "Contact shadow") continue;
             var bounds = renderer.bounds;
             for (var corner = 0; corner < 8; corner++)
             {
