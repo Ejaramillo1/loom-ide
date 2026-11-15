@@ -1,7 +1,8 @@
 import { listKnowledge, readKnowledge, createKnowledge, saveKnowledge, relateKnowledge, reviewKnowledge, archiveKnowledge, restoreKnowledge, exportKnowledgeCanvas, syncKnowledge,
-  type KnowledgeListing, type KnowledgeNote, type KnowledgeEdge, type KnowledgeDetail, type KnowledgeAudit } from "./api";
+  knowledgeSignature, saveCanvasLayout, loadCanvasLayout, listPatterns, getPattern,
+  type KnowledgeListing, type KnowledgeNote, type KnowledgeEdge, type KnowledgeDetail, type KnowledgeAudit, type VaultSignature } from "./api";
 
-type Tab = "graph" | "canvas" | "notes" | "review" | "activity";
+type Tab = "graph" | "canvas" | "notes" | "review" | "activity" | "patterns";
 export function matchingNotes(notes: KnowledgeNote[], query: string, kind = "", folder = "") {
   const q = query.trim().toLowerCase();
   return notes.filter(n => (!kind || n.meta.kind === kind) && (!folder || n.path.startsWith(`${folder}/`)) &&
@@ -51,21 +52,64 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   let benchTab: "graph" | "canvas" = "graph";
   let dirty = false, busy = false, loading = false;
   let request = 0;
-  // shortcut: canvas positions last for this application session; persist only if durable layouts are requested.
+  // Canvas positions persist behind the store adapter (app data dir), so
+  // arrangements survive restarts — durable layout, not session-only.
   const positions = new Map<string, { x: number; y: number }>();
+  let layoutLoaded = false;
+  let layoutSaveTimer: number | null = null;
+  /** The last vault signature the watcher saw; null until the first probe. */
+  let lastSignature: VaultSignature | null = null;
   const showNotice = (text = "", error = false) => { notice.textContent = text; notice.hidden = !text; notice.classList.toggle("error", error); };
   const fail = (error: unknown) => { showNotice(String(error), true); };
   function changed() { if (data) { pendingChanged(data.pending, false); bell.textContent = `🔔 ${data.pending}`; bell.setAttribute("aria-label", `Memory garden: ${data.pending} pending proposals`); } }
+  /** Persist canvas positions (debounced) — the durable-layout store. */
+  function scheduleLayoutSave() {
+    if (layoutSaveTimer !== null) clearTimeout(layoutSaveTimer);
+    layoutSaveTimer = setTimeout(() => {
+      layoutSaveTimer = null;
+      const rows = [...positions.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y }));
+      void saveCanvasLayout(rows).catch(() => { /* layout save is best-effort */ });
+    }, 800) as unknown as number;
+  }
   async function refresh() {
     if (loading) return;
     loading = true;
-    try { data = await listKnowledge(); loadFailed = false; showNotice(); changed(); render(); }
+    try {
+      data = await listKnowledge(); loadFailed = false; showNotice(); changed(); render();
+      if (!layoutLoaded) {
+        layoutLoaded = true;
+        try {
+          const saved = await loadCanvasLayout();
+          for (const row of saved) positions.set(row.id, { x: row.x, y: row.y });
+          renderBench();
+        } catch {
+          /* a missing or unreadable layout file is not an error state */
+        }
+      }
+      try { lastSignature = await knowledgeSignature(); } catch { lastSignature = null; }
+    }
     catch (error) { loadFailed = true; renderBench(); pendingChanged(data?.pending ?? 0, true); fail(error); if (!data) content.replaceChildren(el("p", "Knowledge is unavailable. Open the desktop app or retry loading the vault.", "knowledge-empty")); }
     finally { loading = false; }
   }
+  /** The disk watcher: external edits to vault files appear without a
+      manual refresh. Polls a cheap signature; a draft or open dialog
+      always wins over the refresh. */
+  const setIntervalFn = typeof window !== "undefined" && typeof window.setInterval === "function"
+    ? window.setInterval.bind(window)
+    : null;
+  if (setIntervalFn) setIntervalFn(() => {
+    if (document.hidden || busy || dirty || dialog.open) return;
+    void knowledgeSignature().then((sig) => {
+      if (!lastSignature) { lastSignature = sig; return; }
+      if (sig.changed_at_ms !== lastSignature.changed_at_ms || sig.notes !== lastSignature.notes || sig.pending !== lastSignature.pending) {
+        lastSignature = sig;
+        void refresh();
+      }
+    }).catch(() => { /* watcher failures are silent; the refresh button still works */ });
+  }, 3000);
   function empty(text: string) { content.append(el("p", text, "knowledge-empty")); }
   function openTab(next: Tab) { navigate(); tab = next; render(); }
-  for (const [id, label] of [["graph", "Graph"], ["canvas", "Canvas"], ["notes", "Notes"], ["review", "Memory garden"], ["activity", "Activity"]] as const) {
+  for (const [id, label] of [["graph", "Graph"], ["canvas", "Canvas"], ["notes", "Notes"], ["patterns", "Patterns"], ["review", "Memory garden"], ["activity", "Activity"]] as const) {
     const b = button(label, () => openTab(id), "knowledge-tab"); b.dataset.tab = id; tabs.append(b);
   }
   function noteButton(note: KnowledgeNote, review = false) {
@@ -123,7 +167,53 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       return;
     }
     if (tab === "canvas") { renderCanvas(); return; }
+    if (tab === "patterns") { void renderPatterns(); return; }
     renderGraph();
+  }
+  /** Loom's pattern library — one shelf of the knowledge surface, next to
+      the user's vault. Patterns are HTTP-bound; skills stay unwired until
+      the Phase 5 transport decision (gRPC-only service). */
+  async function renderPatterns() {
+    content.replaceChildren(el("p", "Loading Loom's patterns…", "knowledge-empty"));
+    let patterns: unknown[] = [];
+    try {
+      patterns = await listPatterns();
+    } catch (error) {
+      content.replaceChildren();
+      content.append(el("p", `Could not list Loom's patterns: ${String(error)} Start the Loom server and refresh.`, "knowledge-empty"));
+      return;
+    }
+    if (!patterns.length) {
+      content.replaceChildren();
+      content.append(el("p", "No patterns reported by Loom.", "knowledge-empty"));
+      return;
+    }
+    const rows: { name: string; raw: unknown }[] = patterns.map((p) => ({
+      name: (p as { name?: string }).name ?? (p as { id?: string }).id ?? "(unnamed pattern)",
+      raw: p,
+    }));
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    for (const { name, raw } of rows) {
+      const card = button("", () => { void openPattern(name, raw); }, "knowledge-card");
+      const meta = raw as { domain?: string; description?: string; version?: string };
+      const sub = [meta.domain, meta.version].filter(Boolean).join(" · ");
+      card.append(el("strong", name));
+      if (meta.description) card.append(el("span", String(meta.description).slice(0, 180)));
+      if (sub) card.append(el("span", sub, "knowledge-review-label"));
+      content.append(card);
+    }
+  }
+  async function openPattern(name: string, raw: unknown) {
+    frame(name);
+    try {
+      const detail = await getPattern(name);
+      const pre = el("pre", JSON.stringify(detail, null, 2), "pattern-detail");
+      dialog.append(pre);
+    } catch {
+      // The list row still carries the summary; the detail fetch is best-effort.
+      const pre = el("pre", JSON.stringify(raw, null, 2), "pattern-detail");
+      dialog.append(pre);
+    }
   }
   function svgNode(tag: string, attrs: Record<string, string>) {
     const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -191,8 +281,8 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       const place = () => { card.style.left = `${p.x}px`; card.style.top = `${p.y}px`; }; place();
       card.addEventListener("pointerdown", e => { if (e.button !== 0) return; moved = false; start = { x: e.clientX, y: e.clientY, left: p.x, top: p.y }; card.setPointerCapture(e.pointerId); });
       card.addEventListener("pointermove", e => { if (!start) return; const dx = e.clientX - start.x, dy = e.clientY - start.y; if (Math.hypot(dx, dy) > 4) moved = true; if (!moved) return; p.x = Math.max(0, start.left + dx / scale); p.y = Math.max(0, start.top + dy / scale); place(); drawLines(); });
-      card.addEventListener("pointerup", () => { start = null; }); card.addEventListener("pointercancel", () => { start = null; });
-      card.addEventListener("keydown", e => { const delta: Record<string, [number, number]> = { ArrowLeft: [-20,0], ArrowRight: [20,0], ArrowUp: [0,-20], ArrowDown: [0,20] }; if (delta[e.key]) { e.preventDefault(); p.x = Math.max(0, p.x + delta[e.key][0]); p.y = Math.max(0, p.y + delta[e.key][1]); place(); drawLines(); } else moved = false; });
+      card.addEventListener("pointerup", () => { start = null; scheduleLayoutSave(); }); card.addEventListener("pointercancel", () => { start = null; });
+      card.addEventListener("keydown", e => { const delta: Record<string, [number, number]> = { ArrowLeft: [-20,0], ArrowRight: [20,0], ArrowUp: [0,-20], ArrowDown: [0,20] }; if (delta[e.key]) { e.preventDefault(); p.x = Math.max(0, p.x + delta[e.key][0]); p.y = Math.max(0, p.y + delta[e.key][1]); place(); drawLines(); scheduleLayoutSave(); } else moved = false; });
       plane.append(card);
     }
     drawLines();

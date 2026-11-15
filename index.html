@@ -169,10 +169,23 @@
               <div class="mode-head">
                 <div>
                   <h2>Agents</h2>
-                  <p>Agents registered with the Loom server.</p>
+                  <p>Agents registered with the Loom server, and the MCP servers they can use.</p>
+                </div>
+                <div class="agents-actions">
+                  <button id="agent-create-btn" class="btn" type="button">Create agent</button>
+                  <button id="mcp-add-btn" class="btn ghost" type="button">Add MCP server</button>
+                  <button id="mcp-health-btn" class="btn ghost" type="button">Health check</button>
                 </div>
               </div>
+              <nav id="agents-tabs" class="knowledge-tabs" aria-label="Agents views">
+                <button type="button" class="tab active" data-tab="agents">Agents</button>
+                <button type="button" class="tab" data-tab="mcp">MCP Servers</button>
+                <button type="button" class="tab" data-tab="apps">Apps</button>
+              </nav>
               <div id="agents-list" class="scroll-list"></div>
+              <div id="mcp-list" class="scroll-list" hidden></div>
+              <div id="apps-list" class="scroll-list" hidden></div>
+              <p id="agents-notice" class="knowledge-notice" role="status" hidden></p>
             </div>
 
             <div id="view-evidence" class="view view-list" hidden>
@@ -292,13 +305,17 @@
                   <option value="">No session</option>
                 </select>
                 <button class="icon-btn small" id="session-new" type="button" title="New session" aria-label="New session">＋</button>
+                <button class="icon-btn small" id="session-resume" type="button" title="Resume the selected session" aria-label="Resume session">↻</button>
+                <button class="icon-btn small" id="session-delete" type="button" title="Delete the selected session" aria-label="Delete session">🗑</button>
                 <select id="agent-select" class="agent-select" aria-label="Agent" title="Agent">
                   <option value="">Default agent</option>
                 </select>
               </div>
+              <p id="session-note" class="session-note" role="status" hidden></p>
               <div id="chat-log" class="chat-log"></div>
               <form id="chat-form" class="chat-input">
                 <input id="chat-text" type="text" placeholder="Message Loom…" aria-label="Message Loom" autocomplete="off" />
+                <button class="icon-btn small" id="chat-stop" type="button" title="Stop the reply" aria-label="Stop the reply" hidden>■</button>
                 <button type="submit" class="send-btn" aria-label="Send">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4 20-7z" />
@@ -361,6 +378,53 @@
       </div>
     </div>
     <dialog id="knowledge-dialog" class="knowledge-dialog" aria-labelledby="knowledge-dialog-title"></dialog>
+    <dialog id="trace-dialog" class="app-help-dialog trace-dialog" aria-labelledby="trace-dialog-title">
+      <div class="trace-head">
+        <h2 id="trace-dialog-title">Trace</h2>
+        <button id="trace-close" class="icon-btn small" type="button" aria-label="Close trace">✕</button>
+      </div>
+      <div id="trace-body" class="trace-body"></div>
+    </dialog>
+    <dialog id="mcp-dialog" class="app-help-dialog" aria-labelledby="mcp-dialog-title">
+      <h2 id="mcp-dialog-title">Add MCP server</h2>
+      <p>Configure a server Loom's agents can call tools from. Test before saving to validate the command.</p>
+      <label for="mcp-name">Name</label>
+      <input id="mcp-name" type="text" required autocomplete="off" spellcheck="false" />
+      <label for="mcp-transport">Transport</label>
+      <select id="mcp-transport">
+        <option value="stdio">stdio</option>
+        <option value="http">http</option>
+        <option value="sse">sse</option>
+      </select>
+      <label for="mcp-command">Command (stdio)</label>
+      <input id="mcp-command" type="text" autocomplete="off" spellcheck="false" placeholder="npx -y @some/mcp-server" />
+      <label for="mcp-url">URL (http/sse)</label>
+      <input id="mcp-url" type="text" autocomplete="off" spellcheck="false" placeholder="http://localhost:9000/mcp" />
+      <label for="mcp-args">Arguments (space-separated)</label>
+      <input id="mcp-args" type="text" autocomplete="off" spellcheck="false" />
+      <p id="mcp-dialog-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="mcp-test" class="btn ghost" type="button">Test connection</button>
+        <button id="mcp-submit" class="btn" type="button">Add server</button>
+        <button id="mcp-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="agent-create-dialog" class="app-help-dialog" aria-labelledby="agent-create-title">
+      <h2 id="agent-create-title">Create agent</h2>
+      <p>Describe the agent, and the Weaver proposes a config for your review — or paste a config (or choose a preset) directly.</p>
+      <label for="agent-describe">Describe the agent</label>
+      <textarea id="agent-describe" rows="3" spellcheck="false" placeholder="An agent that reviews markdown notes and proposes links…"></textarea>
+      <button id="agent-describe-btn" class="btn ghost" type="button">Describe → build config</button>
+      <label for="agent-preset">Or start from a preset</label>
+      <select id="agent-preset"><option value="">No preset</option></select>
+      <label for="agent-config">Agent config (JSON)</label>
+      <textarea id="agent-config" class="agent-config" rows="10" spellcheck="false"></textarea>
+      <p id="agent-create-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="agent-create-submit" class="btn" type="button">Create agent</button>
+        <button id="agent-create-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
     <dialog id="open-folder-dialog" class="app-help-dialog" aria-labelledby="open-folder-title">
       <form id="open-folder-form">
         <h2 id="open-folder-title">Open folder</h2>

@@ -81,9 +81,32 @@ import {
   type EvidenceKind,
   evidenceKindLabel,
   type AutonomyChange,
+  type LoomStreamEvent,
+  type McpServer,
+  askLoomStream,
+  cancelLoomStream,
+  answerClarification,
+  listMcpServers,
+  addMcpServer,
+  deleteMcpServer,
+  restartMcpServer,
+  healthCheckMcpServers,
+  testMcpServer,
+  listMcpServerTools,
+  createAgent,
+  startAgent,
+  stopAgent,
+  reloadAgent,
+  deleteAgent,
+  listAgentPresets,
+  listApps,
+  deleteSession,
+  resumeSession,
+  getTrace,
 } from "./api";
 import type { SphereState } from "./sphere";
 import { installAppMenu, textEditingActions } from "./app-menu";
+import { listen } from "@tauri-apps/api/event";
 
 // ---------------------------------------------------------------------------
 // State
@@ -148,6 +171,11 @@ let knowledge: ReturnType<typeof installKnowledge> | null = null;
 let pendingKnowledge = 0;
 let knowledgeFailed = false;
 let chatInFlight = 0;
+/** The request id of the streamed weave in flight, when streaming. */
+let activeStreamId: string | null = null;
+/** The session the in-flight stream is (or was auto-created into) running
+    against — used to deliver clarification answers mid-turn. */
+let activeStreamSessionId: string | null = null;
 let currentNote: NoteKind | null = null;
 let artifactTab: "artifacts" | "documents" = "artifacts";
 let loomReachable = false;
@@ -2754,6 +2782,103 @@ function agentDetail(a: Agent): string {
   return parts.join(" · ");
 }
 
+let mcpServers: McpServer[] = [];
+let apps: unknown[] = [];
+let agentPresets: unknown[] = [];
+
+function agentsNotice(text: string, isError = false) {
+  const note = $("#agents-notice") as HTMLElement;
+  note.textContent = text;
+  note.classList.toggle("error", isError);
+  note.hidden = false;
+  window.setTimeout(() => { note.hidden = true; }, 6000);
+}
+
+function setAgentsTab(tab: "agents" | "mcp" | "apps") {
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#agents-tabs .tab")) {
+    const active = btn.dataset.tab === tab;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", String(active));
+  }
+  $("#agents-list").hidden = tab !== "agents";
+  $("#mcp-list").hidden = tab !== "mcp";
+  $("#apps-list").hidden = tab !== "apps";
+  if (tab === "mcp") void refreshMcpServers();
+  if (tab === "apps") void refreshApps();
+}
+
+async function refreshMcpServers() {
+  try {
+    mcpServers = await listMcpServers();
+  } catch (err) {
+    mcpServers = [];
+    agentsNotice(`Could not list MCP servers: ${err instanceof Error ? err.message : String(err)}`, true);
+  }
+  renderMcpServers();
+}
+
+async function refreshApps() {
+  try {
+    apps = await listApps();
+  } catch (err) {
+    apps = [];
+    agentsNotice(`Could not list Loom apps: ${err instanceof Error ? err.message : String(err)}`, true);
+  }
+  renderApps();
+}
+
+function agentActions(row: HTMLElement, agent: Agent) {
+  const actions = document.createElement("div");
+  actions.className = "agent-actions";
+  const mk = (label: string, fn: (b: HTMLButtonElement) => void, danger = false) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `btn ghost small${danger ? " danger" : ""}`;
+    b.textContent = label;
+    b.addEventListener("click", () => fn(b));
+    actions.append(b);
+    return b;
+  };
+  const running = agent.status === "running";
+  mk(running ? "Stop" : "Start", async (b) => {
+    b.disabled = true;
+    try {
+      running ? await stopAgent(agent.id) : await startAgent(agent.id);
+      agentsNotice(`${agent.name} ${running ? "stopped" : "started"}.`);
+      await refreshAgents();
+      renderAgents();
+    } catch (err) {
+      agentsNotice(`Could not ${running ? "stop" : "start"} ${agent.name}: ${err instanceof Error ? err.message : String(err)}`, true);
+      b.disabled = false;
+    }
+  });
+  mk("Reload", async (b) => {
+    b.disabled = true;
+    try {
+      await reloadAgent(agent.id);
+      agentsNotice(`${agent.name} reloaded.`);
+      await refreshAgents();
+      renderAgents();
+    } catch (err) {
+      agentsNotice(`Could not reload ${agent.name}: ${err instanceof Error ? err.message : String(err)}`, true);
+      b.disabled = false;
+    }
+  });
+  mk("Delete", async () => {
+    if (!window.confirm(`Delete agent ${agent.name} from the Loom server?`)) return;
+    try {
+      await deleteAgent(agent.id);
+      agents = agents.filter((a) => a.id !== agent.id);
+      renderAgents();
+      renderAgentBar();
+      agentsNotice(`${agent.name} deleted.`);
+    } catch (err) {
+      agentsNotice(`Could not delete ${agent.name}: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  }, true);
+  row.append(actions);
+}
+
 function renderAgents() {
   const list = $("#agents-list");
   list.innerHTML = "";
@@ -2786,7 +2911,396 @@ function renderAgents() {
     detail.className = "agent-detail";
     detail.textContent = agentDetail(a);
     row.append(head, detail);
+    agentActions(row, a);
     list.append(row);
+  }
+}
+
+function renderMcpServers() {
+  const list = $("#mcp-list");
+  list.innerHTML = "";
+  if (mcpServers.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "flat-row empty-row";
+    const text = document.createElement("p");
+    text.textContent = "No MCP servers configured. Add one to give Loom's agents more tools.";
+    empty.append(text);
+    list.append(empty);
+    return;
+  }
+  for (const s of mcpServers) {
+    const row = document.createElement("div");
+    row.className = "flat-row mcp-row";
+    const head = document.createElement("div");
+    head.className = "ev-head";
+    const dot = document.createElement("span");
+    dot.className = `agent-dot ${s.connected ? "running" : s.status === "error" ? "error" : "stopped"}`;
+    dot.title = s.status || (s.connected ? "connected" : "disconnected");
+    const name = document.createElement("strong");
+    name.textContent = s.name;
+    head.append(dot, name);
+    const detail = document.createElement("p");
+    detail.className = "agent-detail";
+    const parts = [s.transport || "transport?", s.status || (s.connected ? "connected" : "not connected")];
+    if (s.command) parts.push(s.command);
+    if (s.url) parts.push(s.url);
+    if (s.error) parts.push(`error: ${s.error}`);
+    detail.textContent = parts.join(" · ");
+    row.append(head, detail);
+    const actions = document.createElement("div");
+    actions.className = "agent-actions";
+    const toolsBtn = document.createElement("button");
+    toolsBtn.type = "button";
+    toolsBtn.className = "btn ghost small";
+    toolsBtn.textContent = "Tools";
+    toolsBtn.addEventListener("click", () => { void openMcpTools(s.name); });
+    const restartBtn = document.createElement("button");
+    restartBtn.type = "button";
+    restartBtn.className = "btn ghost small";
+    restartBtn.textContent = "Restart";
+    restartBtn.addEventListener("click", async () => {
+      try {
+        await restartMcpServer(s.name);
+        agentsNotice(`${s.name} restarted.`);
+        await refreshMcpServers();
+      } catch (err) {
+        agentsNotice(`Could not restart ${s.name}: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+    });
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn ghost small danger";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", async () => {
+      if (!window.confirm(`Delete MCP server ${s.name}?`)) return;
+      try {
+        await deleteMcpServer(s.name);
+        agentsNotice(`${s.name} deleted.`);
+        await refreshMcpServers();
+      } catch (err) {
+        agentsNotice(`Could not delete ${s.name}: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+    });
+    actions.append(toolsBtn, restartBtn, deleteBtn);
+    row.append(actions);
+    list.append(row);
+  }
+}
+
+function renderApps() {
+  const list = $("#apps-list");
+  list.innerHTML = "";
+  if (apps.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "flat-row empty-row";
+    const text = document.createElement("p");
+    text.textContent = "No Loom apps reported. The server serves them at /apps when they exist.";
+    empty.append(text);
+    list.append(empty);
+    return;
+  }
+  for (const raw of apps) {
+    const app = raw as { name?: string; description?: string; url?: string };
+    const row = document.createElement("div");
+    row.className = "flat-row mcp-row";
+    const head = document.createElement("div");
+    head.className = "ev-head";
+    const name = document.createElement("strong");
+    name.textContent = app.name ?? "(unnamed app)";
+    head.append(name);
+    const detail = document.createElement("p");
+    detail.className = "agent-detail";
+    detail.textContent = app.description ?? app.url ?? "";
+    row.append(head, detail);
+    const actions = document.createElement("div");
+    actions.className = "agent-actions";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "btn ghost small";
+    open.textContent = "Open";
+    open.addEventListener("click", () => {
+      const url = `http://localhost:5006/apps/${encodeURIComponent(app.name ?? "")}`;
+      window.open(url, "_blank");
+    });
+    actions.append(open);
+    row.append(actions);
+    list.append(row);
+  }
+}
+
+async function openMcpTools(serverName: string) {
+  const dialog = $("#knowledge-dialog") as HTMLDialogElement;
+  dialog.replaceChildren();
+  const h = document.createElement("h2");
+  h.textContent = `Tools — ${serverName}`;
+  dialog.append(h);
+  const body = document.createElement("div");
+  body.className = "mcp-tools";
+  body.append(Object.assign(document.createElement("p"), { textContent: "Loading tools…" }));
+  dialog.append(body);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "btn ghost";
+  close.textContent = "Close";
+  close.addEventListener("click", () => dialog.close());
+  dialog.append(close);
+  dialog.showModal();
+  try {
+    const tools = await listMcpServerTools(serverName);
+    body.replaceChildren();
+    if (tools.length === 0) {
+      body.append(Object.assign(document.createElement("p"), { textContent: "This server exposes no tools (or is not connected)." }));
+    }
+    for (const t of tools) {
+      const tool = t as { name?: string; description?: string };
+      const row = document.createElement("div");
+      row.className = "mcp-tool";
+      const name = document.createElement("strong");
+      name.textContent = tool.name ?? "(unnamed tool)";
+      const desc = document.createElement("p");
+      desc.textContent = tool.description ?? "";
+      row.append(name, desc);
+      body.append(row);
+    }
+  } catch (err) {
+    body.replaceChildren();
+    body.append(Object.assign(document.createElement("p"), {
+      textContent: `Could not list tools: ${err instanceof Error ? err.message : String(err)}`,
+    }));
+  }
+}
+
+function initAgentsView() {
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#agents-tabs .tab")) {
+    btn.addEventListener("click", () => setAgentsTab(btn.dataset.tab as "agents" | "mcp" | "apps"));
+  }
+  $("#agent-create-btn").addEventListener("click", () => { void openAgentCreateDialog(); });
+  $("#mcp-add-btn").addEventListener("click", () => {
+    const d = $("#mcp-dialog") as HTMLDialogElement;
+    ($("#mcp-dialog-error") as HTMLElement).hidden = true;
+    d.showModal();
+  });
+  $("#mcp-health-btn").addEventListener("click", async () => {
+    try {
+      mcpServers = await healthCheckMcpServers();
+      renderMcpServers();
+      agentsNotice("Health check complete.");
+    } catch (err) {
+      agentsNotice(`Health check failed: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  });
+  $("#mcp-cancel").addEventListener("click", () => ($("#mcp-dialog") as HTMLDialogElement).close());
+  $("#mcp-submit").addEventListener("click", () => { void submitMcpServer(); });
+  $("#mcp-test").addEventListener("click", () => { void testMcpConfig(); });
+  $("#agent-create-cancel").addEventListener("click", () => ($("#agent-create-dialog") as HTMLDialogElement).close());
+  $("#agent-create-submit").addEventListener("click", () => { void submitAgentCreate(); });
+  $("#agent-describe-btn").addEventListener("click", () => { void describeAgent(); });
+  $("#trace-close").addEventListener("click", () => ($("#trace-dialog") as HTMLDialogElement).close());
+}
+
+function readMcpForm(): { name: string; transport: string; command?: string; url?: string; args?: string[] } {
+  const name = ($("#mcp-name") as HTMLInputElement).value.trim();
+  const transport = ($("#mcp-transport") as HTMLSelectElement).value;
+  const command = ($("#mcp-command") as HTMLInputElement).value.trim();
+  const url = ($("#mcp-url") as HTMLInputElement).value.trim();
+  const args = ($("#mcp-args") as HTMLInputElement).value.trim().split(/\s+/).filter(Boolean);
+  return { name, transport, command: command || undefined, url: url || undefined, args: args.length ? args : undefined };
+}
+
+function showMcpDialogError(text: string) {
+  const el = $("#mcp-dialog-error") as HTMLElement;
+  el.textContent = text;
+  el.hidden = false;
+}
+
+async function testMcpConfig() {
+  const form = readMcpForm();
+  if (!form.name) return showMcpDialogError("The server needs a name.");
+  showMcpDialogError("");
+  try {
+    await testMcpServer(form.name, form.transport, form.command, form.args, form.url);
+    showMcpDialogError("Connection test passed — save it when ready.");
+  } catch (err) {
+    showMcpDialogError(`Test failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function submitMcpServer() {
+  const form = readMcpForm();
+  if (!form.name) return showMcpDialogError("The server needs a name.");
+  showMcpDialogError("");
+  try {
+    const server = await addMcpServer(form.name, form.transport, form.command, form.args, form.url, true);
+    ($("#mcp-dialog") as HTMLDialogElement).close();
+    agentsNotice(`MCP server ${server.name} added.`);
+    await refreshMcpServers();
+  } catch (err) {
+    showMcpDialogError(`Could not add the server: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function openAgentCreateDialog() {
+  const dialog = $("#agent-create-dialog") as HTMLDialogElement;
+  ($("#agent-create-error") as HTMLElement).hidden = true;
+  ($("#agent-describe") as HTMLTextAreaElement).value = "";
+  ($("#agent-config") as HTMLTextAreaElement).value = "";
+  const preset = $("#agent-preset") as HTMLSelectElement;
+  preset.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "No preset";
+  preset.append(none);
+  dialog.showModal();
+  try {
+    agentPresets = await listAgentPresets();
+  } catch {
+    agentPresets = [];
+  }
+  for (const raw of agentPresets) {
+    const p = raw as { name?: string; description?: string };
+    const opt = document.createElement("option");
+    opt.value = p.name ?? "";
+    opt.textContent = p.name ?? "(unnamed preset)";
+    preset.append(opt);
+  }
+  preset.onchange = () => {
+    if (!preset.value) return;
+    const picked = agentPresets.find((r) => (r as { name?: string }).name === preset.value);
+    ($("#agent-config") as HTMLTextAreaElement).value = picked ? JSON.stringify(picked, null, 2) : "";
+  };
+}
+
+async function describeAgent() {
+  const describe = ($("#agent-describe") as HTMLTextAreaElement).value.trim();
+  if (!describe) return;
+  const err = $("#agent-create-error") as HTMLElement;
+  err.textContent = "The Weaver is building the config…";
+  err.hidden = false;
+  try {
+    const prompt = [
+      "You are the Weaver meta-agent. Produce a Loom agent configuration as a single JSON object",
+      "for this description. Include at minimum: name, description, model, and tools.",
+      "Answer with the JSON object only, no prose.",
+      "",
+      `Description: ${describe}`,
+    ].join("\n");
+    const reply = await askLoom(prompt);
+    const match = reply.text.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("The Weaver's reply had no JSON config to prefill.");
+    ($("#agent-config") as HTMLTextAreaElement).value = JSON.stringify(JSON.parse(match[0]), null, 2);
+    err.textContent = "Config proposed — review it, then create the agent.";
+  } catch (e) {
+    err.textContent = `Could not build a config: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+async function submitAgentCreate() {
+  const raw = ($("#agent-config") as HTMLTextAreaElement).value.trim();
+  if (!raw) return;
+  const err = $("#agent-create-error") as HTMLElement;
+  let config: Record<string, unknown>;
+  try {
+    config = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    err.textContent = "The config is not valid JSON.";
+    err.hidden = false;
+    return;
+  }
+  err.hidden = true;
+  try {
+    const created = await createAgent(config);
+    const name = (created as { name?: string }).name ?? (config.name as string | undefined) ?? "agent";
+    ($("#agent-create-dialog") as HTMLDialogElement).close();
+    agentsNotice(`Agent ${name} created.`);
+    await refreshAgents();
+    renderAgents();
+    renderAgentBar();
+  } catch (e) {
+    err.textContent = `Could not create the agent: ${e instanceof Error ? e.message : String(e)}`;
+    err.hidden = false;
+  }
+}
+
+async function openTraceDialog(traceId: string) {
+  const dialog = $("#trace-dialog") as HTMLDialogElement;
+  const body = $("#trace-body") as HTMLElement;
+  body.replaceChildren();
+  body.append(Object.assign(document.createElement("p"), { textContent: "Loading trace…" }));
+  dialog.showModal();
+  try {
+    const trace = await getTrace(traceId);
+    body.replaceChildren();
+    const dl = document.createElement("dl");
+    dl.className = "trace-summary";
+    const rows: [string, string][] = [
+      ["Trace", trace.id],
+      ["Session", trace.session_id || "(none)"],
+      ["Total duration", `${trace.total_duration_ms} ms`],
+      ["Spans", String(trace.spans?.length ?? 0)],
+    ];
+    for (const [label, value] of rows) {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = value;
+      dl.append(dt, dd);
+    }
+    body.append(dl);
+    for (const span of trace.spans ?? []) {
+      const row = document.createElement("div");
+      row.className = "trace-span";
+      const name = document.createElement("strong");
+      name.textContent = span.name;
+      const meta = document.createElement("span");
+      meta.textContent = `${span.status} · ${Math.round(span.duration_us / 1000)} ms`;
+      row.append(name, meta);
+      body.append(row);
+    }
+  } catch (err) {
+    body.replaceChildren();
+    body.append(Object.assign(document.createElement("p"), {
+      textContent: `Could not load the trace: ${err instanceof Error ? err.message : String(err)}`,
+    }));
+  }
+}
+
+function showSessionNote(text: string, isError = false) {
+  const note = $("#session-note") as HTMLElement;
+  note.textContent = text;
+  note.classList.toggle("error", isError);
+  note.hidden = false;
+  window.setTimeout(() => { note.hidden = true; }, 5000);
+}
+
+async function deleteSelectedSession() {
+  const id = selectedSessionId;
+  if (!id) return showSessionNote("No session selected.");
+  if (!window.confirm("Delete this session and its history from the Loom server? This cannot be undone.")) return;
+  try {
+    await deleteSession(id);
+    sessions = sessions.filter((s) => s.id !== id);
+    if (selectedSessionId === id) {
+      selectedSessionId = null;
+      localStorage.removeItem(SESSION_KEY);
+      sessionDetail = null;
+      renderSessionDetail();
+    }
+    renderSessionBar();
+    showSessionNote("Session deleted.");
+  } catch (err) {
+    showSessionNote(`Could not delete the session: ${err instanceof Error ? err.message : String(err)}`, true);
+  }
+}
+
+async function resumeSelectedSession() {
+  const id = selectedSessionId;
+  if (!id) return showSessionNote("No session selected.");
+  try {
+    await resumeSession(id);
+    showSessionNote("Resume requested — check the session state.");
+    await refreshSessions();
+  } catch (err) {
+    showSessionNote(`Could not resume the session: ${err instanceof Error ? err.message : String(err)}`, true);
   }
 }
 
@@ -3310,6 +3824,15 @@ function addChatMessage(
     msg.append(card);
   }
 
+  if (reply?.trace_id) {
+    const traceBtn = document.createElement("button");
+    traceBtn.type = "button";
+    traceBtn.className = "chat-trace";
+    traceBtn.textContent = "View trace ›";
+    traceBtn.addEventListener("click", () => { void openTraceDialog(reply.trace_id as string); });
+    msg.append(traceBtn);
+  }
+
   if (who === "loom" && live) {
     const src = document.createElement("span");
     src.className = "chat-source";
@@ -3340,26 +3863,271 @@ function addChatError(text: string) {
   log.scrollTop = log.scrollHeight;
 }
 
-async function sendChat(text: string) {
-  const clean = text.trim();
-  if (!clean) return;
-  // Capture the work at send time: the user may switch work while the
-  // reply is in flight, and the reply (and the session link) belongs to
-  // the work it was sent from.
-  const workId = selectedWorkId;
-  const cacheKey = workId ?? UNASSIGNED_KEY;
-  addChatMessage("user", clean);
-  cacheChatMessage(cacheKey, "user", clean);
-  chatInFlight++;
-  setSphereState("processing");
+/** The in-flight state of one streamed weave, keyed by request id. */
+interface StreamReplyState {
+  workId: string | null;
+  cacheKey: string;
+  msg: HTMLElement;
+  bubble: HTMLElement;
+  text: string;
+  toolLines: Map<string, HTMLElement>;
+  clarifications: Set<string>;
+  sessionId: string | null;
+  finished: boolean;
+}
 
+const activeStreams = new Map<string, StreamReplyState>();
+
+function scrollChat() {
   const log = $("#chat-log");
-  const typing = document.createElement("div");
-  typing.className = "typing";
-  typing.textContent = "Loom is thinking…";
-  log.append(typing);
   log.scrollTop = log.scrollHeight;
+}
 
+function renderChatControls() {
+  const stop = $("#chat-stop") as HTMLButtonElement | null;
+  if (stop) stop.hidden = !(chatInFlight > 0 && activeStreamId !== null);
+}
+
+/** Adopt the most recently updated session when the server auto-created
+    one mid-stream (clarifications must be answered against a session). */
+function newestSessionId(): string | null {
+  const sorted = [...sessions].sort((a, b) => b.updated_at - a.updated_at);
+  return sorted[0]?.id ?? null;
+}
+
+/** A streamed weave's progress: partial tokens, tool lifecycle, and
+    human-in-the-loop questions — all rendered incrementally. */
+function handleStreamEvent(p: LoomStreamEvent) {
+  const st = activeStreams.get(p.requestId);
+  if (!st || st.finished) return;
+
+  if (p.kind === "progress" && p.event) {
+    const e = p.event;
+    // Any progress proves the server answered — the same "verified" bar
+    // the unary path sets on a completed reply.
+    loomVerified = true;
+    setLoomReachable(true);
+    if (typeof e.partial_content === "string" && e.partial_content !== st.text) {
+      st.text = e.partial_content;
+      st.bubble.textContent = st.text;
+      scrollChat();
+    }
+    if (e.is_tool_started || e.is_tool_completed) {
+      renderToolLine(st, e);
+    }
+    if (e.hitl_request?.request_id && !st.clarifications.has(e.hitl_request.request_id)) {
+      st.clarifications.add(e.hitl_request.request_id);
+      renderHitlCard(st, e.hitl_request as {
+        request_id: string;
+        question?: string;
+        kind?: string;
+        summary?: string;
+      });
+    }
+    return;
+  }
+
+  finishStream(st, p.requestId, p.kind as "done" | "error" | "cancelled", p.error ?? undefined);
+}
+
+function renderToolLine(st: StreamReplyState, e: LoomStreamEvent["event"] & object) {
+  const id = (e as { tool_call_id?: string }).tool_call_id;
+  let line = id ? st.toolLines.get(id) : undefined;
+  if (!line) {
+    line = document.createElement("div");
+    line.className = "chat-tool";
+    st.msg.append(line);
+    if (id) st.toolLines.set(id, line);
+  }
+  const name = (e as { tool_name?: string }).tool_name || "tool";
+  const completed = Boolean((e as { is_tool_completed?: boolean }).is_tool_completed);
+  if (completed) {
+    const ok = (e as { tool_success?: boolean }).tool_success !== false;
+    line.textContent = `⚙ ${name} — ${ok ? "done" : "failed"}`;
+    line.classList.toggle("tool-failed", !ok);
+    const err = (e as { tool_error?: string }).tool_error;
+    if (!ok && err) line.title = err;
+  } else {
+    line.textContent = `⚙ ${name} …`;
+    line.classList.remove("tool-failed");
+    line.title = "";
+  }
+  scrollChat();
+}
+
+/** A mid-turn human-in-the-loop card: questions get an answer field;
+    approvals (held tool calls) get Approve/Deny. Both deliver through the
+    clarification-answer path, whose request_id is the hold's handle. */
+function renderHitlCard(
+  st: StreamReplyState,
+  hitl: { request_id: string; question?: string; kind?: string; summary?: string },
+) {
+  const card = document.createElement("div");
+  card.className = "chat-clarification";
+  const isApproval = hitl.kind === "approval";
+  const q = document.createElement("p");
+  q.textContent = hitl.question?.trim() || hitl.summary?.trim() ||
+    (isApproval ? "Loom's agent is asking to run a tool." : "The agent has a question for you.");
+  card.append(q);
+  const row = document.createElement("div");
+  row.className = "chat-clarification-row";
+  const deliver = async (answer: string, buttons: HTMLButtonElement[]) => {
+    for (const b of buttons) b.disabled = true;
+    try {
+      let sid = st.sessionId ?? activeStreamSessionId;
+      if (!sid) {
+        await refreshSessions();
+        sid = newestSessionId();
+        if (sid) st.sessionId = sid;
+      }
+      if (!sid) throw new Error("The conversation session is not known yet.");
+      await answerClarification(sid, hitl.request_id, answer);
+      const done = document.createElement("p");
+      done.className = "chat-clarification-done";
+      done.textContent = `Answered — the agent continues.`;
+      card.append(done);
+      row.hidden = true;
+    } catch (err) {
+      const fail = document.createElement("p");
+      fail.className = "chat-clarification-done error";
+      fail.textContent = `Could not deliver the answer: ${err instanceof Error ? err.message : String(err)}`;
+      card.append(fail);
+      for (const b of buttons) b.disabled = false;
+    }
+  };
+  if (isApproval) {
+    const approve = document.createElement("button");
+    approve.type = "button";
+    approve.className = "btn";
+    approve.textContent = "Approve";
+    const deny = document.createElement("button");
+    deny.type = "button";
+    deny.className = "btn ghost";
+    deny.textContent = "Deny";
+    row.append(approve, deny);
+    card.append(row);
+    approve.addEventListener("click", () => { void deliver("approve", [approve, deny]); });
+    deny.addEventListener("click", () => { void deliver("deny", [approve, deny]); });
+  } else {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Your answer…";
+    input.setAttribute("aria-label", "Answer the agent's question");
+    const answer = document.createElement("button");
+    answer.type = "button";
+    answer.className = "btn";
+    answer.textContent = "Answer";
+    row.append(input, answer);
+    card.append(row);
+    answer.addEventListener("click", () => {
+      const value = input.value.trim();
+      if (!value || answer.disabled) return;
+      input.disabled = true;
+      void deliver(value, [answer]);
+    });
+  }
+  st.msg.append(card);
+  scrollChat();
+}
+
+function finishStream(
+  st: StreamReplyState,
+  requestId: string,
+  kind: "done" | "error" | "cancelled",
+  error?: string,
+) {
+  st.finished = true;
+  activeStreams.delete(requestId);
+  if (activeStreamId === requestId) activeStreamId = null;
+  if (activeStreams.size === 0) chatInFlight--;
+  renderChatControls();
+  renderStatusPill();
+
+  if (kind === "cancelled") {
+    const note = document.createElement("p");
+    note.className = "chat-stopped";
+    note.textContent = st.text ? "Stopped. The reply above is partial." : "Stopped before Loom answered.";
+    st.msg.append(note);
+    setSphereState("idle");
+    return;
+  }
+
+  if (kind === "error") {
+    if (error && isLoomConnectionError(new Error(error))) {
+      setLoomReachable(false);
+      // Streaming forces a real connection model: re-check once, shortly.
+      window.setTimeout(() => {
+        void getLoomStatus().then((s) => setLoomReachable(s.online));
+      }, 3000);
+    }
+    const note = document.createElement("p");
+    note.className = "chat-stopped error";
+    note.textContent = `Loom stopped answering: ${error ?? "unknown error"}.`;
+    st.msg.append(note);
+    if (!st.text) addChatError(`Could not reach Loom: ${error ?? "unknown error"}. Start the Loom service and send your message again.`);
+    setSphereState("error");
+    // A failed send returns the text to the composer so it survives a close.
+    if (!st.text) {
+      ($("#chat-text") as HTMLInputElement).value = st.text || "";
+    }
+    return;
+  }
+
+  // kind === "done": adopt the session, finalize the message, refresh.
+  void (async () => {
+    const finalText = st.text.trim();
+    if (!finalText) {
+      st.bubble.textContent = "Loom finished without streaming text.";
+    }
+    loomVerified = true;
+    setLoomReachable(true);
+    cacheChatMessage(st.cacheKey, "loom", st.bubble.textContent || "");
+    if (st.sessionId && !sessions.some((s) => s.id === st.sessionId)) {
+      await refreshSessions();
+    }
+    const sessionId = st.sessionId ?? (selectedSessionId ?? newestSessionId());
+    if (sessionId && !st.sessionId && !selectedSessionId) {
+      st.sessionId = sessionId;
+    }
+    if (st.sessionId && st.workId) {
+      try {
+        const linked = await setWorkSession(st.workId, st.sessionId);
+        workItems = workItems.map((w) => (w.id === linked.id ? linked : w));
+        renderWorkList();
+        if (selectedWorkId === st.workId) {
+          selectedSessionId = st.sessionId;
+          renderSessionBar();
+          void loadWorkArtifacts(st.workId);
+        }
+      } catch {
+        /* link is best-effort */
+      }
+    } else if (st.sessionId && selectedWorkId === st.workId && !selectedSessionId) {
+      selectedSessionId = st.sessionId;
+      renderSessionBar();
+    }
+    // The answering agent's counters just changed.
+    try {
+      await refreshAgents();
+    } catch {
+      /* agent refresh is best-effort */
+    }
+    setSphereState("completed");
+    window.setTimeout(() => {
+      if (sphereState === "completed") setSphereState("idle");
+    }, 3000);
+    renderChatControls();
+  })();
+}
+
+/** The unary path, kept as the fallback when the stream cannot start (a
+    server that doesn't offer streaming, or a start failure). */
+async function sendChatUnary(
+  clean: string,
+  workId: string | null,
+  cacheKey: string,
+  typing: HTMLElement,
+) {
   try {
     const reply = await askLoom(
       clean,
@@ -3420,8 +4188,72 @@ async function sendChat(text: string) {
     setSphereState("error");
   } finally {
     chatInFlight--;
+    renderChatControls();
     renderStatusPill();
   }
+}
+
+async function sendChat(text: string) {
+  const clean = text.trim();
+  if (!clean) return;
+  // Capture the work at send time: the user may switch work while the
+  // reply is in flight, and the reply (and the session link) belongs to
+  // the work it was sent from.
+  const workId = selectedWorkId;
+  const cacheKey = workId ?? UNASSIGNED_KEY;
+  addChatMessage("user", clean);
+  cacheChatMessage(cacheKey, "user", clean);
+  chatInFlight++;
+  setSphereState("processing");
+
+  const log = $("#chat-log");
+  const typing = document.createElement("div");
+  typing.className = "typing";
+  typing.textContent = "Loom is thinking…";
+  log.append(typing);
+  log.scrollTop = log.scrollHeight;
+
+  // Streaming first: incremental tokens, tool calls in flight, a Stop
+  // button, and inline clarification answers. The unary path is the
+  // fallback for a server that doesn't stream.
+  const requestId = `r-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await askLoomStream(
+      requestId,
+      clean,
+      selectedSessionId ?? undefined,
+      selectedAgentId ?? undefined,
+    );
+  } catch {
+    chatInFlight--;
+    await sendChatUnary(clean, workId, cacheKey, typing);
+    return;
+  }
+
+  typing.remove();
+  const msg = document.createElement("div");
+  msg.className = "chat-msg loom";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = "";
+  msg.append(bubble);
+  log.append(msg);
+  const state: StreamReplyState = {
+    workId,
+    cacheKey,
+    msg,
+    bubble,
+    text: "",
+    toolLines: new Map(),
+    clarifications: new Set(),
+    sessionId: selectedSessionId,
+    finished: false,
+  };
+  activeStreams.set(requestId, state);
+  activeStreamId = requestId;
+  activeStreamSessionId = selectedSessionId;
+  renderChatControls();
+  log.scrollTop = log.scrollHeight;
 }
 
 // ---------------------------------------------------------------------------
@@ -5378,6 +6210,24 @@ async function init() {
     localStorage.removeItem(CHAT_DRAFT_KEY);
     await sendChat(text);
   });
+
+  // Streaming weave events arrive over the backend's SSE bridge.
+  if (isTauri) {
+    await listen<LoomStreamEvent>("loom-stream", (event) => {
+      handleStreamEvent(event.payload);
+    });
+  }
+  const stopBtn = $("#chat-stop") as HTMLButtonElement | null;
+  if (stopBtn) stopBtn.addEventListener("click", () => {
+    if (activeStreamId) void cancelLoomStream(activeStreamId);
+  });
+  // The header pill is also the re-check control: click to probe again.
+  $("#loom-status").addEventListener("click", () => {
+    void getLoomStatus().then((s) => setLoomReachable(s.online));
+  });
+  $("#session-delete").addEventListener("click", () => { void deleteSelectedSession(); });
+  $("#session-resume").addEventListener("click", () => { void resumeSelectedSession(); });
+  initAgentsView();
 
 }
 

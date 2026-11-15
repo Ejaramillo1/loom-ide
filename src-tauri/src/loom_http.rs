@@ -454,30 +454,3 @@ pub async fn session_resolve_gap(session_id: String) -> Result<Value, String> {
     )
     .await
 }
-
-// ---------------------------------------------------------------------------
-// Tool permission (human-in-the-loop approval surface)
-// ---------------------------------------------------------------------------
-
-#[tauri::command]
-pub async fn tool_permission_request(
-    session_id: String,
-    tool_name: String,
-    args_json: Option<String>,
-    approved: bool,
-) -> Result<Value, String> {
-    if session_id.trim().is_empty() || tool_name.trim().is_empty() {
-        return Err("A session and tool name are required.".into());
-    }
-    let mut body = serde_json::json!({
-        "sessionId": session_id.trim(),
-        "toolName": tool_name.trim(),
-        "approved": approved,
-    });
-    if let Some(a) = args_json {
-        if !a.trim().is_empty() {
-            body["argsJson"] = Value::String(a);
-        }
-    }
-    loom_send("POST", "/v1/tools:request-permission".into(), Some(body)).await
-}

@@ -46,6 +46,12 @@ export function startSpatialPlayer() {
   loader.onload = async () => {
     try {
       if (typeof window.createUnityInstance !== "function") throw new Error("Unity player unavailable. Build the WebGL player and try again.");
+      // The HiDPI trap: a 400 px CSS column can be an 800 px canvas at
+      // devicePixelRatio 2, and renderScale 1.0 then renders twice the
+      // pixels the eye sees (bloom and SSAO pay for all of them). Clamp
+      // the backing store so native resolution stays cheap on high-DPI
+      // displays — Unity's own DPR handling otherwise follows the display.
+      const clampedDPR = Math.min(window.devicePixelRatio || 1, 1.5);
       unityInstance = await window.createUnityInstance(canvas, {
         dataUrl: "/spatial/Build/spatial.data",
         frameworkUrl: "/spatial/Build/spatial.framework.js",
@@ -54,6 +60,8 @@ export function startSpatialPlayer() {
         companyName: "Loom",
         productName: "Resolute Workbench",
         productVersion: "0.1.0",
+        // Canvas backing-store cap: never more than 1.5× CSS pixels.
+        devicePixelRatio: clampedDPR,
         showBanner: (message, type) => {
           if (type === "error") fail(message);
           else console.warn(message);

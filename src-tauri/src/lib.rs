@@ -2055,7 +2055,6 @@ pub fn run() {
             loom_http::session_delete,
             loom_http::session_resume,
             loom_http::session_resolve_gap,
-            loom_http::tool_permission_request,
             list_sessions,
             create_session,
             list_agents,

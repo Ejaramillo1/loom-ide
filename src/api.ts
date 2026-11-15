@@ -126,6 +126,58 @@ export interface ChatReply {
   // Provenance of the reply's content: what kind of claim it rests on.
   // Defaults to "unknown" when the server does not report one.
   evidenceKind?: EvidenceKind;
+  // The trace id the server reports when tracing is enabled — the
+  // handle for the observability surface (GetTrace).
+  trace_id?: string | null;
+}
+
+/// One WeaveProgress event from POST /v1/weave:stream, re-emitted by the
+/// backend as a Tauri event. Field names follow the Loom proto (snake_case).
+export interface WeaveProgressEvent {
+  stage?: string | number;
+  progress?: number;
+  message?: string;
+  tool_name?: string;
+  partial_content?: string;
+  is_token_stream?: boolean;
+  token_count?: number;
+  is_tool_started?: boolean;
+  is_tool_completed?: boolean;
+  tool_input?: unknown;
+  tool_result?: unknown;
+  tool_error?: string;
+  tool_success?: boolean;
+  tool_call_id?: string;
+  hitl_request?: {
+    request_id?: string;
+    question?: string;
+  } | null;
+}
+
+export interface LoomStreamEvent {
+  requestId: string;
+  kind: "progress" | "done" | "error" | "cancelled";
+  event?: WeaveProgressEvent;
+  error?: string | null;
+}
+
+export interface McpServer {
+  name: string;
+  enabled: boolean;
+  connected: boolean;
+  transport: string;
+  command: string;
+  args: string[];
+  env: Record<string, unknown>;
+  status: string;
+  error: string;
+  url: string;
+}
+
+export interface VaultSignature {
+  notes: number;
+  pending: number;
+  changed_at_ms: number;
 }
 
 export interface Session {
@@ -1102,3 +1154,89 @@ export const restoreKnowledge = (id: string, original: string, revision: string)
   vaultInvoke<void>("knowledge_restore", { id, original, revision });
 export const exportKnowledgeCanvas = () => vaultInvoke<string>("knowledge_export_canvas");
 export const syncKnowledge = () => vaultInvoke<number>("knowledge_sync_from_loom");
+export const knowledgeSignature = () => vaultInvoke<VaultSignature>("knowledge_signature");
+export const saveCanvasLayout = (positions: { id: string; x: number; y: number }[]) =>
+  vaultInvoke<void>("knowledge_canvas_layout_save", { positions });
+export const loadCanvasLayout = () =>
+  vaultInvoke<{ id: string; x: number; y: number }[]>("knowledge_canvas_layout_load");
+
+// ---- Streaming chat (POST /v1/weave:stream over the backend's SSE bridge) ----
+
+export async function askLoomStream(
+  requestId: string,
+  message: string,
+  sessionId?: string,
+  agentId?: string,
+): Promise<void> {
+  return invokeCmd<void>("ask_loom_stream", { requestId, message, sessionId, agentId });
+}
+
+export async function cancelLoomStream(requestId: string): Promise<void> {
+  return invokeCmd<void>("cancel_loom_stream", { requestId });
+}
+
+export async function answerClarification(
+  sessionId: string,
+  questionId: string,
+  answer: string,
+): Promise<string> {
+  return invokeCmd<string>("answer_clarification", { sessionId, questionId, answer });
+}
+
+// ---- MCP server management ----
+
+export const listMcpServers = () => invokeCmd<McpServer[]>("mcp_servers_list");
+export const getMcpServer = (serverName: string) =>
+  invokeCmd<McpServer>("mcp_server_get", { serverName });
+export const addMcpServer = (
+  name: string, transport: string,
+  command?: string, args?: string[], url?: string, enabled?: boolean,
+) => invokeCmd<McpServer>("mcp_server_add", { name, transport, command, args, url, enabled });
+export const updateMcpServer = (
+  serverName: string,
+  transport?: string, command?: string, args?: string[], url?: string, enabled?: boolean,
+) => invokeCmd<McpServer>("mcp_server_update", { serverName, transport, command, args, url, enabled });
+export const deleteMcpServer = (serverName: string) =>
+  invokeCmd<string>("mcp_server_delete", { serverName });
+export const restartMcpServer = (serverName: string) =>
+  invokeCmd<McpServer>("mcp_server_restart", { serverName });
+export const healthCheckMcpServers = () =>
+  invokeCmd<McpServer[]>("mcp_servers_health_check");
+export const testMcpServer = (
+  name: string, transport: string,
+  command?: string, args?: string[], url?: string,
+) => invokeCmd<McpServer>("mcp_server_test", { name, transport, command, args, url });
+export const listMcpServerTools = (serverName: string) =>
+  invokeCmd<unknown[]>("mcp_server_tools", { serverName });
+
+// ---- Agent lifecycle ----
+
+export const createAgent = (config: Record<string, unknown>) =>
+  invokeCmd<unknown>("agent_create", { config });
+export const startAgent = (agentId: string) => invokeCmd<unknown>("agent_start", { agentId });
+export const stopAgent = (agentId: string) => invokeCmd<unknown>("agent_stop", { agentId });
+export const reloadAgent = (agentId: string) => invokeCmd<unknown>("agent_reload", { agentId });
+export const deleteAgent = (agentId: string) => invokeCmd<unknown>("agent_delete", { agentId });
+export const listAgentPresets = () => invokeCmd<unknown[]>("agent_presets_list");
+export const listWorkflowTemplates = () => invokeCmd<unknown[]>("workflow_templates_list");
+
+// ---- Patterns ----
+
+export const listPatterns = () => invokeCmd<unknown[]>("patterns_list");
+export const getPattern = (name: string) => invokeCmd<unknown>("pattern_get", { name });
+export const createPattern = (body: Record<string, unknown>) =>
+  invokeCmd<unknown>("pattern_create", { body });
+export const loadPatterns = (source: string) => invokeCmd<unknown>("patterns_load", { source });
+
+// ---- Embedded MCP apps ----
+
+export const listApps = () => invokeCmd<unknown[]>("apps_list");
+
+// ---- Session completeness ----
+
+export const deleteSession = (sessionId: string) =>
+  invokeCmd<string>("session_delete", { sessionId });
+export const resumeSession = (sessionId: string) =>
+  invokeCmd<unknown>("session_resume", { sessionId });
+export const resolveSessionGap = (sessionId: string) =>
+  invokeCmd<unknown>("session_resolve_gap", { sessionId });
