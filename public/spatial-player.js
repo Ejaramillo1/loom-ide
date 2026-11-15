@@ -76,7 +76,7 @@ export function startSpatialPlayer() {
         companyName: "Loom",
         productName: "Resolute Workbench",
         productVersion: "0.1.0",
-        // Canvas backing-store cap: never more than 1.5× CSS pixels.
+        // Canvas backing-store cap: never more than 2× CSS pixels.
         devicePixelRatio: clampedDPR,
         showBanner: (message, type) => {
           if (type === "error") fail(message);

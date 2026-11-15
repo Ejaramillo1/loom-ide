@@ -576,7 +576,7 @@ namespace Loom.MemoryPalace
             // PBR signatures per surface (§5.2): paper matte, metal bright,
             // wood in between — so each reads under the same light instead
             // of six grey primitives. Base + normal maps are generated
-            // tileable at 256 px (no imported assets; values documented in
+            // tileable at 512 px (no imported assets; values documented in
             // docs/BENCH_MATERIALS.md).
             var paper = Material("Ivory paper", Rgb(229, 218, 195), 0.25f, 0f);
             paper.SetTexture("_BaseMap", PaperTexture(512));
@@ -918,7 +918,7 @@ namespace Loom.MemoryPalace
         }
 
         // ------------------------------------------------------------------
-        // Generated tileable PBR maps (§5.2, no imported assets): 256 px
+        // Generated tileable PBR maps (§5.2, no imported assets): 512 px
         // base + normal pairs for wood, paper and brushed metal. Multi-sine
         // fields tile by construction; normals come from the analytic height
         // gradient so they match the colour maps exactly.
