@@ -27,13 +27,13 @@ foreach (var anchor in anchors)
         if (!filter.GetComponent<Renderer>().sharedMaterial.shader.name.StartsWith("Universal Render Pipeline/")) throw new Exception("Unexpected render pipeline.");
     }
     parts += meshes.Length;
-    anchor.Animate(false, false, true);
+    anchor.Animate(false, false, true, 0f);
     var position = anchor.transform.position; var rotation = anchor.transform.rotation; var scale = anchor.transform.localScale;
-    anchor.Animate(false, false, true);
+    anchor.Animate(false, false, true, 0f);
     if (position != anchor.transform.position || rotation != anchor.transform.rotation || scale != anchor.transform.localScale) throw new Exception("Reduced motion drift.");
-    anchor.Animate(true, true, true);
+    anchor.Animate(true, true, true, 0f);
     if (anchor.transform.localScale.x <= scale.x) throw new Exception("Portal selection feedback missing.");
-    anchor.Animate(false, false, true);
+    anchor.Animate(false, false, true, 0f);
 }
 if (!MemoryPalaceController.PaletteMatchesDesignTokens()) throw new Exception("Palette mismatch.");
 foreach (var theme in new[] { "dark", "white" })

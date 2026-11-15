@@ -71,6 +71,7 @@ namespace Loom.MemoryPalace
         MemoryAnchor hovered;
         Vector2 look;
         float distance = 11f;
+        float orbitAngle;
         bool reduceMotion;
         string draft = "";
         string savedDraft = "";
@@ -245,10 +246,13 @@ namespace Loom.MemoryPalace
                 sphere.Rotate(0f, 1.2f * Time.deltaTime, 0f, Space.World);
                 var pulse = 1f + Mathf.Sin(Time.time * 0.35f) * 0.004f;
                 sphere.localScale = Vector3.one * 2.35f * pulse;
+                // The portals orbit the sphere so each can be brought to the
+                // front to select. Hovering or selecting pauses the ring.
+                if (hovered == null && selected == null) orbitAngle += 12f * Time.deltaTime;
             }
 
             foreach (var anchor in anchors)
-                anchor.Animate(anchor == hovered, anchor == selected, reduceMotion);
+                anchor.Animate(anchor == hovered, anchor == selected, reduceMotion, orbitAngle);
         }
 
         void BuildWorld()
@@ -339,7 +343,13 @@ namespace Loom.MemoryPalace
         {
             var root = new GameObject($"Memory · {portal.Name}");
             root.transform.position = position;
-            root.transform.rotation = Quaternion.Euler(0f, portal.Name == "Code" ? 15f : -12f, 0f);
+            var yaw = portal.Name == "Code" ? 15f : -12f;
+            var outward = new Vector3(position.x, 0f, position.z);
+            // Each portal faces outward from the sphere so it keeps its front
+            // toward the viewer as the ring rotates (a gentle yaw offset remains).
+            root.transform.rotation = outward.sqrMagnitude > 0.0001f
+                ? Quaternion.LookRotation(-outward.normalized) * Quaternion.Euler(0f, yaw, 0f)
+                : Quaternion.Euler(0f, yaw, 0f);
             var accent = BuildPhysicalPortal(portal.Name, root.transform, Material(portal.Name, portal.Color, 0.42f, 0.015f));
 
             var label = new GameObject("Label", typeof(TextMesh)).GetComponent<TextMesh>();
@@ -784,6 +794,7 @@ namespace Loom.MemoryPalace
     {
         Vector3 basePosition;
         Vector3 baseScale;
+        Quaternion baseRotation;
         Color color;
         float phase;
         Transform label;
@@ -804,14 +815,17 @@ namespace Loom.MemoryPalace
             accent = accentRenderer;
             basePosition = transform.position;
             baseScale = transform.localScale;
+            baseRotation = transform.rotation;
             phase = Mathf.Abs(key.GetHashCode() % 1000) * 0.01f;
         }
 
-        public void Animate(bool hovered, bool selected, bool reduceMotion)
+        public void Animate(bool hovered, bool selected, bool reduceMotion, float orbitAngle)
         {
             var lift = hovered || selected ? 0.12f : 0f;
             if (!reduceMotion) lift += Mathf.Sin(Time.time * 0.8f + phase) * 0.025f;
-            transform.position = Vector3.Lerp(transform.position, basePosition + Vector3.up * lift, reduceMotion ? 1f : Time.deltaTime * 5f);
+            var orbit = Quaternion.Euler(0f, orbitAngle, 0f);
+            transform.position = Vector3.Lerp(transform.position, orbit * basePosition + Vector3.up * lift, reduceMotion ? 1f : Time.deltaTime * 5f);
+            transform.rotation = Quaternion.Slerp(transform.rotation, orbit * baseRotation, reduceMotion ? 1f : Time.deltaTime * 6f);
             transform.localScale = Vector3.Lerp(transform.localScale, baseScale * (selected ? 1.06f : hovered ? 1.03f : 1f), reduceMotion ? 1f : Time.deltaTime * 6f);
             if (label && Camera.main)
             {
@@ -819,7 +833,6 @@ namespace Loom.MemoryPalace
                 label.rotation = Quaternion.LookRotation(label.position - Camera.main.transform.position);
             }
             accent.sharedMaterial.SetColor("_EmissionColor", color * (selected ? 0.10f : hovered ? 0.055f : 0.015f));
-            // Tools keep their useful orientation; the shared lift still signals hover/selection.
         }
     }
 }
