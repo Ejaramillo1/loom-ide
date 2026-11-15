@@ -221,6 +221,42 @@ fn set_work_status(id: String, status: String, state: State<AppState>) -> Result
         .set_status(&id, &status)
 }
 
+/// The local autonomy admission rule (Rule 3), independent of Tauri
+/// plumbing so the boundary is directly testable. A work item's level can
+/// be tightened freely; raising it above its intent's ceiling, or raising
+/// without a justification, is rejected. This governs LOCAL work metadata
+/// only — Loom's runtime reads no autonomy level, and this gate is not,
+/// and must not be presented as, server-side tool authorization.
+fn autonomy_admission(
+    from: &str,
+    requested: &str,
+    intent_autonomy: Option<&str>,
+    justification: Option<&str>,
+) -> Result<(), String> {
+    let requested_rank =
+        autonomy_rank(requested).ok_or_else(|| format!("Unknown autonomy level: {requested}"))?;
+    let current_rank = autonomy_rank(from).unwrap_or(0);
+    if let Some(intent) = intent_autonomy {
+        let allowed = autonomy_rank(intent).unwrap_or(2);
+        if requested_rank > allowed {
+            return Err(format!(
+                "Cannot raise this work item to \"{requested}\": its intent allows at most \"{intent}\". Loosen the intent's autonomy first, or pick a lower level for this work item."
+            ));
+        }
+    }
+    // Moving down (tightening) is always instant; moving up requires
+    // justification — the system never grants itself more freedom.
+    if requested_rank > current_rank {
+        let just = justification.unwrap_or("").trim();
+        if just.is_empty() {
+            return Err(format!(
+                "Raising autonomy from \"{from}\" to \"{requested}\" requires a justification — why is more freedom needed?"
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn set_work_autonomy(
     id: String,
@@ -228,8 +264,6 @@ fn set_work_autonomy(
     justification: Option<String>,
     state: State<AppState>,
 ) -> Result<WorkItem, String> {
-    let requested =
-        autonomy_rank(&autonomy).ok_or_else(|| format!("Unknown autonomy level: {autonomy}"))?;
     // Lock order is ALWAYS intents first, then work (never the reverse).
     let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
     let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
@@ -241,28 +275,20 @@ fn set_work_autonomy(
         .into_iter()
         .find(|w| w.id == id)
         .ok_or_else(|| format!("Unknown work item: {id}"))?;
+    let intent_autonomy = item
+        .intent_id
+        .as_deref()
+        .and_then(|iid| intents.get(iid))
+        .map(|i| i.autonomy.clone());
+    autonomy_admission(
+        &item.autonomy,
+        &autonomy,
+        intent_autonomy.as_deref(),
+        justification.as_deref(),
+    )?;
     let current_rank = autonomy_rank(&item.autonomy).unwrap_or(0);
-    if let Some(intent_id) = &item.intent_id {
-        if let Some(intent) = intents.get(intent_id) {
-            let allowed = autonomy_rank(&intent.autonomy).unwrap_or(2);
-            if requested > allowed {
-                return Err(format!(
-                    "Cannot raise this work item to \"{autonomy}\": its intent allows at most \"{}\". Loosen the intent's autonomy first, or pick a lower level for this work item.",
-                    intent.autonomy
-                ));
-            }
-        }
-    }
-    // Moving down (tightening) is always instant; moving up requires
-    // justification — the system never grants itself more freedom.
-    if requested > current_rank {
-        let just = justification.as_deref().unwrap_or("").trim();
-        if just.is_empty() {
-            return Err(format!(
-                "Raising autonomy from \"{}\" to \"{}\" requires a justification — why is more freedom needed?",
-                item.autonomy, autonomy
-            ));
-        }
+    let requested_rank = autonomy_rank(&autonomy).unwrap_or(0);
+    if requested_rank > current_rank {
         work.autonomy_history_push(
             &id,
             &autonomy,

@@ -4004,3 +4004,5 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
    evidence renderer; the standalone Evidence view was removed). */
 .knowledge-evidence-host { margin-top: 8px; }
 .knowledge-evidence-host .flat-row { background: var(--surface); }
+
+.autonomy-scope-note { font-size: 11px; color: var(--muted); margin-top: 8px; max-width: 46ch; }

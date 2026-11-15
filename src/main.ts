@@ -899,6 +899,15 @@ function buildAutonomyDial(
   }
   root.append(levels);
 
+  // Honest scope (QC-01): this level is local metadata policy — the
+  // intent ceiling and the justification rule — not server-side tool
+  // authorization. Loom's runtime does not read it.
+  const scope = document.createElement("p");
+  scope.className = "autonomy-scope-note";
+  scope.textContent =
+    "Autonomy governs local work metadata (intent ceilings, justification). Loom's runtime does not read this level yet — it does not constrain execution on the server.";
+  root.append(scope);
+
   // Autonomy history.
   if (history.length > 0) {
     const histLabel = document.createElement("p");
