@@ -1,5 +1,14 @@
 # Loom connection audit
 
+> **Stale — rewritten by the build-plan pass.** The numbers below are from
+> 13 Nov (55 commands, 24 HTTP endpoints, "tasks are gRPC-only"). All three
+> are false today: ~100 commands are registered, 40+ HTTP endpoints are
+> wired, and tasks plus skills are 100% HTTP (`task.proto` has 19
+> `google.api.http` annotations; `skills_import.proto` has 3). The current
+> surface is documented in `docs/DESIGN_PROGRESS.md`,
+> `docs/LOOM_CONNECTION_MODEL.md` and `docs/DECISIONS.md`. This audit stays
+> as the record of the pre-cleanup state.
+
 Date: November 13, 2026. Repository: `/home/ed/loom-ide-tauri`, branch
 `tauri-prototype`, HEAD `4505daf` **plus the current uncommitted changes**.
 This audits the current source, including the recent integration and navigation

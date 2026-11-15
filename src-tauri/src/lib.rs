@@ -532,7 +532,8 @@ fn clear_experiment_decision(id: String, state: State<AppState>) -> Result<Exper
 }
 
 // ---------------------------------------------------------------------------
-// Attention (derived locally until the Loom server exposes attention items)
+// Attention (derived locally from experiments awaiting a decision; Loom
+// exposes no attention endpoint — collaboration.proto has no service)
 // ---------------------------------------------------------------------------
 
 #[tauri::command]

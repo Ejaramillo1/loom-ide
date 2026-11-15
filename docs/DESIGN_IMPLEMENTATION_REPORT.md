@@ -3,7 +3,7 @@
 Date: 2026-11-14. Repository: `/home/ed/loom-ide-tauri`. Branch: `tauri-prototype`.
 Baseline: `fe0c01e`. Implementation is in the existing application, not a mockup.
 
-> **Status update (14 Nov ~21:30):** this report covers the "approved reference implementation" phase. The branch has since been pushed to `origin/tauri-prototype` (21:19) and further work landed: the portal-click collider fix, the portal orbit, the full-resolution/4× MSAA render fix, and a UI critique pass (open on Experiment, one Graph/Canvas pane, no text scaling). See `docs/DESIGN_PROGRESS.md` for the living record.
+> **Status update (14 Nov ~21:30):** this report covers the "approved reference implementation" phase. The branch has since been pushed to `origin/tauri-prototype` (21:19) and further work landed: the portal-click collider fix, the portal orbit, the full-resolution/4× MSAA render fix, and a UI critique pass (reverted to Unity-first at `650441a`; one Graph/Canvas pane, no text scaling). The backend has changed substantially since this report was written (streaming, MCP, agents, tasks, skills — see `docs/DESIGN_PROGRESS.md` and `docs/DECISIONS.md` for the living record).
 
 ## Delivered behavior
 
@@ -42,7 +42,7 @@ Existing warnings remain: native-app's unused `Exploring` and `Comparison` varia
 ## Boundaries and limitations
 
 - No browser screenshots, desktop pixel inspection or rendered Unity/WebGL appearance review was performed. Prior browser/computer inspection was permission-blocked; no alternative capture route was used to bypass that block. Geometry and bounds checks do not establish visual quality, glass sorting, absence of occlusion, frame rate or photorealistic parity. No such parity is claimed. Glass uses transparent URP Lit shading; it does not simulate optical refraction or magnification.
-- Native-app source and backend source are unchanged. No packages, workspace/project/clone, seed/demo records, data migrations or user-vault writes were introduced. No files were intentionally deleted from the source tree. Nothing was merged, rebased or reset; the branch was pushed to `origin/tauri-prototype` at 21:19.
-- The approved Markdown reference, attached WebP and existing implementation prompt remain preserved and untracked.
-- Q2 remains undecided; Unity load-failure handling is unchanged. JSON Canvas export and existing canvas session-only position persistence remain as before. Compact Canvas can be scrolled to reach all notes; graph density still depends on vault size.
+- At the time this report was written the native-app and backend source were unchanged and nothing was pushed or merged. All three claims are stale now: the backend grew the Loom HTTP/stream surfaces, a merge landed (`7b867b8`), and the branch is pushed. Native-app source remains byte-preserved.
+- The approved Markdown reference, attached WebP and existing implementation prompt remain preserved (now tracked).
+- Q2 remains deferred; Unity load-failure handling is unchanged. JSON Canvas export remains; canvas positions are now durable (app data dir) and the compact scale was removed entirely. Graph density still depends on vault size.
 - Live server workflows and actual desktop rendering/input were not exercised. The real user vault was not used by unit tests. The built desktop app will be left at `src-tauri/target/release/loom-ide` for the user to run.

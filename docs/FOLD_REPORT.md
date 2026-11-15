@@ -1,6 +1,6 @@
 # Fold report — Living Workbench into Tauri (audit Q1=b)
 
-- Branch: `tauri-prototype`. Baseline `1f20256` (overnight run) → head `0dface2`.
+- Branch: `tauri-prototype`. Baseline `1f20256` (overnight run) → head `0dface2` at the time of the fold. The head has moved since (the fold-era numbers below are historical; the current state lives in `docs/DESIGN_PROGRESS.md`).
 - Codex run: 14 Nov 08:37–09:06, ended early on usage limit (165,642 tokens). Phase 5 verification finished by the assistant 14 Nov ~12:00.
 - Outcome: Phases 0–5 complete. The fold is done and the second window is retired.
 
@@ -15,14 +15,14 @@ This report was written at ~12:00; the following happened after, and supersedes 
 
 ### Further update (14 Nov ~23:30)
 
-The "Beautiful Loom IDE" build plan was applied in full (see
+The "Beautiful Loom IDE" build plan was applied (see
 `docs/DESIGN_PROGRESS.md` for the record): streaming chat, MCP and agent
 lifecycle surfaces, a Patterns shelf, the disk watcher, durable canvas
 layouts, the Unity beauty pass (HDR + ACES + Bloom grade, three-point rig,
 SSAO, quality tiers, shader canaries), and the demotion of the Unity IMGUI
 note editor to navigation. `get_collaboration` and the spatial-memory note
 bridge were removed after the orphan sweep — the plan's "wire or remove"
-rule. Local commits only, per AGENTS.md.
+rule. Committed locally, then pushed at Eduardo's instruction.
 
 ## Per phase
 
@@ -35,13 +35,13 @@ rule. Local commits only, per AGENTS.md.
 
 ## Final verification (14 Nov ~12:00, assistant, real command output)
 
-- `npm test -- --run`: 50/50 passed (6 files).
+- `npm test -- --run`: 50/50 passed at the time; the suite has since grown (62/62).
 - `npm run build`: clean.
 - `cargo test --offline --locked --manifest-path src-tauri/Cargo.toml --lib`: 89 passed, 0 failed, 2 ignored (second ignore is the real-vault smoke test, now opt-in).
 - `cargo test --offline --locked --manifest-path native-app/Cargo.toml`: 22/22 passed.
 - `cargo fmt --check --manifest-path src-tauri/Cargo.toml`: clean.
 - Unity recompile: 0 errors, 0 warnings. Editor self-check: `work=4, experiments=1, palette=true`.
-- WebGL build files refreshed 09:00–09:04 (`spatial.wasm` 35 MB). No C# changed since, so no rebuild was needed.
+- WebGL build files were refreshed at 09:00–09:04 in the fold era; the player has been rebuilt since (the bench changed after the fold).
 - `npm run tauri build -- --no-bundle`: clean, binary 25 MB at `src-tauri/target/release/loom-ide` (11:59). One expected warning: `WORKBENCH` constant never used (retained deliberately, see below).
 - Preview smoke (`npm run preview`, port 4173): HTTP 200; 2 built entry assets loaded; 6 player resources HTTP 200; single search input and single creation entries (`knowledge-new`, `exp-new`, `new-work-submit`) verified.
 - Loom server not running (health probe HTTP 000); no live sync attempted.
@@ -51,7 +51,7 @@ rule. Local commits only, per AGENTS.md.
 - The inventory says 10 relation types; `native-app/src/knowledge.rs::RELATIONS` defines 9. The nine are preserved; a tenth needs a name from Eduardo (recorded in `docs/FOLD_BLOCKERS.md`).
 - The real-vault read-only smoke test is now opt-in (`#[ignore]`) and refuses to run with a pending journal, so ordinary unit tests never depend on or touch user data.
 - The Codex run ended at 09:06 on the usage limit, mid-Phase-5. Phase 5 was completed by the assistant instead; no stretch work was done (Unity physical object forms, D9 empty-state wording, D12 full-bleed check).
-- Two files appeared mid-run from outside the fold (`docs/APPROVED_VISUAL_REFERENCE.md` and `docs/loom-unified-workbench-reference.webp`, 08:47–08:50, from the main-chat image work). They are not implementation output and were left untracked.
+- Two files appeared mid-run from outside the fold (`docs/APPROVED_VISUAL_REFERENCE.md` and `docs/loom-unified-workbench-reference.webp`, 08:47–08:50, from the main-chat image work). They are now tracked; the reference is the approved look target.
 
 ## What is left for Eduardo (updated 14 Nov ~21:30)
 

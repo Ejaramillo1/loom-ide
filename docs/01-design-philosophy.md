@@ -155,7 +155,7 @@ checklist.
 ### Adaptation to the current state (14 Nov 2026)
 
 The philosophy above is direction, not a description of what is built. What
-differs today, on `tauri-prototype` at head `3240c30`:
+differs today, on `tauri-prototype` at head `faa2338` (and later):
 
 - **Composition.** §6 describes brand + banner top-left, work list and chat
   on the left, a large sphere in the centre, and collaboration/attention
@@ -176,12 +176,14 @@ differs today, on `tauri-prototype` at head `3240c30`:
   `docs/QUIET_COMPLEXITY_REFINEMENT.md`).
 - **Water.** §6's discreet water surface exists only as a decorative backdrop
   (`aria-hidden`); no water system was built.
-- **What is still missing.** Code mode is a plain textarea (no Monaco), the
-  note editor is still Unity IMGUI, canvas positions last only for the
-  session, there is no disk watcher for external vault edits, and there is no
-  Unity failure fallback (Q2, deferred) and no real-window pixel check (D14,
-  blocked). The philosophy's §10 rule applies to all of it: refine the
-  existing Tauri / TypeScript / Unity stack, no new framework, no second app.
+- **What is still missing.** Code mode is a plain textarea (no Monaco —
+  dependency decision pending). The note editor moved out of Unity IMGUI
+  into the Tauri Notes view, canvas positions persist durably, and a disk
+  watcher picks up external vault edits. There is no Unity failure
+  fallback (Q2, deferred) and no real-window pixel check (D14, blocked;
+  Editor captures exist in `docs/bench-shots/`). The philosophy's §10 rule
+  applies to all of it: refine the existing Tauri / TypeScript / Unity
+  stack, no new framework, no second app.
 
 # Quiet Complexity
 ## Filosofía de diseño minimalista para Loom

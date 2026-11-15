@@ -1,5 +1,13 @@
 # Unity first: audit of the running app + recommendations
 
+> **Historical snapshot.** This audit is from 13 Nov 2026, before the fold
+> (Q1 answered: b — the second window was retired), before the vault moved
+> to `Research Vault/`, and before the critique pass. Decisions D3/D6 were
+> later superseded by Eduardo (the Unity title is gone; the decorative
+> sphere copies stay). Keep it as the record of the Unity-first
+> acceptance (A1–A6) and the duplicate list (D1–D14); the living state is
+> `docs/DESIGN_PROGRESS.md` and `docs/DECISIONS.md`.
+
 **Date:** 2026-11-13. **Source:** 6 screenshots of the app running on the laptop
 (Firefox, http://127.0.0.1:1420, 12:55-12:56 PST): Spatial, Evidence, Agents,
 Work, Experiment, Code. **Audience:** the coding agent working in this repo.

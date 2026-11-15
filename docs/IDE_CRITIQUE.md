@@ -20,7 +20,7 @@ The shell is a header, a left catalogue, a center workspace, a right pane, and a
 ## 2. Duplicated things
 
 - **Two Loom-state indicators.** The header status pill and the Unity sphere both encode Loom connection/state. They agree by design, but two surfaces carry the same meaning with no single source of truth in the UI.
-- **Intent in two places.** The active intent is rendered both as a compact header (`#intent-header`) and as the full intent editor. Mild, but the same object has two persistent editors.
+- **Intent in two places.** Verified resolved: one editor lives inside `#intent-header` (the audit's finding); this critique line was stale.
 - **Three search inputs.** `#search-input` (work + notes), `#knowledge-search-slot` (knowledge), `#artifact-search` (artifacts). Scoped, but three separate search mechanics to maintain.
 - **Two meanings of "experiment".** JSON experiment records (arms run through Loom) and markdown notes of kind `experiment` (knowledge vault). They are intentionally separate and never merged — but the same word names both, which reads as duplication.
 
@@ -33,7 +33,7 @@ The shell is a header, a left catalogue, a center workspace, a right pane, and a
 - **Code editor** — a plain `<textarea id="code-editor">` (`index.html:158`), not Monaco. No syntax highlighting, line numbers, or language awareness. *Still open: Monaco/CodeMirror are benchmark candidates that need Eduardo's per-dependency decision (`docs/01-design-philosophy.md`); no new dependencies without it.*
 - **Object-memory note editor** — ✅ demoted: selecting a bench object navigates to its Tauri view; the card offers "Open note in Notes". Text editing lives in the Tauri Notes view; the dead spatial-memory bridge was unregistered.
 - **Q2 fallback** — if Unity fails to load, there is no fallback view; only a Retry control. *Still deferred (standing decision, AGENTS.md §4).*
-- **The sphere** — kept as optional identity/atmosphere, not a functional surface (per your decision). *Still kept; it is the single live Loom-state indicator.*
+- **The sphere** — kept as optional identity/atmosphere, not a functional surface (per your decision). *Still kept; it is one of two Loom-state surfaces (pill + sphere) — the single-surface decision is registered in `docs/DECISIONS.md`.*
 - **Disk watcher** — ✅ the Knowledge surface polls a vault signature; external edits appear without a manual refresh (drafts and dialogs win).
 - **Durable canvas layouts** — ✅ canvas card positions persist in the app data dir.
 - **Orphan commands** — ✅ `get_collaboration` and `knowledge_pending_count` removed; the double-registered `knowledge_archive` fixed.

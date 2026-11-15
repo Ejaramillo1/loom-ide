@@ -1,8 +1,10 @@
-//! Work items, collaboration steps and attention items.
+//! Work items and attention items.
 //! Work items are the only data persisted to disk (structured JSON),
 //! mirroring the existing eframe app. The store starts empty: work
-//! items come from the user creating them. Collaboration steps and
-//! attention items are empty until the Loom server exposes them.
+//! items come from the user creating them. Attention items are derived
+//! locally from experiments awaiting a decision; collaboration.proto
+//! defines no service, so there is nothing to wire for collaboration
+//! steps (§2.6.5).
 
 use serde::{Deserialize, Serialize};
 use std::fs;
