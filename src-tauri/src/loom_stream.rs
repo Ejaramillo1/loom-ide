@@ -97,12 +97,12 @@ pub fn ask_loom_stream(
     obj.insert("query".into(), Value::String(message.to_string()));
     if let Some(s) = session_id {
         if !s.trim().is_empty() {
-            obj.insert("sessionId".into(), Value::String(s));
+            obj.insert("session_id".into(), Value::String(s));
         }
     }
     if let Some(a) = agent_id {
         if !a.trim().is_empty() {
-            obj.insert("agentId".into(), Value::String(a));
+            obj.insert("agent_id".into(), Value::String(a));
         }
     }
     // The vault context pack (§2.4): active work, intent and the open file
@@ -113,7 +113,7 @@ pub fn ask_loom_stream(
         }
     }
     // Tracing on so the completed turn has an observability record.
-    obj.insert("enableTrace".into(), Value::Bool(true));
+    obj.insert("enable_trace".into(), Value::Bool(true));
     start_loom_stream(
         app,
         request_id,
@@ -296,13 +296,33 @@ pub fn answer_clarification(
         percent_encode(session_id.trim())
     );
     let value = loom_request("POST", &path, Some(body))?;
-    match value.get("status").and_then(|s| s.as_str()) {
-        Some(status) => Ok(status.to_string()),
-        // The server did not report a status; never invent one (§3.7.3).
-        None => Err(
-            "The server accepted the answer but reported no status — check the conversation."
-                .into(),
-        ),
+    clarification_ack(&value)
+}
+
+fn weave_completed(value: &Value) -> Result<bool, String> {
+    if let Some(error) = value
+        .get("error")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+    {
+        return Err(error.to_string());
+    }
+    Ok(value.get("stage").and_then(Value::as_i64) == Some(7)
+        || value.get("stage").and_then(Value::as_str) == Some("EXECUTION_STAGE_COMPLETED"))
+}
+
+fn clarification_ack(value: &Value) -> Result<String, String> {
+    if value.get("success").and_then(Value::as_bool) == Some(true)
+        && value.get("accepted").and_then(Value::as_bool) == Some(true)
+    {
+        Ok("accepted".into())
+    } else {
+        Err(value
+            .get("error")
+            .and_then(Value::as_str)
+            .filter(|message| !message.is_empty())
+            .unwrap_or("Loom did not accept the answer.")
+            .to_string())
     }
 }
 
@@ -349,6 +369,7 @@ fn run_stream(
     let mut error_body = String::new();
     let mut status_code: u16 = 0;
     let started = Instant::now();
+    let mut completed = false;
     let mut skipped_chunks: usize = 0;
     let mut skipped_sample = String::new();
 
@@ -407,6 +428,9 @@ fn run_stream(
                 event_payload.clear();
                 if payload != "[DONE]" {
                     if let Ok(value) = serde_json::from_str::<Value>(&payload) {
+                        if event_name == "loom-stream" {
+                            completed |= weave_completed(&value)?;
+                        }
                         let _ = app.emit(
                             event_name,
                             serde_json::json!({ "requestId": rid, "kind": "progress", "event": value }),
@@ -454,6 +478,9 @@ fn run_stream(
             });
         return Err(msg);
     }
+    if event_name == "loom-stream" && !completed {
+        return Err("Loom disconnected before confirming completion.".into());
+    }
     if skipped_chunks > 0 {
         // The stream's non-JSON chunks ride one final progress event so a
         // dead stream is diagnosable instead of silently empty (§2.1.3).
@@ -472,6 +499,30 @@ fn run_stream(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn weave_requires_completion_and_surfaces_application_errors() {
+        assert!(weave_completed(&serde_json::json!({"stage": 7})).unwrap());
+        assert!(!weave_completed(&serde_json::json!({"partial_content": "partial"})).unwrap());
+        assert_eq!(
+            weave_completed(&serde_json::json!({"error": "query failed"})).unwrap_err(),
+            "query failed"
+        );
+    }
+
+    #[test]
+    fn clarification_requires_explicit_acceptance() {
+        assert_eq!(
+            clarification_ack(&serde_json::json!({"success": true, "accepted": true})).unwrap(),
+            "accepted"
+        );
+        assert_eq!(
+            clarification_ack(&serde_json::json!({"error": "expired"})).unwrap_err(),
+            "expired"
+        );
+        assert!(clarification_ack(&serde_json::json!({"success": true})).is_err());
+        assert!(clarification_ack(&serde_json::json!({})).is_err());
+    }
 
     #[test]
     fn cancel_of_an_unknown_request_is_an_error() {
