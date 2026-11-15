@@ -5,7 +5,6 @@
 - Outcome: Phases 0–5 complete. The fold is done and the second window is retired.
 
 ## Status update (14 Nov ~21:30)
-
 This report was written at ~12:00; the following happened after, and supersedes the stale items below.
 
 - The branch was pushed to `origin/tauri-prototype` at 21:19 and is in sync.
@@ -13,6 +12,17 @@ This report was written at ~12:00; the following happened after, and supersedes 
 - The `WORKBENCH` constant is retained with `#[allow(dead_code)]` (native-app still uses it); the build warning is cleared.
 - A critique pass (Eduardo, 21:00) changed the app: it now opens on **Experiment** (not Spatial), the compact Canvas no longer shrinks text, the bench has one Graph/Canvas pane, Unity no longer scales its UI, and the render runs at full resolution with 4× MSAA. Commits `7e5a950`–`cc61643`.
 - D14 (real-window pixel check) has still not been performed; visual claims rest on geometry checks and the browser preview.
+
+### Further update (14 Nov ~23:30)
+
+The "Beautiful Loom IDE" build plan was applied in full (see
+`docs/DESIGN_PROGRESS.md` for the record): streaming chat, MCP and agent
+lifecycle surfaces, a Patterns shelf, the disk watcher, durable canvas
+layouts, the Unity beauty pass (HDR + ACES + Bloom grade, three-point rig,
+SSAO, quality tiers, shader canaries), and the demotion of the Unity IMGUI
+note editor to navigation. `get_collaboration` and the spatial-memory note
+bridge were removed after the orphan sweep — the plan's "wire or remove"
+rule. Local commits only, per AGENTS.md.
 
 ## Per phase
 
