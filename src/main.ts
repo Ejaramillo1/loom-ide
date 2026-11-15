@@ -2455,7 +2455,7 @@ function buildLoomBoardsSection(): HTMLElement {
   section.append(board);
   const src = document.createElement("p");
   src.className = "wd-sub-label";
-  src.textContent = "Tasks live in Loom; local work items stay local. Nothing is migrated silently — migration (read-bridge vs full vs local) is an open decision in docs/DECISIONS.md.";
+  src.textContent = "Tasks live in Loom; local work migrates to Loom in full (decided) — every move is explicit, never silent.";
   section.append(src);
   return section;
 }
