@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { installKnowledge } from "./knowledge";
-import { listKnowledge, readKnowledge, archiveKnowledge, restoreKnowledge, type KnowledgeListing, type KnowledgeNote, type KnowledgeDetail } from "./api";
+import { listKnowledge, readKnowledge, archiveKnowledge, restoreKnowledge, listPatterns, type KnowledgeListing, type KnowledgeNote, type KnowledgeDetail } from "./api";
 
-vi.mock("./api", () => ({ listKnowledge: vi.fn(), readKnowledge: vi.fn(), createKnowledge: vi.fn(), saveKnowledge: vi.fn(), relateKnowledge: vi.fn(), reviewKnowledge: vi.fn(), archiveKnowledge: vi.fn(), restoreKnowledge: vi.fn(), exportKnowledgeCanvas: vi.fn(), syncKnowledge: vi.fn() }));
+vi.mock("./api", () => ({ listKnowledge: vi.fn(), readKnowledge: vi.fn(), createKnowledge: vi.fn(), saveKnowledge: vi.fn(), relateKnowledge: vi.fn(), reviewKnowledge: vi.fn(), archiveKnowledge: vi.fn(), restoreKnowledge: vi.fn(), exportKnowledgeCanvas: vi.fn(), syncKnowledge: vi.fn(), knowledgeSignature: vi.fn(), saveCanvasLayout: vi.fn(), loadCanvasLayout: vi.fn(), listPatterns: vi.fn(), getPattern: vi.fn(), createPattern: vi.fn(), loadPatterns: vi.fn(), patternUpdatesStream: vi.fn().mockResolvedValue(undefined), addSkill: vi.fn(), classifySkill: vi.fn(), bulkImportSkills: vi.fn() }));
 
 // A small DOM double exercises the real renderers/handlers without a browser or new dependency.
 class Node {
@@ -48,7 +48,9 @@ async function mount(data = listing()) {
   vi.mocked(listKnowledge).mockResolvedValue(data);
   const navigate = vi.fn();
   const instance = installKnowledge(navigate, vi.fn());
-  await Promise.resolve();
+  // The install-time refresh spans several awaits (listing → layout →
+  // signature); a macrotask drains them all before assertions run.
+  await new Promise((resolve) => setTimeout(resolve, 0));
   return { nodes, navigate, instance };
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
@@ -166,4 +168,31 @@ it("archives a note through the shared dialog", async () => {
   expect(archive).toBeTruthy();
   archive.fire("click");
   expect(archiveKnowledge).toHaveBeenCalledWith("Alpha", "", "test");
+});
+
+it("patterns shelf carries create/load actions and names the next step when empty", async () => {
+  vi.mocked(listPatterns).mockResolvedValue([]);
+  const { nodes } = await mount();
+  const tab = nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "patterns")!;
+  expect(tab).toBeTruthy();
+  tab.fire("click");
+  await new Promise(r => setTimeout(r, 0));
+  expect(listPatterns).toHaveBeenCalled();
+  const text = nodes["knowledge-content"].text();
+  expect(text).toContain("New pattern");
+  expect(text).toContain("Load patterns");
+  // D9: the empty state names the next step, not just the absence.
+  expect(text).toContain("Start the Loom server and refresh");
+});
+
+it("skills shelf offers add, classify and bulk import (Loom has no list endpoint)", async () => {
+  const { nodes } = await mount();
+  const tab = nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "skills")!;
+  expect(tab).toBeTruthy();
+  tab.fire("click");
+  const text = nodes["knowledge-content"].text();
+  expect(text).toContain("Add a skill");
+  expect(text).toContain("Classify a skill");
+  expect(text).toContain("Bulk import");
+  expect(text).toContain("no skill list to read");
 });

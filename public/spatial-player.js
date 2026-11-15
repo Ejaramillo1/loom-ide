@@ -32,6 +32,9 @@ export function startSpatialPlayer() {
       if (unityInstance) unityInstance.SendMessage("Resolute Workbench", "RefreshVault", payload);
       else pendingVault = payload;
     }
+    if (event.data?.type === "loom-quality" && typeof event.data.tier === "string") {
+      if (unityInstance) unityInstance.SendMessage("Resolute Workbench", "ApplyQuality", event.data.tier);
+    }
   });
   function fail(error) {
     failed = true;
@@ -48,10 +51,11 @@ export function startSpatialPlayer() {
       if (typeof window.createUnityInstance !== "function") throw new Error("Unity player unavailable. Build the WebGL player and try again.");
       // The HiDPI trap: a 400 px CSS column can be an 800 px canvas at
       // devicePixelRatio 2, and renderScale 1.0 then renders twice the
-      // pixels the eye sees (bloom and SSAO pay for all of them). Clamp
-      // the backing store so native resolution stays cheap on high-DPI
-      // displays — Unity's own DPR handling otherwise follows the display.
-      const clampedDPR = Math.min(window.devicePixelRatio || 1, 1.5);
+      // pixels the eye sees (bloom and SSAO pay for all of them). The cap
+      // keeps the backing store at full native density up to 2× and only
+      // trims beyond it, so DPR-2 screens render 1:1 without re-scaling —
+      // the previous 1.5 cap re-scaled 33% and was blur in itself (§1.1.1).
+      const clampedDPR = Math.min(window.devicePixelRatio || 1, 2);
       unityInstance = await window.createUnityInstance(canvas, {
         dataUrl: "/spatial/Build/spatial.data",
         frameworkUrl: "/spatial/Build/spatial.framework.js",

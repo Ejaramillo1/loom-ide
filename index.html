@@ -440,6 +440,53 @@
         <button id="schedule-cancel" class="btn ghost" type="button">Cancel</button>
       </div>
     </dialog>
+    <dialog id="board-dialog" class="app-help-dialog" aria-labelledby="board-title">
+      <h2 id="board-title">New board</h2>
+      <p>Boards live in Loom; Work shows them beside local work items, labelled by source.</p>
+      <label for="board-name">Board name</label>
+      <input id="board-name" type="text" autocomplete="off" spellcheck="false" />
+      <p id="board-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="board-submit" class="btn" type="button">Create board</button>
+        <button id="board-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="task-dialog" class="app-help-dialog" aria-labelledby="task-title">
+      <h2 id="task-title">New task</h2>
+      <label for="task-title">Title</label>
+      <input id="task-title" type="text" autocomplete="off" spellcheck="false" />
+      <label for="task-description">Description</label>
+      <textarea id="task-description" rows="4" spellcheck="false"></textarea>
+      <p id="task-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="task-submit" class="btn" type="button">Create task</button>
+        <button id="task-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="tool-dialog" class="app-help-dialog" aria-labelledby="tool-dialog-title">
+      <h2 id="tool-dialog-title">Register tool</h2>
+      <p>Register a tool definition with Loom (POST /v1/tools:register).</p>
+      <label for="tool-json">Tool definition (JSON)</label>
+      <textarea id="tool-json" class="agent-config" rows="12" spellcheck="false"></textarea>
+      <p id="tool-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="tool-submit" class="btn" type="button">Register tool</button>
+        <button id="tool-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="app-dialog" class="app-help-dialog" aria-labelledby="app-dialog-title">
+      <h2 id="app-dialog-title">Add app</h2>
+      <p>Create an embedded Loom app served at /apps.</p>
+      <label for="app-name">Name</label>
+      <input id="app-name" type="text" autocomplete="off" spellcheck="false" />
+      <label for="app-html">HTML</label>
+      <textarea id="app-html" rows="6" spellcheck="false"></textarea>
+      <p id="app-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="app-submit" class="btn" type="button">Create app</button>
+        <button id="app-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
     <dialog id="agent-create-dialog" class="app-help-dialog" aria-labelledby="agent-create-title">      <h2 id="agent-create-title">Create agent</h2>
       <p>Describe the agent, and the Weaver proposes a config for your review — or paste a config (or choose a preset) directly.</p>
       <label for="agent-describe">Describe the agent</label>

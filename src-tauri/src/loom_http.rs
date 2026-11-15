@@ -533,6 +533,251 @@ pub async fn workflow_schedule_history(schedule_id: String) -> Result<Vec<Value>
     Ok(list_field(&value, &["history", "executions"]).to_vec())
 }
 
+#[tauri::command]
+pub async fn workflow_schedule_pause(schedule_id: String) -> Result<Value, String> {
+    if schedule_id.trim().is_empty() {
+        return Err("No schedule selected.".into());
+    }
+    loom_send(
+        "POST",
+        format!(
+            "/v1/workflows/schedules/{}:pause",
+            percent_encode(&schedule_id)
+        ),
+        Some(serde_json::json!({})),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn workflow_schedule_resume(schedule_id: String) -> Result<Value, String> {
+    if schedule_id.trim().is_empty() {
+        return Err("No schedule selected.".into());
+    }
+    loom_send(
+        "POST",
+        format!(
+            "/v1/workflows/schedules/{}:resume",
+            percent_encode(&schedule_id)
+        ),
+        Some(serde_json::json!({})),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn workflow_schedule_cancel_execution(execution_id: String) -> Result<Value, String> {
+    if execution_id.trim().is_empty() {
+        return Err("No execution selected.".into());
+    }
+    loom_send(
+        "POST",
+        format!(
+            "/v1/workflows/schedules/executions/{}:cancel",
+            percent_encode(&execution_id)
+        ),
+        Some(serde_json::json!({})),
+    )
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// Skills (100% HTTP — no transport decision needed)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn skills_add(inline: Value) -> Result<Value, String> {
+    let name = inline
+        .get("name")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("The skill needs a name.")?;
+    let _ = name;
+    if inline
+        .get("skill_md")
+        .or_else(|| inline.get("skillMd"))
+        .is_none()
+    {
+        return Err("The skill needs its SKILL.md content.".into());
+    }
+    loom_send(
+        "POST",
+        "/v1/skills".into(),
+        Some(serde_json::json!({ "inline": inline })),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn skills_classify(skill_name: String) -> Result<Value, String> {
+    if skill_name.trim().is_empty() {
+        return Err("No skill selected.".into());
+    }
+    loom_send(
+        "POST",
+        format!("/v1/skills/{}:classify", percent_encode(&skill_name)),
+        Some(serde_json::json!({})),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn skills_bulk_import(
+    app: tauri::AppHandle,
+    request_id: String,
+    src_dir: String,
+    out_dir: Option<String>,
+) -> Result<(), String> {
+    if src_dir.trim().is_empty() {
+        return Err("The skill source directory is required.".into());
+    }
+    let mut body = serde_json::json!({ "srcDir": src_dir.trim() });
+    if let Some(o) = out_dir {
+        if !o.trim().is_empty() {
+            body["outDir"] = Value::String(o);
+        }
+    }
+    super::loom_stream::start_loom_stream(
+        app,
+        request_id,
+        "loom-skills",
+        "POST",
+        "/v1/skills:bulkImport".into(),
+        body,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// MCP apps CRUD + component types
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn apps_get(name: String) -> Result<Value, String> {
+    if name.trim().is_empty() {
+        return Err("No app selected.".into());
+    }
+    loom_get(format!("/v1/apps/{}", percent_encode(&name))).await
+}
+
+#[tauri::command]
+pub async fn apps_create(body: Value) -> Result<Value, String> {
+    loom_send("POST", "/v1/apps".into(), Some(body)).await
+}
+
+#[tauri::command]
+pub async fn apps_update(name: String, body: Value) -> Result<Value, String> {
+    if name.trim().is_empty() {
+        return Err("No app selected.".into());
+    }
+    loom_send(
+        "PUT",
+        format!("/v1/apps/{}", percent_encode(&name)),
+        Some(body),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn apps_delete(name: String) -> Result<String, String> {
+    if name.trim().is_empty() {
+        return Err("No app selected.".into());
+    }
+    let value = loom_send(
+        "DELETE",
+        format!("/v1/apps/{}", percent_encode(&name)),
+        None,
+    )
+    .await?;
+    Ok(value
+        .get("message")
+        .and_then(|m| m.as_str())
+        .unwrap_or("Deleted.")
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn apps_component_types() -> Result<Vec<Value>, String> {
+    let value = loom_get("/v1/apps/component-types".into()).await?;
+    Ok(list_field(&value, &["componentTypes", "types"]).to_vec())
+}
+
+// ---------------------------------------------------------------------------
+// Tools: register + permission request (the human answer path for holds is
+// the clarification endpoint; this is the agent-side request surface)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn tools_register(tool: Value) -> Result<Value, String> {
+    loom_send(
+        "POST",
+        "/v1/tools:register".into(),
+        Some(serde_json::json!({ "tool": tool })),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn tool_permission_request(
+    session_id: String,
+    tool_name: String,
+    args_json: Option<String>,
+    description: Option<String>,
+    risk_level: Option<String>,
+) -> Result<Value, String> {
+    if session_id.trim().is_empty() || tool_name.trim().is_empty() {
+        return Err("A session and tool name are required.".into());
+    }
+    let mut body = serde_json::json!({
+        "sessionId": session_id.trim(),
+        "toolName": tool_name.trim(),
+    });
+    if let Some(a) = args_json {
+        if !a.trim().is_empty() {
+            body["argsJson"] = Value::String(a);
+        }
+    }
+    if let Some(d) = description {
+        if !d.trim().is_empty() {
+            body["description"] = Value::String(d);
+        }
+    }
+    if let Some(r) = risk_level {
+        if !r.trim().is_empty() {
+            body["riskLevel"] = Value::String(r);
+        }
+    }
+    loom_send("POST", "/v1/tools:request-permission".into(), Some(body)).await
+}
+
+// ---------------------------------------------------------------------------
+// Server administration (TLS status/renew, storage migration)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn tls_status() -> Result<Value, String> {
+    loom_get("/v1/server/tls".into()).await
+}
+
+#[tauri::command]
+pub async fn tls_renew() -> Result<Value, String> {
+    loom_send(
+        "POST",
+        "/v1/server/tls:renew".into(),
+        Some(serde_json::json!({})),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn run_migration() -> Result<Value, String> {
+    loom_send(
+        "POST",
+        "/v1/server/storage:migrate".into(),
+        Some(serde_json::json!({})),
+    )
+    .await
+}
+
 // ---------------------------------------------------------------------------
 // Session completeness (delete / resume / resolve-gap)
 // ---------------------------------------------------------------------------

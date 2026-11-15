@@ -104,6 +104,11 @@ for (var i = 0; i < levels.Length; i++)
     var entry = list.GetArrayElementAtIndex(i);
     entry.FindPropertyRelative("name").stringValue = levels[i].Item1;
     entry.FindPropertyRelative("customRenderPipeline").objectReferenceValue = levels[i].Item2;
+    // The built-in AA field only matters for the built-in pipeline, but a
+    // stray 0 next to "High" invites the wrong reading (§1.2.1): keep all
+    // three at 4 so the tier table is unambiguous (URP reads MSAA from the
+    // RP asset: 4/2/1).
+    entry.FindPropertyRelative("antiAliasing").intValue = 4;
 }
 var defaults = qsObject.FindProperty("m_PerPlatformDefaultQuality");
 // The per-platform defaults serialize as pairs { first: platform, second:

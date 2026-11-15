@@ -116,6 +116,24 @@ import {
   deleteSession,
   resumeSession,
   getTrace,
+  switchModel,
+  listLoomBoards,
+  createLoomBoard,
+  listLoomTasks,
+  createLoomTask,
+  deleteLoomTask,
+  claimLoomTask,
+  releaseLoomTask,
+  closeLoomTask,
+  taskUpdatesStream,
+  createApp,
+  deleteApp,
+  listComponentTypes,
+  registerTool,
+  getTlsStatus,
+  renewCertificate,
+  runMigration,
+  getMcpServer,
 } from "./api";
 import type { SphereState } from "./sphere";
 import { installAppMenu, textEditingActions } from "./app-menu";
@@ -193,6 +211,10 @@ let currentNote: NoteKind | null = null;
 let artifactTab: "artifacts" | "documents" = "artifacts";
 let loomReachable = false;
 let loomVerified = false;
+/** True between a dropped connection and the next successful probe — the
+    visible "reconnecting" state (Phase 3 acceptance: killing the server
+    mid-session must never show a frozen UI or a stale "connected"). */
+let loomReconnecting = false;
 /** False until the first status probe resolves; the UI shows a neutral
     "Checking Loom…" state instead of flashing "offline" meanwhile. */
 let loomStatusKnown = false;
@@ -415,6 +437,13 @@ function setLoomReachable(reachable: boolean) {
   const firstProbe = !loomStatusKnown;
   loomReachable = reachable;
   loomStatusKnown = true;
+  if (reachable) {
+    loomReconnecting = false;
+  } else if (loomStatusKnown && !reachable) {
+    // A drop invalidates the previous "verified" claim: a reply received
+    // before the drop proves nothing about the current connection.
+    loomVerified = false;
+  }
   renderStatusPill();
   if (changed || firstProbe) {
     renderWorkDetail();
@@ -1426,6 +1455,7 @@ function renderWorkDetail() {
     wrap.append(buildSuccessCriteria(item));
     wrap.append(buildArtifactsSection(item));
     wrap.append(buildEvidenceSection(item.id));
+    wrap.append(buildLoomBoardsSection());
 
     // Real Loom workflows stay available, but in a collapsed supporting
     // section so they never crowd the selected work.
@@ -2240,6 +2270,308 @@ async function submitSchedule() {
     await refreshSchedules();
   } catch (err) {
     const el = $("#schedule-error") as HTMLElement;
+    el.textContent = err instanceof Error ? err.message : String(err);
+    el.hidden = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Loom task boards (100% HTTP; read-bridge beside local work, §4.2)
+// ---------------------------------------------------------------------------
+
+let loomBoards: unknown[] = [];
+let loomBoardTasks: unknown[] = [];
+let selectedLoomBoardId: string | null = null;
+let taskBoardError: string | null = null;
+let taskBoardStreamId: string | null = null;
+
+function boardId(raw: unknown): string {
+  const b = raw as { id?: string };
+  return b.id ?? "?";
+}
+
+function boardName(raw: unknown): string {
+  const b = raw as { name?: string; id?: string };
+  return b.name ?? b.id ?? "(unnamed board)";
+}
+
+function taskStatus(raw: unknown): string {
+  const t = raw as { status?: string | number };
+  const s = typeof t.status === "string" ? t.status : String(t.status ?? "");
+  return s.replace(/^TASK_STATUS_/, "").toLowerCase();
+}
+
+function taskTitle(raw: unknown): string {
+  const t = raw as { title?: string; id?: string };
+  return t.title?.trim() || `Task ${t.id?.slice(0, 8) ?? "?"}`;
+}
+
+async function refreshLoomBoards() {
+  try {
+    loomBoards = await listLoomBoards();
+    if (loomBoards.length > 0 && !selectedLoomBoardId) {
+      selectedLoomBoardId = boardId(loomBoards[0]);
+      await refreshLoomBoardTasks();
+    }
+    taskBoardError = null;
+  } catch (err) {
+    loomBoards = [];
+    taskBoardError = err instanceof Error ? err.message : String(err);
+  }
+  renderLoomBoards();
+}
+
+async function refreshLoomBoardTasks() {
+  if (!selectedLoomBoardId) {
+    loomBoardTasks = [];
+    renderLoomBoards();
+    return;
+  }
+  try {
+    loomBoardTasks = await listLoomTasks(selectedLoomBoardId);
+    taskBoardError = null;
+  } catch (err) {
+    loomBoardTasks = [];
+    taskBoardError = err instanceof Error ? err.message : String(err);
+  }
+  renderLoomBoards();
+  // Live board updates (§4.2.3): one subscription per selected board.
+  const subId = `board-${selectedLoomBoardId}`;
+  if (taskBoardStreamId === subId) return;
+  if (taskBoardStreamId) {
+    void cancelLoomStream(taskBoardStreamId).catch(() => { /* already ended */ });
+  }
+  taskBoardStreamId = subId;
+  void taskUpdatesStream(subId, selectedLoomBoardId).catch(() => { taskBoardStreamId = null; });
+}
+
+function handleTaskBoardEvent(p: StreamEnvelope<unknown>) {
+  if (!taskBoardStreamId || p.requestId !== taskBoardStreamId) return;
+  if (p.kind === "progress") {
+    void refreshLoomBoardTasks();
+  } else if (p.kind === "error" || p.kind === "done") {
+    taskBoardStreamId = null;
+  }
+}
+
+const TASK_LANES = ["open", "in_progress", "blocked", "done", "deferred", "cancelled"] as const;
+
+function buildLoomBoardsSection(): HTMLElement {
+  const section = document.createElement("section");
+  section.className = "wd-section";
+  const head = document.createElement("div");
+  head.className = "wd-section-head";
+  const h = document.createElement("h4");
+  h.textContent = "Loom task boards";
+  const actions = document.createElement("div");
+  actions.className = "section-actions";
+  const refresh = document.createElement("button");
+  refresh.type = "button";
+  refresh.className = "icon-btn small";
+  refresh.title = "Refresh boards";
+  refresh.setAttribute("aria-label", "Refresh boards");
+  refresh.textContent = "↻";
+  refresh.addEventListener("click", () => { void refreshLoomBoards(); });
+  const newBoard = document.createElement("button");
+  newBoard.type = "button";
+  newBoard.className = "btn ghost";
+  newBoard.textContent = "New board";
+  newBoard.addEventListener("click", openBoardCreateDialog);
+  const newTask = document.createElement("button");
+  newTask.type = "button";
+  newTask.className = "btn";
+  newTask.textContent = "New task";
+  newTask.disabled = !selectedLoomBoardId;
+  newTask.addEventListener("click", openTaskCreateDialog);
+  actions.append(newBoard, newTask, refresh);
+  head.append(h, actions);
+  section.append(head);
+
+  if (taskBoardError) {
+    section.append(Object.assign(document.createElement("p"), { className: "field-error", textContent: `Boards unavailable: ${taskBoardError}` }));
+  }
+
+  if (loomBoards.length === 0 && !taskBoardError) {
+    section.append(Object.assign(document.createElement("p"), { className: "empty", textContent: "No Loom boards yet. Create one to plan work with dependencies." }));
+    return section;
+  }
+
+  const sel = document.createElement("select");
+  sel.className = "board-select";
+  sel.setAttribute("aria-label", "Loom board");
+  for (const raw of loomBoards) {
+    const opt = document.createElement("option");
+    opt.value = boardId(raw);
+    opt.textContent = boardName(raw);
+    sel.append(opt);
+  }
+  sel.value = selectedLoomBoardId ?? "";
+  sel.addEventListener("change", () => {
+    selectedLoomBoardId = sel.value || null;
+    void refreshLoomBoardTasks();
+  });
+  section.append(sel);
+
+  // Kanban lanes, labelled by source so nothing looks silently migrated.
+  const board = document.createElement("div");
+  board.className = "kanban";
+  const byLane = new Map<string, unknown[]>();
+  for (const lane of TASK_LANES) byLane.set(lane, []);
+  for (const t of loomBoardTasks) {
+    const lane = taskStatus(t) || "open";
+    (byLane.get(lane) ?? byLane.set(lane, []).get(lane)!).push(t);
+  }
+  for (const lane of TASK_LANES) {
+    const col = document.createElement("div");
+    col.className = "kanban-col";
+    const colHead = document.createElement("h5");
+    colHead.textContent = lane.replace("_", " ");
+    col.append(colHead);
+    const tasks = byLane.get(lane) ?? [];
+    if (tasks.length === 0) {
+      col.append(Object.assign(document.createElement("p"), { className: "empty", textContent: "—" }));
+    }
+    for (const t of tasks) {
+      col.append(taskCard(t));
+    }
+    board.append(col);
+  }
+  section.append(board);
+  const src = document.createElement("p");
+  src.className = "wd-sub-label";
+  src.textContent = "Tasks live in Loom; local work items stay local. Nothing is migrated silently.";
+  section.append(src);
+  return section;
+}
+
+function taskCard(raw: unknown): HTMLElement {
+  const t = raw as { id?: string; title?: string; description?: string };
+  const card = document.createElement("div");
+  card.className = "kanban-card";
+  card.append(Object.assign(document.createElement("strong"), { textContent: taskTitle(raw) }));
+  if (t.description) {
+    card.append(Object.assign(document.createElement("p"), { textContent: String(t.description).slice(0, 140) }));
+  }
+  const actions = document.createElement("div");
+  actions.className = "schedule-actions";
+  const status = taskStatus(raw);
+  if (status === "open" || status === "blocked" || status === "deferred") {
+    const claim = document.createElement("button");
+    claim.type = "button";
+    claim.className = "btn ghost small";
+    claim.textContent = "Claim";
+    claim.addEventListener("click", async () => {
+      if (!t.id) return;
+      try {
+        await claimLoomTask(t.id, selectedAgentId ?? undefined, selectedSessionId ?? undefined);
+        await refreshLoomBoardTasks();
+      } catch (err) {
+        taskBoardError = err instanceof Error ? err.message : String(err);
+        renderLoomBoards();
+      }
+    });
+    actions.append(claim);
+  }
+  if (status === "in_progress") {
+    const done = document.createElement("button");
+    done.type = "button";
+    done.className = "btn ghost small";
+    done.textContent = "Close";
+    done.addEventListener("click", async () => {
+      if (!t.id) return;
+      try {
+        await closeLoomTask(t.id);
+        await refreshLoomBoardTasks();
+      } catch (err) {
+        taskBoardError = err instanceof Error ? err.message : String(err);
+        renderLoomBoards();
+      }
+    });
+    const release = document.createElement("button");
+    release.type = "button";
+    release.className = "btn ghost small";
+    release.textContent = "Release";
+    release.addEventListener("click", async () => {
+      if (!t.id) return;
+      try {
+        await releaseLoomTask(t.id);
+        await refreshLoomBoardTasks();
+      } catch (err) {
+        taskBoardError = err instanceof Error ? err.message : String(err);
+        renderLoomBoards();
+      }
+    });
+    actions.append(done, release);
+  }
+  if (t.id) {
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn ghost small danger";
+    del.textContent = "Delete";
+    del.addEventListener("click", async () => {
+      if (!window.confirm(`Delete task "${taskTitle(raw)}"?`)) return;
+      try {
+        await deleteLoomTask(t.id as string);
+        await refreshLoomBoardTasks();
+      } catch (err) {
+        taskBoardError = err instanceof Error ? err.message : String(err);
+        renderLoomBoards();
+      }
+    });
+    actions.append(del);
+  }
+  card.append(actions);
+  return card;
+}
+
+function renderLoomBoards() {
+  // The section lives inside renderWorkDetail; rebuild the detail in place.
+  renderWorkDetail();
+}
+
+function openBoardCreateDialog() {
+  const dialog = $("#board-dialog") as HTMLDialogElement;
+  ($("#board-name") as HTMLInputElement).value = "";
+  ($("#board-error") as HTMLElement).hidden = true;
+  dialog.showModal();
+}
+
+async function submitBoardCreate() {
+  const name = ($("#board-name") as HTMLInputElement).value.trim();
+  if (!name) return;
+  try {
+    const created = await createLoomBoard({ name });
+    const id = (created as { id?: string }).id;
+    if (id) {
+      selectedLoomBoardId = id;
+      await refreshLoomBoards();
+    }
+    ($("#board-dialog") as HTMLDialogElement).close();
+  } catch (err) {
+    const el = $("#board-error") as HTMLElement;
+    el.textContent = err instanceof Error ? err.message : String(err);
+    el.hidden = false;
+  }
+}
+
+function openTaskCreateDialog() {
+  const dialog = $("#task-dialog") as HTMLDialogElement;
+  ($("#task-title") as HTMLInputElement).value = "";
+  ($("#task-description") as HTMLTextAreaElement).value = "";
+  ($("#task-error") as HTMLElement).hidden = true;
+  dialog.showModal();
+}
+
+async function submitTaskCreate() {
+  const title = ($("#task-title") as HTMLInputElement).value.trim();
+  const description = ($("#task-description") as HTMLTextAreaElement).value.trim();
+  if (!title || !selectedLoomBoardId) return;
+  try {
+    await createLoomTask({ title, description, boardId: selectedLoomBoardId });
+    ($("#task-dialog") as HTMLDialogElement).close();
+    await refreshLoomBoardTasks();
+  } catch (err) {
+    const el = $("#task-error") as HTMLElement;
     el.textContent = err instanceof Error ? err.message : String(err);
     el.hidden = false;
   }
@@ -3307,6 +3639,7 @@ function agentActions(row: HTMLElement, agent: Agent) {
       b.disabled = false;
     }
   });
+  mk("Detail", () => { void openAgentDetail(agent.id); });
   mk("Delete", async () => {
     if (!window.confirm(`Delete agent ${agent.name} from the Loom server?`)) return;
     try {
@@ -3397,6 +3730,11 @@ function renderMcpServers() {
     toolsBtn.className = "btn ghost small";
     toolsBtn.textContent = "Tools";
     toolsBtn.addEventListener("click", () => { void openMcpTools(s.name); });
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn ghost small";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => openMcpEditDialog(s.name));
     const restartBtn = document.createElement("button");
     restartBtn.type = "button";
     restartBtn.className = "btn ghost small";
@@ -3424,7 +3762,7 @@ function renderMcpServers() {
         agentsNotice(`Could not delete ${s.name}: ${err instanceof Error ? err.message : String(err)}`, true);
       }
     });
-    actions.append(toolsBtn, restartBtn, deleteBtn);
+    actions.append(toolsBtn, editBtn, restartBtn, deleteBtn);
     row.append(actions);
     list.append(row);
   }
@@ -3437,7 +3775,7 @@ function renderApps() {
     const empty = document.createElement("div");
     empty.className = "flat-row empty-row";
     const text = document.createElement("p");
-    text.textContent = "No Loom apps reported. The server serves them at /apps when they exist.";
+    text.textContent = "No Loom apps reported. Add one below, or start the server — it serves apps at /apps when they exist.";
     empty.append(text);
     list.append(empty);
     return;
@@ -3465,10 +3803,200 @@ function renderApps() {
       const url = `http://localhost:5006/apps/${encodeURIComponent(app.name ?? "")}`;
       window.open(url, "_blank");
     });
-    actions.append(open);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn ghost small danger";
+    del.textContent = "Delete";
+    del.addEventListener("click", async () => {
+      if (!app.name || !window.confirm(`Delete app ${app.name}?`)) return;
+      try {
+        await deleteApp(app.name);
+        await refreshApps();
+        agentsNotice(`${app.name} deleted.`);
+      } catch (err) {
+        agentsNotice(`Could not delete ${app.name}: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+    });
+    actions.append(open, del);
     row.append(actions);
     list.append(row);
   }
+
+  // Server administration (§4.7): TLS status/renew and storage migration,
+  // honest about which endpoints exist.
+  const server = document.createElement("div");
+  server.className = "server-admin";
+  const sh = document.createElement("h4");
+  sh.textContent = "Server";
+  server.append(sh);
+  const tls = document.createElement("button");
+  tls.type = "button";
+  tls.className = "btn ghost small";
+  tls.textContent = "TLS status";
+  tls.addEventListener("click", async () => {
+    try {
+      const status = await getTlsStatus();
+      agentsNotice(`TLS: ${JSON.stringify(status).slice(0, 180)}`);
+    } catch (err) {
+      agentsNotice(`TLS status unavailable: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  });
+  const renew = document.createElement("button");
+  renew.type = "button";
+  renew.className = "btn ghost small";
+  renew.textContent = "Renew certificate";
+  renew.addEventListener("click", async () => {
+    if (!window.confirm("Renew the Loom server's TLS certificate?")) return;
+    try {
+      await renewCertificate();
+      agentsNotice("Certificate renewal requested.");
+    } catch (err) {
+      agentsNotice(`Renewal failed: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  });
+  const migrate = document.createElement("button");
+  migrate.type = "button";
+  migrate.className = "btn ghost small danger";
+  migrate.textContent = "Run storage migration";
+  migrate.addEventListener("click", async () => {
+    if (!window.confirm("Run a storage migration on the Loom server?")) return;
+    try {
+      const result = await runMigration();
+      agentsNotice(`Migration: ${JSON.stringify(result).slice(0, 180)}`);
+    } catch (err) {
+      agentsNotice(`Migration failed: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  });
+  const components = document.createElement("button");
+  components.type = "button";
+  components.className = "btn ghost small";
+  components.textContent = "Component types";
+  components.addEventListener("click", async () => {
+    try {
+      const types = await listComponentTypes();
+      const names = types.map((t) => (t as { name?: string }).name ?? JSON.stringify(t).slice(0, 40));
+      agentsNotice(`Component types: ${names.join(", ") || "none reported"}`);
+    } catch (err) {
+      agentsNotice(`Could not list component types: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+  });
+  const register = document.createElement("button");
+  register.type = "button";
+  register.className = "btn ghost small";
+  register.textContent = "Register tool…";
+  register.addEventListener("click", openRegisterToolDialog);
+  const addApp = document.createElement("button");
+  addApp.type = "button";
+  addApp.className = "btn ghost small";
+  addApp.textContent = "Add app…";
+  addApp.addEventListener("click", openAppCreateDialog);
+  server.append(tls, renew, migrate, components, register, addApp);
+  list.append(server);
+}
+
+function openRegisterToolDialog() {
+  const dialog = $("#tool-dialog") as HTMLDialogElement;
+  ($("#tool-json") as HTMLTextAreaElement).value = JSON.stringify({
+    name: "my_tool",
+    description: "What this tool does",
+    input_schema_json: "{}",
+    backends: ["local"],
+  }, null, 2);
+  ($("#tool-error") as HTMLElement).hidden = true;
+  dialog.showModal();
+}
+
+async function submitRegisterTool() {
+  const raw = ($("#tool-json") as HTMLTextAreaElement).value.trim();
+  if (!raw) return;
+  let tool: Record<string, unknown>;
+  try {
+    tool = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    ($("#tool-error") as HTMLElement).textContent = "The tool definition is not valid JSON.";
+    ($("#tool-error") as HTMLElement).hidden = false;
+    return;
+  }
+  try {
+    await registerTool(tool);
+    ($("#tool-dialog") as HTMLDialogElement).close();
+    agentsNotice(`Tool ${String(tool.name ?? "")} registered.`);
+  } catch (err) {
+    const el = $("#tool-error") as HTMLElement;
+    el.textContent = err instanceof Error ? err.message : String(err);
+    el.hidden = false;
+  }
+}
+
+function openAppCreateDialog() {
+  const dialog = $("#app-dialog") as HTMLDialogElement;
+  ($("#app-name") as HTMLInputElement).value = "";
+  ($("#app-html") as HTMLTextAreaElement).value = "<div>Hello from a Loom app.</div>";
+  ($("#app-error") as HTMLElement).hidden = true;
+  dialog.showModal();
+}
+
+async function submitAppCreate() {
+  const name = ($("#app-name") as HTMLInputElement).value.trim();
+  const html = ($("#app-html") as HTMLTextAreaElement).value.trim();
+  if (!name || !html) return;
+  try {
+    await createApp({ name, html });
+    ($("#app-dialog") as HTMLDialogElement).close();
+    await refreshApps();
+    agentsNotice(`App ${name} created.`);
+  } catch (err) {
+    const el = $("#app-error") as HTMLElement;
+    el.textContent = err instanceof Error ? err.message : String(err);
+    el.hidden = false;
+  }
+}
+
+/** Agent detail beyond the list (§3.1.4): state, tools, sessions. */
+async function openAgentDetail(agentId: string) {
+  const dialog = $("#knowledge-dialog") as HTMLDialogElement;
+  dialog.replaceChildren();
+  const h2 = document.createElement("h2");
+  h2.textContent = "Agent detail";
+  dialog.append(h2);
+  const body = document.createElement("div");
+  body.className = "mcp-tools";
+  body.append(Object.assign(document.createElement("p"), { textContent: "Loading…" }));
+  dialog.append(body);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "btn ghost";
+  close.textContent = "Close";
+  close.addEventListener("click", () => dialog.close());
+  dialog.append(close);
+  dialog.showModal();
+  try {
+    const detail = await getAgent(agentId);
+    body.replaceChildren();
+    const pre = document.createElement("pre");
+    pre.className = "pattern-detail";
+    pre.textContent = JSON.stringify(detail, null, 2);
+    body.append(pre);
+  } catch (err) {
+    body.replaceChildren();
+    body.append(Object.assign(document.createElement("p"), {
+      textContent: `Could not load the agent: ${err instanceof Error ? err.message : String(err)}`,
+    }));
+  }
+}
+
+/** Edit an MCP server (§3.3.2): prefill from the server, save via update. */
+function openMcpEditDialog(serverName: string) {
+  const dialog = $("#mcp-dialog") as HTMLDialogElement;
+  ($("#mcp-dialog-error") as HTMLElement).hidden = true;
+  dialog.showModal();
+  void getMcpServer(serverName).then((s) => {
+    ($("#mcp-name") as HTMLInputElement).value = s.name;
+    ($("#mcp-transport") as HTMLSelectElement).value = s.transport || "stdio";
+    ($("#mcp-command") as HTMLInputElement).value = s.command ?? "";
+    ($("#mcp-url") as HTMLInputElement).value = s.url ?? "";
+    ($("#mcp-args") as HTMLInputElement).value = s.args?.join(" ") ?? "";
+  }).catch(() => { /* the dialog stays open with the blank form */ });
 }
 
 async function openMcpTools(serverName: string) {
@@ -3550,6 +4078,10 @@ function initAgentsView() {
   $("#agent-create-submit").addEventListener("click", () => { void submitAgentCreate(); });
   $("#agent-describe-btn").addEventListener("click", () => { void describeAgent(); });
   $("#trace-close").addEventListener("click", () => ($("#trace-dialog") as HTMLDialogElement).close());
+  $("#tool-submit").addEventListener("click", () => { void submitRegisterTool(); });
+  $("#tool-cancel").addEventListener("click", () => ($("#tool-dialog") as HTMLDialogElement).close());
+  $("#app-submit").addEventListener("click", () => { void submitAppCreate(); });
+  $("#app-cancel").addEventListener("click", () => ($("#app-dialog") as HTMLDialogElement).close());
 }
 
 function readMcpForm(): { name: string; transport: string; command?: string; url?: string; args?: string[] } {
@@ -3828,6 +4360,39 @@ function renderSessionDetail(): HTMLElement {
     });
     actions.append(resume, resolve);
     section.append(actions);
+  }
+
+  // Model switching (§2.3.3): the session's model changes from the detail
+  // surface, with the server's provider/model list as the options.
+  if (models.length > 0) {
+    const modelH = document.createElement("h5");
+    modelH.textContent = "Model";
+    section.append(modelH);
+    const modelSel = document.createElement("select");
+    modelSel.className = "board-select";
+    modelSel.setAttribute("aria-label", "Session model");
+    const keep = document.createElement("option");
+    keep.value = "";
+    keep.textContent = "Keep current model";
+    modelSel.append(keep);
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.name || m.id;
+      modelSel.append(opt);
+    }
+    modelSel.addEventListener("change", async () => {
+      if (!modelSel.value) return;
+      const detail = sessionDetail;
+      if (!detail) return;
+      try {
+        await switchModel(detail.id, undefined, modelSel.value);
+        showSessionNote("Model switch requested.");
+      } catch (err) {
+        showSessionNote(`Could not switch the model: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+    });
+    section.append(modelSel);
   }
 
   if (sessionDetail.metadata && Object.keys(sessionDetail.metadata).length > 0) {
@@ -4229,6 +4794,53 @@ function applySearchFilter(query: string) {
 /** The unsent message, kept across close/reopen (and app restarts). */
 const CHAT_DRAFT_KEY = "loom-ide-tauri:chat-draft";
 
+/** The bench quality tier (High/Balanced/Low), persisted and pushed to the
+    player over the spatial bridge (§1.3.5). */
+const QUALITY_KEY = "loom-ide-tauri:quality";
+let qualityTier: "High" | "Balanced" | "Low" =
+  (localStorage.getItem(QUALITY_KEY) as "High" | "Balanced" | "Low" | null) ?? "High";
+
+function setQualityTier(tier: "High" | "Balanced" | "Low") {
+  qualityTier = tier;
+  localStorage.setItem(QUALITY_KEY, tier);
+  const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame");
+  frame?.contentWindow?.postMessage({ type: "loom-quality", tier }, location.origin);
+}
+
+function handlePatternEvent(p: StreamEnvelope<unknown>) {
+  // The Patterns shelf re-fetches on the next open; nothing else needs to
+  // react to individual pattern events beyond refreshing the listing.
+  if (p.kind === "progress" || p.kind === "error") knowledge?.refresh();
+}
+
+/** The vault context pack (§2.4): active work, intent and the open file
+    travel with every query so the model answers with the real context
+    instead of only the typed message. */
+function buildChatContext(): Record<string, string> | undefined {
+  const context: Record<string, string> = {};
+  const work = workItems.find((w) => w.id === selectedWorkId);
+  if (work) {
+    context.active_work = work.title;
+    context.active_work_status = work.status;
+    context.active_work_autonomy = work.autonomy;
+  }
+  const intent = intents.find((i) => i.id === activeIntentId);
+  if (intent) context.active_intent = intent.statement;
+  if (openFilePath) {
+    context.open_file = workspaceLabel(openFilePath);
+    const editor = $("#code-editor") as HTMLTextAreaElement | null;
+    const content = editor?.value ?? "";
+    if (content.trim()) context.open_file_content = content.slice(0, 4000);
+  }
+  if (selectedExperimentId) {
+    const ex = experiments.find((e) => e.id === selectedExperimentId);
+    if (ex) context.active_experiment = ex.title ?? ex.question ?? "";
+  }
+  if (selectedSessionId) context.session_id = selectedSessionId;
+  if (selectedAgentId) context.agent_id = selectedAgentId;
+  return Object.keys(context).length > 0 ? context : undefined;
+}
+
 function saveChatDraft() {
   const input = $("#chat-text") as HTMLInputElement;
   localStorage.setItem(CHAT_DRAFT_KEY, input.value);
@@ -4538,10 +5150,15 @@ function finishStream(
 
   if (kind === "error") {
     if (error && isLoomConnectionError(new Error(error))) {
+      loomReconnecting = true;
       setLoomReachable(false);
-      // Streaming forces a real connection model: re-check once, shortly.
+      // Streaming forces a real connection model: re-check once, shortly;
+      // the periodic re-probe continues from there while offline.
       window.setTimeout(() => {
-        void getLoomStatus().then((s) => setLoomReachable(s.online));
+        void getLoomStatus().then((s) => {
+          loomReconnecting = false;
+          setLoomReachable(s.online);
+        });
       }, 3000);
     }
     const note = document.createElement("p");
@@ -4618,6 +5235,7 @@ async function sendChatUnary(
       clean,
       selectedSessionId ?? undefined,
       selectedAgentId ?? undefined,
+      buildChatContext(),
     );
     typing.remove();
     loomVerified = true;
@@ -4708,6 +5326,7 @@ async function sendChat(text: string) {
       clean,
       selectedSessionId ?? undefined,
       selectedAgentId ?? undefined,
+      buildChatContext(),
     );
   } catch {
     chatInFlight--;
@@ -5871,6 +6490,7 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
       prompt,
       selectedSessionId ?? undefined,
       selectedAgentId ?? undefined,
+      buildChatContext(),
     );
     typing.remove();
     loomVerified = true;
@@ -6015,6 +6635,16 @@ function initAppMenu() {
         { label: "White", radio: true, checked: () => getAppearance() === "white",
           run: () => setAppearance("white") },
         "separator",
+        // Quality tiers (§1.3.5): High/Balanced/Low switch the URP asset in
+        // the bench (renderScale 1/0.85/0.75, bloom off on Low). The choice
+        // persists and reaches the player over the spatial bridge.
+        { label: "Quality: High", radio: true, checked: () => qualityTier === "High",
+          run: () => setQualityTier("High") },
+        { label: "Quality: Balanced", radio: true, checked: () => qualityTier === "Balanced",
+          run: () => setQualityTier("Balanced") },
+        { label: "Quality: Low", radio: true, checked: () => qualityTier === "Low",
+          run: () => setQualityTier("Low") },
+        "separator",
         ...LAYERS.map((layer) => ({
           label: layer.label,
           description: layer.desc,
@@ -6067,6 +6697,10 @@ function renderStatusPill() {
     text.textContent = "Checking Loom…";
     pill.classList.remove("live");
     pill.title = "Checking whether the Loom server answers on localhost:5006.";
+  } else if (loomReconnecting) {
+    text.textContent = "Reconnecting…";
+    pill.classList.remove("live");
+    pill.title = "The connection dropped; Loom is being re-checked automatically.";
   } else if (loomVerified) {
     text.textContent = "Connected to Loom";
     pill.classList.add("live");
@@ -6298,7 +6932,7 @@ async function init() {
   // Initialize local views before any Loom requests finish.
   initCodeEditor();
   initWorkspaceExplorer();
-  knowledge = installKnowledge(() => setMode("knowledge"), (count, failed) => { pendingKnowledge = count; knowledgeFailed = failed; renderStatusPill(); });
+  knowledge = installKnowledge(() => setMode("knowledge"), (count, failed) => { pendingKnowledge = count; knowledgeFailed = failed; renderStatusPill(); }, refreshSpatialVault);
   installSpatialWorkbench((object) => {
     switch (object) {
       case "Work": setMode("work"); break;
@@ -6713,6 +7347,12 @@ async function init() {
     await listen<StreamEnvelope<unknown>>("loom-session", (event) => {
       handleSessionEvent(event.payload);
     });
+    await listen<StreamEnvelope<unknown>>("loom-tasks", (event) => {
+      handleTaskBoardEvent(event.payload);
+    });
+    await listen<StreamEnvelope<unknown>>("loom-patterns", (event) => {
+      handlePatternEvent(event.payload);
+    });
   }
   const stopBtn = $("#chat-stop") as HTMLButtonElement | null;
   if (stopBtn) stopBtn.addEventListener("click", () => {
@@ -6732,6 +7372,13 @@ async function init() {
   $("#abtest-cancel").addEventListener("click", () => ($("#abtest-dialog") as HTMLDialogElement).close());
   $("#schedule-cancel").addEventListener("click", () => ($("#schedule-dialog") as HTMLDialogElement).close());
   $("#schedule-submit").addEventListener("click", () => { void submitSchedule(); });
+
+  // Loom task boards.
+  $("#board-submit").addEventListener("click", () => { void submitBoardCreate(); });
+  $("#board-cancel").addEventListener("click", () => ($("#board-dialog") as HTMLDialogElement).close());
+  $("#task-submit").addEventListener("click", () => { void submitTaskCreate(); });
+  $("#task-cancel").addEventListener("click", () => ($("#task-dialog") as HTMLDialogElement).close());
+  void refreshLoomBoards();
 
 }
 

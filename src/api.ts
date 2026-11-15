@@ -855,15 +855,17 @@ export async function askLoom(
   message: string,
   sessionId?: string,
   agentId?: string,
+  context?: Record<string, string>,
 ): Promise<ChatReply> {
   if (IN_TAURI) {
-    return invoke<ChatReply>("ask_loom", { message, sessionId, agentId });
+    return invoke<ChatReply>("ask_loom", { message, sessionId, agentId, context });
   }
   if (!message.trim()) throw new Error("Enter a message first.");
-  const body: Record<string, string> = { query: message };
+  const body: Record<string, unknown> = { query: message };
   if (sessionId?.trim()) body.sessionId = sessionId;
   if (agentId?.trim()) body.agentId = agentId;
-  const value = await loomRequest("/v1/weave", body);
+  if (context && Object.keys(context).length > 0) body.context = context;
+  const value = await loomRequest("/v1/weave", body as object);
   const text = [value.text, value.response, value.content, value.reply, value.message]
     .find(value => typeof value === "string" && value.trim());
   if (!text) throw new Error("Loom returned an empty response. Check its agent configuration.");
@@ -1167,8 +1169,9 @@ export async function askLoomStream(
   message: string,
   sessionId?: string,
   agentId?: string,
+  context?: Record<string, string>,
 ): Promise<void> {
-  return invokeCmd<void>("ask_loom_stream", { requestId, message, sessionId, agentId });
+  return invokeCmd<void>("ask_loom_stream", { requestId, message, sessionId, agentId, context });
 }
 
 export async function cancelLoomStream(requestId: string): Promise<void> {
@@ -1292,3 +1295,97 @@ export const triggerWorkflowSchedule = (scheduleId: string) =>
   invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId });
 export const workflowScheduleHistory = (scheduleId: string) =>
   invokeCmd<unknown[]>("workflow_schedule_history", { scheduleId });
+export const pauseWorkflowSchedule = (scheduleId: string) =>
+  invokeCmd<unknown>("workflow_schedule_pause", { scheduleId });
+export const resumeWorkflowSchedule = (scheduleId: string) =>
+  invokeCmd<unknown>("workflow_schedule_resume", { scheduleId });
+export const cancelScheduledExecution = (executionId: string) =>
+  invokeCmd<unknown>("workflow_schedule_cancel_execution", { executionId });
+export const patternUpdatesStream = (requestId: string) =>
+  invokeCmd<void>("pattern_updates_stream", { requestId });
+export const taskUpdatesStream = (requestId: string, boardId: string) =>
+  invokeCmd<void>("task_updates_stream", { requestId, boardId });
+
+// ---- Loom tasks and boards (100% HTTP — no transport decision) ----
+
+export interface LoomTask {
+  id?: string;
+  title?: string;
+  description?: string;
+  objective?: string;
+  approach?: string;
+  acceptance_criteria?: string;
+  status?: string | number;
+  priority?: string | number;
+  board_id?: string;
+  assignee_agent_id?: string;
+  parent_id?: string;
+}
+
+export const listLoomBoards = () => invokeCmd<unknown[]>("task_boards_list");
+export const getLoomBoard = (boardId: string) => invokeCmd<unknown>("task_board_get", { boardId });
+export const createLoomBoard = (board: Record<string, unknown>) =>
+  invokeCmd<unknown>("task_board_create", { board });
+export const listLoomTasks = (boardId?: string, status?: string, query?: string) =>
+  invokeCmd<unknown[]>("loom_tasks_list", { boardId, status, query });
+export const getLoomTask = (taskId: string) => invokeCmd<unknown>("loom_task_get", { taskId });
+export const createLoomTask = (task: Record<string, unknown>) =>
+  invokeCmd<unknown>("loom_task_create", { task });
+export const updateLoomTask = (task: Record<string, unknown>) =>
+  invokeCmd<unknown>("loom_task_update", { task });
+export const deleteLoomTask = (taskId: string) =>
+  invokeCmd<string>("loom_task_delete", { taskId });
+export const claimLoomTask = (taskId: string, agentId?: string, sessionId?: string) =>
+  invokeCmd<unknown>("loom_task_claim", { taskId, agentId, sessionId });
+export const releaseLoomTask = (taskId: string) =>
+  invokeCmd<unknown>("loom_task_release", { taskId });
+export const closeLoomTask = (taskId: string) =>
+  invokeCmd<unknown>("loom_task_close", { taskId });
+export const transitionLoomTask = (taskId: string, newStatus: string, reason?: string) =>
+  invokeCmd<unknown>("loom_task_transition", { taskId, newStatus, reason });
+export const addLoomTaskDependency = (fromTaskId: string, toTaskId: string) =>
+  invokeCmd<unknown>("loom_task_add_dependency", { fromTaskId, toTaskId });
+export const removeLoomTaskDependency = (fromTaskId: string, toTaskId: string) =>
+  invokeCmd<string>("loom_task_remove_dependency", { fromTaskId, toTaskId });
+export const boardReadyTasks = (boardId: string) =>
+  invokeCmd<unknown[]>("task_board_ready", { boardId });
+export const boardBlockedTasks = (boardId: string) =>
+  invokeCmd<unknown[]>("task_board_blocked", { boardId });
+export const decomposeLoomTask = (goal: string, context?: string, boardId?: string) =>
+  invokeCmd<unknown>("loom_task_decompose", { goal, context, boardId });
+export const loomTaskContext = (agentId: string) =>
+  invokeCmd<unknown>("loom_task_context", { agentId });
+
+// ---- Skills (100% HTTP) ----
+
+export const addSkill = (inline: Record<string, unknown>) =>
+  invokeCmd<unknown>("skills_add", { inline });
+export const classifySkill = (skillName: string) =>
+  invokeCmd<unknown>("skills_classify", { skillName });
+export const bulkImportSkills = (requestId: string, srcDir: string, outDir?: string) =>
+  invokeCmd<void>("skills_bulk_import", { requestId, srcDir, outDir });
+
+// ---- MCP apps CRUD ----
+
+export const getApp = (name: string) => invokeCmd<unknown>("apps_get", { name });
+export const createApp = (body: Record<string, unknown>) =>
+  invokeCmd<unknown>("apps_create", { body });
+export const updateApp = (name: string, body: Record<string, unknown>) =>
+  invokeCmd<unknown>("apps_update", { name, body });
+export const deleteApp = (name: string) => invokeCmd<string>("apps_delete", { name });
+export const listComponentTypes = () => invokeCmd<unknown[]>("apps_component_types");
+
+// ---- Tools: register + permission ----
+
+export const registerTool = (tool: Record<string, unknown>) =>
+  invokeCmd<unknown>("tools_register", { tool });
+export const requestToolPermissionCmd = (
+  sessionId: string, toolName: string,
+  argsJson?: string, description?: string, riskLevel?: string,
+) => invokeCmd<unknown>("tool_permission_request", { sessionId, toolName, argsJson, description, riskLevel });
+
+// ---- Server administration ----
+
+export const getTlsStatus = () => invokeCmd<unknown>("tls_status");
+export const renewCertificate = () => invokeCmd<unknown>("tls_renew");
+export const runMigration = () => invokeCmd<unknown>("run_migration");

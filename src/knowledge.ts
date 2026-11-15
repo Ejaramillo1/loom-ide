@@ -1,8 +1,9 @@
 import { listKnowledge, readKnowledge, createKnowledge, saveKnowledge, relateKnowledge, reviewKnowledge, archiveKnowledge, restoreKnowledge, exportKnowledgeCanvas, syncKnowledge,
-  knowledgeSignature, saveCanvasLayout, loadCanvasLayout, listPatterns, getPattern,
+  knowledgeSignature, saveCanvasLayout, loadCanvasLayout, listPatterns, getPattern, createPattern, loadPatterns,
+  patternUpdatesStream, addSkill, classifySkill, bulkImportSkills,
   type KnowledgeListing, type KnowledgeNote, type KnowledgeEdge, type KnowledgeDetail, type KnowledgeAudit, type VaultSignature } from "./api";
 
-type Tab = "graph" | "canvas" | "notes" | "review" | "activity" | "patterns";
+type Tab = "graph" | "canvas" | "notes" | "patterns" | "skills" | "review" | "activity";
 export function matchingNotes(notes: KnowledgeNote[], query: string, kind = "", folder = "") {
   const q = query.trim().toLowerCase();
   return notes.filter(n => (!kind || n.meta.kind === kind) && (!folder || n.path.startsWith(`${folder}/`)) &&
@@ -33,7 +34,7 @@ function select(label: string, values: string[], value: string, all?: string) {
 }
 const time = (value: number) => new Date(value * 1000).toLocaleString();
 
-export function installKnowledge(navigate: () => void, pendingChanged: (count: number, failed: boolean) => void) {
+export function installKnowledge(navigate: () => void, pendingChanged: (count: number, failed: boolean) => void, onWatcherRefresh?: () => void) {
   const host = document.querySelector<HTMLElement>("#view-knowledge")!;
   const content = host.querySelector<HTMLElement>("#knowledge-content")!;
   const notice = host.querySelector<HTMLElement>("#knowledge-notice")!;
@@ -104,12 +105,15 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       if (sig.changed_at_ms !== lastSignature.changed_at_ms || sig.notes !== lastSignature.notes || sig.pending !== lastSignature.pending) {
         lastSignature = sig;
         void refresh();
+        // External vault edits also feed the Unity bench (§5.4.1): the
+        // shell re-pushes the bench's counts on watcher-driven refreshes.
+        onWatcherRefresh?.();
       }
     }).catch(() => { /* watcher failures are silent; the refresh button still works */ });
   }, 3000);
   function empty(text: string) { content.append(el("p", text, "knowledge-empty")); }
   function openTab(next: Tab) { navigate(); tab = next; render(); }
-  for (const [id, label] of [["graph", "Graph"], ["canvas", "Canvas"], ["notes", "Notes"], ["patterns", "Patterns"], ["review", "Memory garden"], ["activity", "Activity"]] as const) {
+  for (const [id, label] of [["graph", "Graph"], ["canvas", "Canvas"], ["notes", "Notes"], ["patterns", "Patterns"], ["skills", "Skills"], ["review", "Memory garden"], ["activity", "Activity"]] as const) {
     const b = button(label, () => openTab(id), "knowledge-tab"); b.dataset.tab = id; tabs.append(b);
   }
   function noteButton(note: KnowledgeNote, review = false) {
@@ -168,11 +172,13 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     }
     if (tab === "canvas") { renderCanvas(); return; }
     if (tab === "patterns") { void renderPatterns(); return; }
+    if (tab === "skills") { void renderSkills(); return; }
     renderGraph();
   }
   /** Loom's pattern library — one shelf of the knowledge surface, next to
-      the user's vault. Patterns are HTTP-bound; skills stay unwired until
-      the Phase 5 transport decision (gRPC-only service). */
+      the user's vault. Patterns are HTTP-bound; the shelf also carries the
+      create/load actions and lives updates (the backend's pattern stream
+      refreshes the listing). */
   async function renderPatterns() {
     content.replaceChildren(el("p", "Loading Loom's patterns…", "knowledge-empty"));
     let patterns: unknown[] = [];
@@ -183,9 +189,14 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       content.append(el("p", `Could not list Loom's patterns: ${String(error)} Start the Loom server and refresh.`, "knowledge-empty"));
       return;
     }
+    const tools = el("div", "", "knowledge-tools");
+    tools.append(
+      button("New pattern", openPatternCreate, "btn ghost"),
+      button("Load patterns", openPatternsLoad, "btn ghost"),
+    );
+    content.append(tools);
     if (!patterns.length) {
-      content.replaceChildren();
-      content.append(el("p", "No patterns reported by Loom.", "knowledge-empty"));
+      content.append(el("p", "No patterns reported by Loom. Start the Loom server and refresh, or create one here.", "knowledge-empty"));
       return;
     }
     const rows: { name: string; raw: unknown }[] = patterns.map((p) => ({
@@ -202,6 +213,109 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       if (sub) card.append(el("span", sub, "knowledge-review-label"));
       content.append(card);
     }
+  }
+  function openPatternCreate() {
+    frame("New pattern");
+    const name = el("input");
+    name.required = true;
+    name.setAttribute("aria-label", "Pattern name");
+    name.placeholder = "Pattern name";
+    const body = el("textarea");
+    body.rows = 8;
+    body.setAttribute("aria-label", "Pattern definition (JSON)");
+    body.placeholder = "Pattern definition (JSON)";
+    const error = dialog.querySelector<HTMLElement>(".knowledge-dialog-error")!;
+    dialog.append(name, body, button("Create pattern", async () => {
+      let def: Record<string, unknown>;
+      try {
+        def = JSON.parse(body.value || "{}") as Record<string, unknown>;
+      } catch {
+        error.textContent = "The pattern definition is not valid JSON.";
+        return;
+      }
+      def.name = name.value.trim();
+      try {
+        await createPattern(def);
+        dialog.close();
+        await refresh();
+      } catch (e) {
+        error.textContent = String(e);
+      }
+    }, "btn"));
+  }
+  function openPatternsLoad() {
+    frame("Load patterns");
+    const source = el("input");
+    source.required = true;
+    source.setAttribute("aria-label", "Pattern source");
+    source.placeholder = "Directory or repository path on the server";
+    const error = dialog.querySelector<HTMLElement>(".knowledge-dialog-error")!;
+    dialog.append(source, button("Load", async () => {
+      try {
+        await loadPatterns(source.value.trim());
+        dialog.close();
+        await refresh();
+      } catch (e) {
+        error.textContent = String(e);
+      }
+    }, "btn"));
+  }
+  /** Skills (100% HTTP): Loom has no list endpoint, so the shelf carries
+      the honest surface — add a skill (inline SKILL.md), classify one, or
+      bulk-import a directory on the server. */
+  function renderSkills() {
+    const intro = el("p", "Loom's skills are imported, added or classified — the server exposes no skill list to read. Import or add below; each action reports what the server said.", "knowledge-empty");
+    content.append(intro);
+    const addForm = el("div", "", "skills-form");
+    const addH = el("h3", "Add a skill");
+    const name = el("input");
+    name.setAttribute("aria-label", "Skill name");
+    name.placeholder = "Skill name (kebab-case)";
+    const md = el("textarea");
+    md.rows = 10;
+    md.setAttribute("aria-label", "SKILL.md content");
+    md.placeholder = "Full SKILL.md content, including frontmatter";
+    const addBtn = button("Add skill", async () => {
+      if (!name.value.trim() || !md.value.trim()) return;
+      try {
+        await addSkill({ name: name.value.trim(), skill_md: md.value });
+        showNotice("Skill added.");
+      } catch (e) {
+        fail(e);
+      }
+    }, "btn");
+    addForm.append(addH, name, md, addBtn);
+    content.append(addForm);
+    const classForm = el("div", "", "skills-form");
+    classForm.append(el("h3", "Classify a skill"));
+    const cname = el("input");
+    cname.setAttribute("aria-label", "Skill name to classify");
+    cname.placeholder = "Skill name";
+    classForm.append(cname, button("Classify", async () => {
+      if (!cname.value.trim()) return;
+      try {
+        const result = await classifySkill(cname.value.trim());
+        showNotice(`Classified: ${JSON.stringify(result).slice(0, 200)}`);
+      } catch (e) {
+        fail(e);
+      }
+    }, "btn ghost"));
+    content.append(classForm);
+    const importForm = el("div", "", "skills-form");
+    importForm.append(el("h3", "Bulk import"));
+    const dir = el("input");
+    dir.setAttribute("aria-label", "Source directory on the server");
+    dir.placeholder = "/path/on/server/to/skills";
+    importForm.append(dir, button("Import (streams progress)", async () => {
+      if (!dir.value.trim()) return;
+      try {
+        await bulkImportSkills(`skills-${Date.now()}`, dir.value.trim());
+        showNotice("Bulk import started — progress arrives as it runs.");
+      } catch (e) {
+        fail(e);
+      }
+    }, "btn ghost"));
+    content.append(importForm);
   }
   async function openPattern(name: string, raw: unknown) {
     frame(name);
@@ -388,6 +502,10 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   benchCanvasTab.addEventListener("click", () => { benchTab = "canvas"; renderBench(); });
   renderBench();
   bell.addEventListener("click", () => openTab("review"));
+  // Live pattern updates (§6.3.1): the shelf refreshes when Loom reports
+  // pattern changes; the backend stream is best-effort (the browser
+  // preview has no bridge, and a quiet failure costs nothing).
+  void patternUpdatesStream("patterns-shelf").catch(() => { /* no bridge */ });
   void refresh();
   return { refresh, newNote, openNote, showNotes: () => openTab("notes"), search: (value: string) => { query = value; if (tab === "notes") render(); },
     searchResults: (value: string) => data ? matchingNotes(data.notes, value) : [], isDialogOpen: () => dialog.open };

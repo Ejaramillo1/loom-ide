@@ -29,6 +29,7 @@ mod navigation;
 use experiment::{Experiment, ExperimentStore};
 mod loom_http;
 mod loom_stream;
+mod loom_tasks;
 mod spatial;
 mod store;
 mod workspace;
@@ -85,6 +86,11 @@ fn percent_encode(s: &str) -> String {
         }
     }
     out
+}
+
+/// Percent-encode a query-parameter value (spaces become %20).
+fn percent_encode_query(s: &str) -> String {
+    percent_encode(s)
 }
 
 fn workspace_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -1185,15 +1191,27 @@ fn parse_content_length(head: &str) -> Option<usize> {
 /// dribbles bytes cannot hold a worker forever and a runaway response
 /// cannot grow memory without bound. Timeouts surface as a plain
 /// "timed out" message instead of raw OS text.
+/// The Loom server address: `LOOM_ADDR` overrides the localhost default
+/// (§2.2.4 — configurable without recompiling).
+fn loom_addr() -> String {
+    std::env::var("LOOM_ADDR")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "127.0.0.1:5006".to_string())
+}
+
 fn loom_http_raw(
     method: &str,
     path: &str,
     body: Option<String>,
     read_timeout: Duration,
 ) -> Result<(u16, Vec<u8>), String> {
-    let mut stream =
-        TcpStream::connect_timeout(&"127.0.0.1:5006".parse().unwrap(), Duration::from_secs(2))
-            .map_err(|e| format!("Loom is unavailable. Start looms serve --http-port 5006. {e}"))?;
+    let addr = loom_addr();
+    let mut stream = TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(2))
+        .map_err(|e| {
+            format!("Loom is unavailable at {addr}. Start looms serve --http-port 5006. {e}")
+        })?;
     stream
         .set_read_timeout(Some(read_timeout))
         .map_err(|e| e.to_string())?;
@@ -1202,7 +1220,7 @@ fn loom_http_raw(
         .map_err(|e| e.to_string())?;
     let body = body.unwrap_or_default();
     let request = format!(
-        "{method} {path} HTTP/1.1\r\nHost: localhost:5006\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     stream
@@ -1305,7 +1323,18 @@ fn loom_request(
     body: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let read_timeout = Duration::from_secs(if body.is_some() { 180 } else { 4 });
-    let (status, payload) = loom_http_raw(method, path, body, read_timeout)?;
+    // One retry for transient connection failures on idempotent GETs only
+    // (§2.2.5); a failed POST is never replayed — it may have executed.
+    let first = loom_http_raw(method, path, body.clone(), read_timeout);
+    let (status, payload) = match first {
+        Err(e)
+            if method == "GET" && (e.contains("Connection refused") || e.contains("timed out")) =>
+        {
+            std::thread::sleep(Duration::from_millis(500));
+            loom_http_raw(method, path, body, read_timeout).map_err(|_| e)?
+        }
+        other => other?,
+    };
     if status == 204 {
         return Ok(serde_json::Value::Null);
     }
@@ -1691,6 +1720,7 @@ async fn ask_loom(
     message: String,
     session_id: Option<String>,
     agent_id: Option<String>,
+    context: Option<HashMap<String, String>>,
 ) -> Result<ChatReply, String> {
     if message.trim().is_empty() {
         return Err("Enter a message first.".into());
@@ -1705,6 +1735,13 @@ async fn ask_loom(
     if let Some(a) = agent_id {
         if !a.trim().is_empty() {
             obj.insert("agentId".into(), a.into());
+        }
+    }
+    // The vault context pack (§2.4): active work, intent and the open file
+    // travel with the query so the model answers with the real context.
+    if let Some(c) = context {
+        if !c.is_empty() {
+            obj.insert("context".into(), serde_json::json!(c));
         }
     }
     obj.insert("enableTrace".into(), serde_json::Value::Bool(true));
@@ -2022,6 +2059,8 @@ pub fn run() {
             loom_stream::execute_workflow_stream,
             loom_stream::session_subscribe,
             loom_stream::provider_abtest,
+            loom_stream::pattern_updates_stream,
+            loom_stream::task_updates_stream,
             loom_http::mcp_servers_list,
             loom_http::mcp_server_get,
             loom_http::mcp_server_add,
@@ -2045,6 +2084,40 @@ pub fn run() {
             loom_http::workflow_schedule_delete,
             loom_http::workflow_schedule_trigger,
             loom_http::workflow_schedule_history,
+            loom_http::workflow_schedule_pause,
+            loom_http::workflow_schedule_resume,
+            loom_http::workflow_schedule_cancel_execution,
+            loom_http::skills_add,
+            loom_http::skills_classify,
+            loom_http::skills_bulk_import,
+            loom_http::apps_get,
+            loom_http::apps_create,
+            loom_http::apps_update,
+            loom_http::apps_delete,
+            loom_http::apps_component_types,
+            loom_http::tools_register,
+            loom_http::tool_permission_request,
+            loom_http::tls_status,
+            loom_http::tls_renew,
+            loom_http::run_migration,
+            loom_tasks::task_boards_list,
+            loom_tasks::task_board_get,
+            loom_tasks::task_board_create,
+            loom_tasks::loom_tasks_list,
+            loom_tasks::loom_task_get,
+            loom_tasks::loom_task_create,
+            loom_tasks::loom_task_update,
+            loom_tasks::loom_task_delete,
+            loom_tasks::loom_task_claim,
+            loom_tasks::loom_task_release,
+            loom_tasks::loom_task_close,
+            loom_tasks::loom_task_transition,
+            loom_tasks::loom_task_add_dependency,
+            loom_tasks::loom_task_remove_dependency,
+            loom_tasks::task_board_ready,
+            loom_tasks::task_board_blocked,
+            loom_tasks::loom_task_decompose,
+            loom_tasks::loom_task_context,
             loom_http::patterns_list,
             loom_http::pattern_get,
             loom_http::pattern_create,

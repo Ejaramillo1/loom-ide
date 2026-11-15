@@ -27,6 +27,10 @@ while (controller == null && (DateTime.UtcNow - started).TotalSeconds < 90)
 }
 if (!controller) throw new Exception("Workbench controller is missing.");
 
+// The self-check runs with the SHIPPING tier (High, level 0), not the
+// editor's current level (§1.1.5/§1.7.6).
+QualitySettings.SetQualityLevel(0, false);
+
 var errors = new List<string>();
 void Check(bool condition, string message) { if (!condition) errors.Add(message); }
 

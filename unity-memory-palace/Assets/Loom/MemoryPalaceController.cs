@@ -45,11 +45,10 @@ namespace Loom.MemoryPalace
         // The three-point rig colors (§5.5): warm key, cool fill, white rim.
         static readonly Color FillCool = Rgb(133, 158, 202);
         static readonly Color RimWhite = Rgb(228, 236, 248);
-        // Emission hero discipline (§5.4): the sphere glows at 2–4× HDR;
-        // every other accent stays at 1–2 so only the state sphere blooms.
-        // Tuned to 2.0×: higher values blow the sphere into a flat white
-        // disc under ACES (the original complaint); at 2.0 the surface keeps
-        // its shading and bloom supplies the halo.
+        // Emission hero discipline (§5.4): the sphere is the hero at 2.0× HDR
+        // and every portal accent glows at 1.35–2.0× (spine, ribbon, screen,
+        // liquid, badge, eyes) — the plan wanted accents glowing too; the
+        // discipline is that the state sphere always stays the brightest.
         const float SphereEmission = 2.0f;
         internal const float AccentEmission = 1.35f;
 
@@ -72,6 +71,7 @@ namespace Loom.MemoryPalace
         Material wallMaterial;
         Material sphereMaterial;
         Material contactShadowMaterial;
+        UnityEngine.Rendering.Universal.Bloom bloomOverride;
         Light keyLight;
         Light fillLight;
         Light rimLight;
@@ -185,6 +185,17 @@ namespace Loom.MemoryPalace
 
         public void ApplyReducedMotion(string reduced) => reduceMotion = reduced == "true";
 
+        /// The shell's quality-tier choice (High/Balanced/Low). The index
+        /// mirrors the quality levels BeautifyBench wrote: High 0, Balanced 1,
+        /// Low 2. Per-tier bloom follows in Update.
+        public void ApplyQuality(string tier)
+        {
+            var index = string.Equals(tier, "Balanced", StringComparison.OrdinalIgnoreCase) ? 1
+                : string.Equals(tier, "Low", StringComparison.OrdinalIgnoreCase) ? 2
+                : 0;
+            if (index < QualitySettings.names.Length) QualitySettings.SetQualityLevel(index, false);
+        }
+
         static Color PortalColorWhite(string name)
         {
             foreach (var portal in Portals)
@@ -257,13 +268,23 @@ namespace Loom.MemoryPalace
                 else if (!reduceMotion && dust.isPaused) dust.Play();
             }
 
+            // Per-tier volume profile (§1.3.4): the Low tier turns bloom off
+            // ("Bloom off on Low tier"); the tier itself comes from the
+            // quality level the shell selected.
+            if (bloomOverride)
+            {
+                var tier = QualitySettings.names[QualitySettings.GetQualityLevel()];
+                var bloomOn = tier != "Low";
+                if (bloomOverride.active != bloomOn) bloomOverride.active = bloomOn;
+            }
+
             if (!reduceMotion)
             {
                 sphere.Rotate(0f, 1.2f * Time.deltaTime, 0f, Space.World);
                 var pulse = 1f + Mathf.Sin(Time.time * 0.35f) * 0.004f;
                 sphere.localScale = Vector3.one * 2.35f * pulse;
                 // The pulse animates emission, not a light: cheaper and
-                // bloom-stable (§5.4). HDR emission 2–4× makes the sphere
+                // bloom-stable (§5.4). HDR emission 2.0× keeps the sphere
                 // bloom while paper and matte surfaces stay under threshold.
                 if (sphereMaterial)
                     sphereMaterial.SetColor("_EmissionColor", liveStateColor * (SphereEmission + 0.3f * Mathf.Sin(Time.time * 1.1f)));
@@ -388,11 +409,13 @@ namespace Loom.MemoryPalace
             var grade = gradeObject.GetComponent<Volume>();
             grade.isGlobal = true;
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
-            var bloom = profile.Add<Bloom>(true);
+            var bloom = bloomOverride = profile.Add<Bloom>(true);
             bloom.threshold.Override(1.05f);
             bloom.intensity.Override(0.45f);
             bloom.scatter.Override(0.7f);
-            bloom.highQualityFiltering.Override(false);
+            // The high-quality filter costs more but keeps the glow soft
+            // without the cheap filter's blur artifacts (§1.3.1).
+            bloom.highQualityFiltering.Override(true);
             var tonemapping = profile.Add<Tonemapping>(true);
             tonemapping.mode.Override(TonemappingMode.ACES);
             var adjustments = profile.Add<ColorAdjustments>(true);
@@ -501,7 +524,7 @@ namespace Loom.MemoryPalace
                 : Quaternion.Euler(0f, yaw, 0f);
             var accentMaterial = Material(portal.Name, portal.Color, 0.42f, 0.015f);
             // One reserved accent per object (§5.4): emissive at 1–2× HDR so
-            // it reads as a soft glow while the sphere's 2–4× stays the hero.
+            // it reads as a soft glow while the sphere's 2.0× stays the hero.
             accentMaterial.EnableKeyword("_EMISSION");
             accentMaterial.SetColor("_EmissionColor", portal.Color * AccentEmission);
             var accent = BuildPhysicalPortal(portal.Name, root.transform, accentMaterial);
@@ -515,7 +538,7 @@ namespace Loom.MemoryPalace
             label.text = portal.Name;
             label.anchor = TextAnchor.MiddleCenter;
             label.alignment = TextAlignment.Center;
-            label.characterSize = 0.07f;
+            label.characterSize = 0.09f;
             label.fontSize = 48;
             label.color = Text;
             portalLabels.Add(label);
@@ -543,18 +566,18 @@ namespace Loom.MemoryPalace
             // tileable at 256 px (no imported assets; values documented in
             // docs/BENCH_MATERIALS.md).
             var paper = Material("Ivory paper", Rgb(229, 218, 195), 0.25f, 0f);
-            paper.SetTexture("_BaseMap", PaperTexture(256));
-            paper.SetTexture("_BumpMap", PaperNormal(256));
+            paper.SetTexture("_BaseMap", PaperTexture(512));
+            paper.SetTexture("_BumpMap", PaperNormal(512));
             paper.EnableKeyword("_NORMALMAP");
             var ink = Material("Graphite", Rgb(47, 51, 54), 0.3f, 0f);
             var metal = Material("Brushed nickel", Rgb(150, 159, 162), 0.72f, 0f);
             metal.SetFloat("_Metallic", 0.88f);
-            metal.SetTexture("_BaseMap", BrushedMetalTexture(256));
-            metal.SetTexture("_BumpMap", BrushedMetalNormal(256));
+            metal.SetTexture("_BaseMap", BrushedMetalTexture(512));
+            metal.SetTexture("_BumpMap", BrushedMetalNormal(512));
             metal.EnableKeyword("_NORMALMAP");
             var wood = Material("Oiled walnut", Rgb(105, 66, 39), 0.37f, 0f);
-            wood.SetTexture("_BaseMap", WoodGrainTexture(256));
-            wood.SetTexture("_BumpMap", WoodGrainNormal(256));
+            wood.SetTexture("_BaseMap", WoodGrainTexture(512));
+            wood.SetTexture("_BumpMap", WoodGrainNormal(512));
             wood.EnableKeyword("_NORMALMAP");
             var glassTemplate = Resources.Load<Material>("LoomGlass");
             if (!glassTemplate) throw new InvalidOperationException("Loom glass material resource is missing");

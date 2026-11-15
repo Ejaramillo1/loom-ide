@@ -97,6 +97,24 @@ controller.SendMessage("MoveCamera");
 await Bookmark("bench-column.png", new Vector3(0f, 8.8f, -23.3f), bench);
 camera.aspect = 1280f / 548f;
 
+// §1.6.5: judge the rig light by light — key alone, fill alone, rim alone.
+var allLights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsInactive.Exclude);
+Light ByName(string n) => System.Array.Find(allLights, l => l.name == n);
+var keyLight = ByName("Warm key");
+var fillLight = ByName("Cool fill");
+var rimLight = ByName("White rim");
+var saved = new System.Collections.Generic.Dictionary<Light, float>();
+foreach (var l in allLights) saved[l] = l.intensity;
+async Task Solo(string name, Light keep)
+{
+    foreach (var l in allLights) l.intensity = l == keep ? l.intensity : 0f;
+    await Bookmark(name, new Vector3(0f, 5.37f, -12.76f), bench);
+    foreach (var l in allLights) l.intensity = saved[l];
+}
+await Solo("bench-light-key.png", keyLight);
+await Solo("bench-light-fill.png", fillLight);
+await Solo("bench-light-rim.png", rimLight);
+
 controller.enabled = true;
 EditorApplication.ExitPlaymode();
 return new { shots, outDir, size = $"{width}x{height}", post = volume != null };
