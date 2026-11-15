@@ -49,6 +49,36 @@ build plan.html`, 17 secciones).
 - **Orden sugerido:** sección 1 (la borrosidad es lo que Eduardo ve), luego 2 y 7
   (la conexión viva y la verificación, que es lo que impide afirmar que algo está
   hecho), luego 3, 4, 5 y 6.
+---
+
+## Decisiones registradas (15 nov 2026)
+
+Las 10 decisiones del plan, decididas por Eduardo una por una el 15 de noviembre
+de 2026. Esta sección prevalece sobre los defaults mencionados en los ítems: donde
+un ítem diga "decisión pendiente", vale lo registrado aquí.
+
+1. **Monaco** para Code mode, con su visor de diff. CodeMirror queda descartado.
+   Desbloquea 5.1.1, 5.1.3, 5.1.4, 5.1.5 y 5.1.6.
+2. **promptfoo + Docling** aprobados para empezar el benchmark. El resto de
+   componentes (filex, FileBrowser Quantum, xterm.js, Filestash,
+   Cognee/Mem0/Graphiti, E2B, Opik, LiteLLM) se decide uno por uno. Desbloquea
+   6.6.1 y 6.6.2.
+3. **Cliente gRPC en Rust** para el transporte de la Fase 5, con Judge primero.
+   Loom no se toca. Desbloquea 4.4.1, 6.1.1 y 6.2.1.
+4. **Panel estático "3D no disponible"** para Q2; las vistas no espaciales siguen
+   alcanzables. Desbloquea 7.5.2.
+5. **Sí, conectar** Loom como servidor MCP al harness, en las dos direcciones, con
+   una lista explícita de qué herramientas del PC se exponen. Desbloquea 3.5.2 a
+   3.5.7.
+6. **Migración completa** del trabajo local a tareas de Loom. El mapeo de intents
+   y attention se define antes de migrar, y la migración es explícita, nunca en
+   silencio. Desbloquea 4.2.1 a 4.2.4.
+7. **Cablear el avatar**. Su concepto de cuenta o perfil se define al implementar.
+8. **Ambas superficies de estado con roles definidos**: píldora precisa con texto,
+   esfera ambiental con color, un solo estado compartido. Desbloquea 2.6.2.
+9. **Añadir el décimo tipo de relación: "blocks"**. Desbloquea 5.5.5.
+10. **Workflow streaming primero, luego ABTest**. Desbloquea 4.3.1 y luego 4.4.2.
+
 
 ---
 
@@ -403,10 +433,10 @@ visible, contexto real en el chat y el loop vivo ejercitado en la app.
 
 ### 2.6 Salud y estado
 
-- **2.6.1 Una sola superficie de estado Loom.** [verificado] Es la recomendación 2
-  de la crítica y sigue abierta: la píldora del header y la esfera muestran lo
-  mismo. Aceptación: decisión registrada (píldora o esfera, o ambas con roles
-  definidos).
+- **2.6.1 Ambas superficies con roles definidos.** [verificado] Decidido el 15 nov
+  2026: la píldora es el estado preciso con texto y la esfera el estado ambiental
+  con color, las dos del mismo estado único. Es la recomendación 2 de la crítica.
+  Aceptación: las dos superficies coherentes, sin contradecirse.
 - **2.6.2 Píldora y esfera con una sola fuente de verdad.** [verificado]
   `loomState()` (`loom-state.ts:4`) es la derivación única para la esfera y
   `setSphereState` (`main.ts:266-270`) re-renderiza la píldora, pero siguen siendo
@@ -542,9 +572,9 @@ el lado servidor MCP hacia el harness.
 
 ### 3.5 MCP servidor hacia el harness
 
-- **3.5.1 Decisión: conectar `cmd/loom-mcp` al harness.** [verificado] Diferido
-  explícitamente ("cross-project; no harness changes without a decision",
-  `DESIGN_PROGRESS.md`). Aceptación: la decisión registrada.
+- **3.5.1 Decisión: conectar `cmd/loom-mcp` al harness.** [verificado] Decidido
+  el 15 nov 2026: se conecta, en las dos direcciones. Aceptación: la conexión
+  hecha, con la lista explícita de herramientas del PC expuestas.
 - **3.5.2 Documentar `cmd/loom-mcp` y sus ~50 herramientas `loom_*`.**
   [verificado] No hay ningún comando, wrapper ni entrada en el IDE. Aceptación:
   el documento existe.
@@ -650,12 +680,14 @@ ni cambio en Loom. El IDE hoy re-implementa el trabajo localmente (`get_work_ite
 - **4.2.3 `StreamTaskUpdates` en vivo.** [verificado] `GET
   /v1/boards/{board_id}/updates:stream` (`task.proto:159-161`). Aceptación: el
   tablero se actualiza en vivo sin refrescar.
-- **4.2.4 Nada migrado en silencio.** [verificado] El default es read-bridge only
-  (Fase 5). Aceptación: ninguna tarea local se mueve a Loom sin una acción
-  explícita.
-- **4.2.5 Decisión de migración: read-bridge, migración completa o local para
-  siempre.** [verificado] Es una decisión de Eduardo. Aceptación: la decisión
-  registrada.
+- **4.2.4 Nada migrado en silencio.** [verificado] La migración completa está
+  decidida (ver 4.2.5), pero cada movimiento es explícito: ninguna tarea local se
+  mueve a Loom sin una acción explícita. Aceptación: la migración hecha con
+  registro de cada movimiento.
+- **4.2.5 Decisión de migración: migración completa.** [verificado] Decidido el
+  15 nov 2026: todo el trabajo local se mueve a tareas de Loom. Aceptación: la
+  decisión registrada y el mapeo de intents y attention definido antes de migrar
+  (ver 4.2.4).
 - **4.2.6 Filtros por tablero, estado y agente.** [verificado] Aceptación: el
   tablero se filtra sin perder su fuente.
 - **4.2.7 Dependencias visibles en el tablero.** [verificado] Aceptación: una
@@ -666,7 +698,8 @@ ni cambio en Loom. El IDE hoy re-implementa el trabajo localmente (`get_work_ite
 - **4.3.1 Workflow streaming en la UI.** [verificado] El backend existe
   (`execute_workflow_stream`, `lib.rs:2022`; `loom_stream.rs:125-141`; `POST
   /v1/workflows:stream`) y emite eventos `loom-workflow`, pero cero coincidencias
-  en `src/`. Aceptación: la ejecución de un workflow se ve en vivo.
+  en `src/`. Priorizado el 15 nov 2026: primero, antes que ABTest. Aceptación: la
+  ejecución de un workflow se ve en vivo.
 - **4.3.2 Scheduling UI.** [verificado] El backend tiene 7 de 10 comandos
   (`lib.rs:2041-2047`); ninguno tiene UI (cero coincidencias de
   `workflow_schedule` en `src/api.ts` y `src/`). Aceptación: la vista de horarios
@@ -697,16 +730,15 @@ ni cambio en Loom. El IDE hoy re-implementa el trabajo localmente (`get_work_ite
   (`provider_abtest`, `lib.rs:2024`; `loom_stream.rs:165-200`; `POST
   /v1/providers:abtest`, streaming; el proto lo confirma:
   `rpc ABTest(...) returns (stream ABTestEvent)`, `loom.proto:290-295`), pero
-  cero coincidencias en `src/`. Aceptación: el ABTest se ve junto a los brazos
-  locales de Experiments.
-- **4.4.3 Decisión de transporte registrada.** [verificado] Gateway bindings en
-  Loom, cliente gRPC en Rust, o mezcla por servicio. No existe registrada en
-  ningún sitio; `loom_http.rs:7-9` solo dice que "quedan sin conectar hasta que se
-  tome la decisión de transporte de la Fase 5". Aceptación: la decisión registrada
-  con su motivo.
-- **4.4.4 Judge como bindings (recomendación del plan).** [verificado] Es la
-  recomendación de §14.5, sin confirmar. Aceptación: confirmada o cambiada por
-  Eduardo.
+  cero coincidencias en `src/`. Priorizado el 15 nov 2026: después del workflow
+  streaming. Aceptación: el ABTest se ve junto a los brazos locales de
+  Experiments.
+- **4.4.3 Decisión de transporte: cliente gRPC en Rust.** [verificado] Decidido el
+  15 nov 2026: cliente gRPC (tonic) en el backend del IDE; Loom no se toca.
+  Aceptación: la decisión registrada y aplicada en 4.4.1, 6.1.1 y 6.2.1.
+- **4.4.4 Judge por el cliente gRPC.** [verificado] La recomendación del plan
+  (Judge como bindings) quedó sustituida por la decisión del 15 nov 2026: Judge
+  llega por el cliente gRPC en Rust. Aceptación: Judge conectado por gRPC.
 - **4.4.5 Brazos locales contra brazos Loom: comparar.** [verificado] Aceptación:
   la comparación se ve en la misma vista.
 - **4.4.6 Judge score reproducible desde el trace.** [por confirmar] Es la
@@ -783,9 +815,9 @@ bench Unity y la limpieza del código muerto del frontend.
 - **5.1.1 Monaco en Code mode.** [verificado] Cero coincidencias de `Monaco` en
   `main.ts`; `index.html:158` sigue siendo `<textarea id="code-editor">`.
   Aceptación: Monaco abierto en Code mode con resaltado.
-- **5.1.2 Decisión: Monaco o CodeMirror.** [verificado] Es una decisión por
-  dependencia (Monaco MIT, CodeMirror 6 MIT y más ligero). Aceptación: la
-  decisión registrada.
+- **5.1.2 Decisión: Monaco.** [verificado] Decidido el 15 nov 2026: Monaco (MIT).
+  CodeMirror 6 queda descartado. Aceptación: la decisión registrada y aplicada en
+  5.1.1.
 - **5.1.3 Resaltado y autocompletado básico.** [verificado] Aceptación: el editor
   resalta el lenguaje del archivo abierto.
 - **5.1.4 Vista de diff para cambios propuestos por agentes.** [verificado] No
@@ -879,9 +911,9 @@ bench Unity y la limpieza del código muerto del frontend.
 - **5.5.4 Archival de notas: verificar "Show archived".** [verificado] El
   archival existe (status `archived`, archivo preservado, versiones y auditoría
   retenidas); falta verificarlo en la UI. Aceptación: archivar y ver archivadas.
-- **5.5.5 Décimo tipo de relación: decidir si se añade.** [verificado] Era un
-  miscount: el inventario lista nueve y `RELATIONS` define las mismas nueve.
-  Aceptación: la decisión registrada (nueve o diez).
+- **5.5.5 Décimo tipo de relación: "blocks".** [verificado] Decidido el 15 nov
+  2026: se añade "blocks" (bloquea). El miscount original queda corregido (eran
+  nueve). Aceptación: los diez tipos definidos en `RELATIONS`.
 - **5.5.6 Crear, editar, archivar y ver archivadas.** [por confirmar]
   Aceptación: el ciclo completo hecho en vivo.
 - **5.5.7 Notas propuestas por agentes solo como "proposed".** [por confirmar]
@@ -925,10 +957,11 @@ bench Unity y la limpieza del código muerto del frontend.
   `sphere.ts:18-27`: `attention` es crema cálido (`250,238,214`), no el ámbar
   decidido. Relevante solo si se resucita la clase. Aceptación: corregido si se
   resucita.
-- **5.7.3 Avatar decorativo: cablearlo o quitarlo.** [verificado]
-  `index.html:40`: `<span class="avatar" title="You">`; cero coincidencias de
-  `avatar` en `main.ts` (sin handler); solo CSS. Es la recomendación 1 de la
-  crítica. Aceptación: la decisión registrada.
+- **5.7.3 Avatar decorativo: cablearlo.** [verificado] Decidido el 15 nov 2026:
+  se cablea. `index.html:40`: `<span class="avatar" title="You">`; cero
+  coincidencias de `avatar` en `main.ts` (sin handler); solo CSS. Es la
+  recomendación 1 de la crítica. Aceptación: cableado, con su concepto de cuenta
+  o perfil definido.
 - **5.7.4 Dos significados de "experiment": documentar o fusionar.**
   [verificado] Registros JSON contra notas kind `experiment` en el vault; persiste
   por decisión, sin fusionar. Aceptación: la decisión documentada en la UI o en el
@@ -953,9 +986,10 @@ aparte, tiene aquí su sección.
 
 ### 6.1 Graph memory (gRPC-only)
 
-- **6.1.1 Decisión de transporte.** [verificado] `graph_memory.proto` tiene 0
-  anotaciones HTTP: es gRPC-only de verdad y forma parte de la decisión de la
-  Fase 5 (ver 4.4.3). Aceptación: la decisión registrada.
+- **6.1.1 Decisión de transporte: cliente gRPC.** [verificado]
+  `graph_memory.proto` tiene 0 anotaciones HTTP: es gRPC-only de verdad y llega
+  por el cliente gRPC decidido el 15 nov 2026 (ver 4.4.3). Aceptación: la decisión
+  registrada y aplicada.
 - **6.1.2 Visor de graph memory en Knowledge.** [verificado] Cero RPCs
   conectados. Aceptación: entidades, relaciones y recall visibles en Knowledge.
 - **6.1.3 Escritura después; forget detrás de confirmación explícita.**
@@ -973,9 +1007,9 @@ aparte, tiene aquí su sección.
 
 ### 6.2 Memory layer
 
-- **6.2.1 MemoryLayerService (5 RPCs, gRPC-only): conectar o dejar fuera con
-  motivo.** [verificado] `memory.proto` tiene 0 anotaciones HTTP. Aceptación: la
-  decisión registrada.
+- **6.2.1 MemoryLayerService (5 RPCs, gRPC-only): conectar por el cliente gRPC.**
+  [verificado] `memory.proto` tiene 0 anotaciones HTTP; llega por el cliente gRPC
+  decidido el 15 nov 2026 (ver 4.4.3). Aceptación: la decisión registrada.
 - **6.2.2 Memoria de agente visible en el IDE.** [verificado] El experimento de
   memoria (59% contra 40%, +19 puntos, p=0.03) no se ve en el IDE. Aceptación: el
   resultado y sus trazas se ven.
@@ -1048,12 +1082,11 @@ aparte, tiene aquí su sección.
 
 ### 6.6 Evaluación y benchmark (componentes open source)
 
-- **6.6.1 promptfoo: evaluación de prompts.** [verificado] Es el veredicto del
-  research de componentes: empezar aquí (MIT). Aceptación: la decisión de
-  adoptarlo registrada.
-- **6.6.2 Docling: PDF a Markdown al vault.** [verificado] Segundo del veredicto
-  (MIT). Aceptación: la decisión registrada; los archivos no confiables se
-  procesan en sandbox (28 avisos de seguridad entre junio y octubre de 2026).
+- **6.6.1 promptfoo: evaluación de prompts.** [verificado] Aprobado el 15 nov 2026
+  (MIT). Aceptación: adoptado y en uso.
+- **6.6.2 Docling: PDF a Markdown al vault.** [verificado] Aprobado el 15 nov 2026
+  (MIT). Aceptación: adoptado; los archivos no confiables se procesan en sandbox
+  (28 avisos de seguridad entre junio y octubre de 2026).
 - **6.6.3 Cognee contra Mem0 contra Graphiti: elegir UNO.** [verificado]
   Decisión por dependencia (memoria y grafo de conocimiento). Aceptación: uno
   elegido con motivo.
@@ -1200,12 +1233,12 @@ cosas falsas. Sin esta sección, ninguna otra se puede dar por hecha.
 
 ### 7.5 Q2 y robustez ante fallo de Unity
 
-- **7.5.1 Decisión Q2: vista completa, panel estático o seguir diferido.**
-  [verificado] Decisión vigente: diferido. El plan la re-pregunta porque
-  HDR+MSAA+post sube las odds de fallo. Aceptación: la decisión registrada.
-- **7.5.2 Panel estático "3D unavailable" (opción barata) si se aprueba.**
-  [verificado] Aceptación: el panel existe y las vistas no espaciales siguen
-  alcanzables.
+- **7.5.1 Decisión Q2: panel estático.** [verificado] Decidido el 15 nov 2026:
+  panel estático "3D no disponible". El plan la re-preguntaba porque HDR+MSAA+post
+  sube las odds de fallo. Aceptación: el panel construido (ver 7.5.2).
+- **7.5.2 Panel estático "3D no disponible" (opción barata).** [verificado]
+  Aprobado el 15 nov 2026. Aceptación: el panel existe y las vistas no espaciales
+  siguen alcanzables.
 - **7.5.3 Retry es hoy el único control.** [verificado] `index.html:77-80` solo
   ofrece Retry. Aceptación: el control existe o se añade el panel.
 - **7.5.4 Qué pasa si WebGL no carga (WebGL 2.0 only).** [por confirmar]
@@ -1256,22 +1289,28 @@ cosas falsas. Sin esta sección, ninguna otra se puede dar por hecha.
 
 ---
 
-## Decisiones que solo Eduardo puede tomar (resumen)
+## Decisiones registradas (resumen, 15 nov 2026)
 
-1. Monaco o CodeMirror para Code mode (5.1.2).
-2. Resto de componentes del benchmark: filex, FileBrowser Quantum, xterm.js,
-   Filestash, promptfoo, Docling, Cognee/Mem0/Graphiti, E2B, Opik, LiteLLM (5.2.2,
-   5.3.1, 6.6).
-3. Transporte Fase 5: gateway bindings, cliente gRPC en Rust o mezcla por servicio
-   (4.4.3).
-4. Q2: fallback si Unity falla (7.5.1).
-5. Loom-como-servidor-MCP contra el harness MuseBridge (3.5.1).
-6. Migración de tareas: read-bridge, migración completa o local para siempre
-   (4.2.5).
-7. Avatar: cablearlo o quitarlo (5.7.3).
-8. Una sola superficie de estado Loom: píldora o esfera (2.6.1).
-9. Décimo tipo de relación: nueve o diez (5.5.5).
-10. Workflow streaming y ABTest: priorización (4.3.1, 4.4.2).
+1. **Monaco** para Code mode, con su visor de diff (5.1.2).
+2. **promptfoo + Docling** aprobados para empezar el benchmark; el resto de
+   componentes (filex, FileBrowser Quantum, xterm.js, Filestash,
+   Cognee/Mem0/Graphiti, E2B, Opik, LiteLLM) se decide uno por uno (5.2.2, 5.3.1,
+   6.6).
+3. **Cliente gRPC en Rust** para el transporte de la Fase 5, con Judge primero;
+   Loom no se toca (4.4.3).
+4. **Panel estático "3D no disponible"** para Q2; las vistas no espaciales siguen
+   alcanzables (7.5.1).
+5. **Sí, conectar** Loom como servidor MCP al harness, en las dos direcciones, con
+   una lista explícita de qué herramientas del PC se exponen (3.5.1).
+6. **Migración completa** del trabajo local a tareas de Loom; el mapeo de intents
+   y attention se define antes de migrar y la migración es explícita, nunca en
+   silencio (4.2.5).
+7. **Cablear el avatar**; su concepto de cuenta o perfil se define al implementar
+   (5.7.3).
+8. **Ambas superficies de estado con roles definidos**: píldora precisa con texto,
+   esfera ambiental con color, un solo estado compartido (2.6.1).
+9. **Añadir el décimo tipo de relación: "blocks"** (5.5.5).
+10. **Workflow streaming primero, luego ABTest** (4.3.1, 4.4.2).
 
 ## Lo que ya está resuelto (para no dejarlo como pendiente)
 
