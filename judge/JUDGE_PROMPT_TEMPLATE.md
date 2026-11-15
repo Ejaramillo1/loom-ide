@@ -33,16 +33,58 @@ nunca push.
 - Decisiones que ya están tomadas y no se re-litigan: <...>
 - Qué no tocar: <...>
 
-## Criterio de aceptación
+## Entradas (inputs)
 
-- <comandos que deben pasar, p. ej. npm test, cargo test, Unity recompile>
-- <qué debe ser visible/comprobable al terminar>
+- <entrada 1: ruta o recurso exacto con su contenido/estado de partida>
+- <entrada 2: ...>
+
+## Estado inicial
+
+- HEAD <sha>; árbol con/sin cambios sin commitear (inventariados).
+- <estado relevante del feature: "no existe", "parcial en X", ...>
+
+## Cambios permitidos
+
+- <lista de archivos/áreas que la tarea puede tocar>
+
+## Cambios prohibidos
+
+- <lista de archivos/áreas que no debe tocar, p. ej. Loom, Unity, datos del vault>
+
+## Resultado esperado
+
+- <comportamiento observable tras terminar>
+- <qué NO debe ocurrir>
+
+## Criterio de aceptación (grounding/evidencia)
+
+- <comandos que deben pasar, con los números que el reporte debe mostrar>
+- <evidencia concreta exigida: archivo de log, captura, conteo de tests, bundle size>
+- <prueba de que el cambio se ejecutó de verdad, no solo que compila>
+
+## Versiones
+
+- OpenCode <versión>, Node <versión>, Rust <versión>, Unity <versión>.
+- Herramientas instaladas que la tarea puede usar; ninguna instalación nueva.
+
+## Presupuesto
+
+- <presupuesto de tiempo/llamadas del agente>; si se agota, commit de lo
+  completo con el ledger de progreso actualizado y el bloqueante exacto.
 
 ## Al terminar
 
 Commitea localmente (un commit lógico por paso) e informa: archivos
 cambiados con SHAs, resultados de verificación con números, decisiones
 tomadas y qué queda con su motivo. No termines con una pregunta.
+
+## Resultado del juicio (lo llena el juez, no el agente)
+
+- Veredicto: PASS / FAIL / NEEDS-DECISION.
+- Juicio por criterio: <criterio → pasado/fallado, con la evidencia revisada>.
+- Lo que el agente probó (de su reporte) y lo que el juez re-verificó.
+- Intentos reales registrados: <intento N → resultado>.
+- Pendiente / unblock para el siguiente intento.
 ```
 
 ## Ejemplo (tarea real: Monaco en Code mode)

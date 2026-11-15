@@ -69,6 +69,16 @@ const CANVAS: &str = "50 Projects/Agent Memory/Artifacts/Knowledge.canvas";
 pub static ACCESS: Mutex<()> = Mutex::new(());
 
 pub fn default_root() -> PathBuf {
+    // Portability without relocation (QC-16): an explicit compatible
+    // location setting can point the vault elsewhere; the default
+    // preserves the existing location and data exactly.
+    if let Some(dir) = std::env::var("LOOM_VAULT_DIR")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        return PathBuf::from(dir);
+    }
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -467,7 +477,12 @@ impl Vault {
                 let p = entry.path();
                 let Ok(meta) = fs::metadata(&p) else { continue };
                 if meta.is_dir() {
-                    if entry.file_name().to_string_lossy().starts_with('.') {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    // Hidden dirs are skipped EXCEPT .loom: relation-only
+                    // edits change .loom/ledger.json without touching any
+                    // note file, and the watcher signature must see them
+                    // (QC-18).
+                    if name.starts_with('.') && name != ".loom" {
                         continue;
                     }
                     newest(&p, best);
@@ -1047,7 +1062,15 @@ pub fn knowledge_canvas_layout_save(
 ) -> Result<(), String> {
     let path = canvas_layout_path(&app)?;
     let json = serde_json::to_string(&positions).map_err(|e| e.to_string())?;
-    std::fs::write(&path, json).map_err(|e| format!("Cannot save layout: {e}"))
+    // Atomic write (QC-19): the layout lands via a temp file + rename, so
+    // a crash mid-write leaves the previous layout intact, and the error
+    // surfaces instead of being swallowed.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json).map_err(|e| format!("Cannot save layout: {e}"))?;
+    std::fs::rename(&tmp, &path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("Cannot save layout: {e}")
+    })
 }
 
 #[tauri::command]
@@ -1573,5 +1596,29 @@ mod tests {
             v.list("").pending
         );
         assert_eq!(read_optional(&root, LEDGER, 32 * NOTE_CAP).unwrap(), before);
+    }
+    #[test]
+    fn relation_only_edits_change_the_vault_signature() {
+        let mut v = vault();
+        let a = create(&mut v, Actor::Human);
+        let b = create(&mut v, Actor::Human);
+        let before = v.changed_at_ms();
+        // Ensure the ledger write lands in a strictly later mtime bucket.
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        v.relate(
+            Edge {
+                from: a.clone(),
+                to: b.clone(),
+                kind: "derived from".into(),
+            },
+            false,
+            &v.revision.clone(),
+        )
+        .unwrap();
+        let after = v.changed_at_ms();
+        assert!(
+            after > before,
+            "relation-only edits must move the watcher signature (QC-18)"
+        );
     }
 }

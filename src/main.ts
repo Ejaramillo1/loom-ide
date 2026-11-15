@@ -3855,7 +3855,8 @@ function renderApps() {
     open.textContent = "Open";
     open.addEventListener("click", () => {
       const url = `http://localhost:5006/apps/${encodeURIComponent(app.name ?? "")}`;
-      window.open(url, "_blank");
+      // Server pages are untrusted: open detached, without opener access.
+      window.open(url, "_blank", "noopener,noreferrer");
     });
     const del = document.createElement("button");
     del.type = "button";
@@ -4662,21 +4663,35 @@ function setArtifactTab(tab: "artifacts" | "documents") {
 }
 
 /** Search artifacts on the server; a query under 2 characters restores
-    the full list. Failures keep the previous list and say so. */
+    the full list. Failures keep the previous list and say so. A shared
+    request-generation guard (QC-15) means an older response can never
+    replace the results (or clear the error) of a newer query. */
 let artifactSearchTimer: ReturnType<typeof setTimeout> | undefined;
+let artifactSearchSeq = 0;
 async function searchArtifactsView(query: string) {
   const errorEl = document.querySelector<HTMLElement>("#artifact-search-error");
   const q = query.trim();
   if (q.length < 2) {
+    const token = ++artifactSearchSeq;
     if (errorEl) errorEl.hidden = true;
-    await refreshGlobalArtifacts();
+    try {
+      await refreshGlobalArtifacts();
+    } finally {
+      // A stale restore must not clobber a newer search's results.
+      if (token !== artifactSearchSeq) return;
+      renderArtifacts();
+    }
     return;
   }
+  const token = ++artifactSearchSeq;
   try {
-    artifacts = await searchArtifacts(q);
+    const found = await searchArtifacts(q);
+    if (token !== artifactSearchSeq) return; // a newer query owns the view
+    artifacts = found;
     setLoomReachable(true);
     if (errorEl) errorEl.hidden = true;
   } catch (err) {
+    if (token !== artifactSearchSeq) return;
     if (isLoomConnectionError(err)) setLoomReachable(false);
     if (errorEl) {
       errorEl.textContent = `Could not search artifacts: ${err instanceof Error ? err.message : String(err)}`;

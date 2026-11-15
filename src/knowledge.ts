@@ -63,13 +63,16 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   const showNotice = (text = "", error = false) => { notice.textContent = text; notice.hidden = !text; notice.classList.toggle("error", error); };
   const fail = (error: unknown) => { showNotice(String(error), true); };
   function changed() { if (data) { pendingChanged(data.pending, false); bell.textContent = `🔔 ${data.pending}`; bell.setAttribute("aria-label", `Memory garden: ${data.pending} pending proposals`); } }
-  /** Persist canvas positions (debounced) — the durable-layout store. */
+  /** Persist canvas positions (debounced) — the durable-layout store.
+      Failures surface in the notice instead of being swallowed (QC-19). */
   function scheduleLayoutSave() {
     if (layoutSaveTimer !== null) clearTimeout(layoutSaveTimer);
     layoutSaveTimer = setTimeout(() => {
       layoutSaveTimer = null;
       const rows = [...positions.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y }));
-      void saveCanvasLayout(rows).catch(() => { /* layout save is best-effort */ });
+      void saveCanvasLayout(rows).catch((error) => {
+        showNotice(`Could not save the canvas layout: ${String(error)}`, true);
+      });
     }, 800) as unknown as number;
   }
   async function refresh() {
@@ -84,7 +87,10 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
           for (const row of saved) positions.set(row.id, { x: row.x, y: row.y });
           renderBench();
         } catch {
-          /* a missing or unreadable layout file is not an error state */
+          // A corrupt layout is never overwritten with a fallback: the
+          // default arrangement renders, the file stays untouched, and
+          // the failure is visible (QC-19).
+          showNotice("The saved canvas layout is unreadable — showing the default arrangement. The layout file was left untouched.", true);
         }
       }
       try { lastSignature = await knowledgeSignature(); } catch { lastSignature = null; }
