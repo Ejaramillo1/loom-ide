@@ -142,7 +142,7 @@ let pendingCreatedIntent: { id: string; statement: string } | null = null;
 /** Last intents-load failure, kept so the header can say so instead of
     showing the empty state. Never clears the previously loaded intents. */
 let intentsLoadError: string | null = null;
-let mode: Mode = "experiment";
+let mode: Mode = "spatial";
 let sphereState: SphereState = "idle";
 let knowledge: ReturnType<typeof installKnowledge> | null = null;
 let pendingKnowledge = 0;

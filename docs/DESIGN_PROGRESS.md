@@ -50,6 +50,6 @@ Implementation underway. Verification and local phase commits follow.
 
 - Removed the compact Canvas `scale(0.62)` (13px text had become ~8px); the bench canvas now scrolls at full reading size.
 - Combined the two stacked bench panels (Graph + Canvas) into one pane with a Graph/Canvas toggle, so the landing screen no longer duplicates the same knowledge twice.
-- The bench starts on the Experiment view (not Spatial) so the app opens on the experiment question/variants; Spatial remains a bottom-nav destination.
+- The bench starts on the Spatial (Unity) view — Unity-first, per Eduardo — and Experiment remains a bottom-nav tab rather than the landing.
 - Unity no longer shrinks its UI (`GUI.matrix` scale removed) and no longer draws its own title/instructions (they live in the host header); the object-memory note panel is drawn at real size.
 - Recorded but deferred in this pass: moving the object-memory note editor from Unity IMGUI into the host HTML, the full "AI experimentation workbench" layout restructure (slim experiment sidebar, main question/variants/run workspace), and reducing the decorative shell chrome — each is larger than a point fix and will be separate commits.
