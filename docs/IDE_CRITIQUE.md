@@ -26,19 +26,26 @@ The shell is a header, a left catalogue, a center workspace, a right pane, and a
 
 ## 3. Not really implemented
 
+> Status update (14 Nov ~23:30, build-plan application): items marked ✅ were
+> resolved by the build-plan pass; the rest remain open for the reasons noted.
+
 - **Avatar** — renders but does nothing (no profile, no account, no menu).
-- **Code editor** — a plain `<textarea id="code-editor">` (`index.html:158`), not Monaco. No syntax highlighting, line numbers, or language awareness.
-- **Object-memory note editor** — still Unity IMGUI, not the host HTML (deferred from the critique pass).
-- **Q2 fallback** — if Unity fails to load, there is no fallback view; only a Retry control.
-- **The sphere** — kept as optional identity/atmosphere, not a functional surface (per your decision).
+- **Code editor** — a plain `<textarea id="code-editor">` (`index.html:158`), not Monaco. No syntax highlighting, line numbers, or language awareness. *Still open: Monaco/CodeMirror are benchmark candidates that need Eduardo's per-dependency decision (`docs/01-design-philosophy.md`); no new dependencies without it.*
+- **Object-memory note editor** — ✅ demoted: selecting a bench object navigates to its Tauri view; the card offers "Open note in Notes". Text editing lives in the Tauri Notes view; the dead spatial-memory bridge was unregistered.
+- **Q2 fallback** — if Unity fails to load, there is no fallback view; only a Retry control. *Still deferred (standing decision, AGENTS.md §4).*
+- **The sphere** — kept as optional identity/atmosphere, not a functional surface (per your decision). *Still kept; it is the single live Loom-state indicator.*
+- **Disk watcher** — ✅ the Knowledge surface polls a vault signature; external edits appear without a manual refresh (drafts and dialogs win).
+- **Durable canvas layouts** — ✅ canvas card positions persist in the app data dir.
+- **Orphan commands** — ✅ `get_collaboration` and `knowledge_pending_count` removed; the double-registered `knowledge_archive` fixed.
+- **Live Loom loop / streaming** — ✅ chat streams over `/v1/weave:stream` with Stop, in-flight tool lines, and HITL cards; traces are viewable from replies.
 
 ## 4. Recommendations (in priority order)
 
 1. Wire or remove the avatar. If there is no account concept, drop it — it is the clearest "chrome without a job".
 2. Pick one Loom-state surface. Keep the header pill as the reliable indicator and let the sphere be ambient color only, or vice versa — not both carrying the same meaning.
-3. Replace the Code textarea with Monaco, or explicitly scope Code as a plain-text editor (rename/relabel so it doesn't promise more than it does).
-4. Move the object-memory note editor out of Unity IMGUI into the host HTML.
-5. Decide Q2's fallback (Experiment view is the natural default, consistent with the nav).
+3. Replace the Code textarea with Monaco (or CodeMirror), or explicitly scope Code as a plain-text editor (rename/relabel so it doesn't promise more than it does). *Needs Eduardo's per-dependency decision — see §3.*
+4. ~~Move the object-memory note editor out of Unity IMGUI into the host HTML.~~ ✅ Done.
+5. Decide Q2's fallback (Experiment view is the natural default, consistent with the nav). *Still deferred.*
 
 ## Not in scope here (already resolved or deferred elsewhere)
 
