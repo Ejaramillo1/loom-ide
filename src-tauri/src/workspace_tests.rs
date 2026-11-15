@@ -307,3 +307,89 @@ fn autonomy_admission_rejects_unknown_levels_and_ignores_missing_intents() {
     // Work items without an intent are unaffected by ceilings.
     assert!(autonomy_admission("assisted", "delegated", None, Some("a reason")).is_ok());
 }
+
+// Migration preview (decision 6 / Step 10): read-only, conflict-honest.
+// The migration itself stays an explicit user-triggered action; these
+// fixtures prove the preview detects collisions and never guesses the
+// open intent-mapping decision.
+
+#[test]
+fn migration_preview_detects_task_name_collisions() {
+    let items = vec![
+        WorkItem {
+            id: "w1".into(),
+            title: "Ship report".into(),
+            status: "active".into(),
+            autonomy: "assisted".into(),
+            updated_label: "Now".into(),
+            updated_at: 0,
+            session_id: None,
+            success_criteria: vec![],
+            artifact_ids: vec![],
+            intent_id: None,
+            autonomy_history: vec![],
+        },
+        WorkItem {
+            id: "w2".into(),
+            title: "ship-report".into(),
+            status: "active".into(),
+            autonomy: "manual".into(),
+            updated_label: "Now".into(),
+            updated_at: 0,
+            session_id: None,
+            success_criteria: vec![],
+            artifact_ids: vec![],
+            intent_id: None,
+            autonomy_history: vec![],
+        },
+    ];
+    let preview = build_migration_preview(&items);
+    assert_eq!(preview.total, 2);
+    assert_eq!(preview.ready, 1);
+    assert_eq!(preview.needs_decision, 1);
+    assert!(
+        preview.items[1]
+            .conflicts
+            .iter()
+            .any(|c| c.contains("collides"))
+    );
+    // Autonomy stays local: noted on every row.
+    assert!(
+        preview.items[0]
+            .notes
+            .iter()
+            .any(|n| n.contains("stays local"))
+    );
+}
+
+#[test]
+fn migration_preview_rejects_untitled_items() {
+    let items = vec![WorkItem {
+        id: "w1".into(),
+        title: "   ".into(),
+        status: "active".into(),
+        autonomy: "manual".into(),
+        updated_label: "Now".into(),
+        updated_at: 0,
+        session_id: None,
+        success_criteria: vec![],
+        artifact_ids: vec![],
+        intent_id: None,
+        autonomy_history: vec![],
+    }];
+    let preview = build_migration_preview(&items);
+    assert!(
+        preview.items[0]
+            .conflicts
+            .iter()
+            .any(|c| c.contains("No usable title"))
+    );
+    assert_eq!(preview.items[0].proposed_task_name, "");
+}
+
+#[test]
+fn migration_task_names_are_url_safe_slugs() {
+    assert_eq!(migration_task_name("Ship the report!"), "ship-the-report");
+    assert_eq!(migration_task_name("  A/B test  "), "a-b-test");
+    assert_eq!(migration_task_name("---"), "");
+}

@@ -597,6 +597,29 @@ export async function setWorkAutonomy(
   return invoke<WorkItem>("set_work_autonomy", { id, autonomy, justification });
 }
 
+
+export interface MigrationPreviewItem {
+  id: string;
+  title: string;
+  status: string;
+  autonomy: string;
+  proposed_task_name: string;
+  conflicts: string[];
+  notes: string[];
+}
+
+export interface MigrationPreview {
+  items: MigrationPreviewItem[];
+  total: number;
+  ready: number;
+  needs_decision: number;
+}
+
+/** Read-only preview of the work→task migration (decision 6): never
+    migrates anything, never calls Loom. */
+export const workMigrationPreview = () =>
+  invokeCmd<MigrationPreview>("work_migration_preview");
+
 export async function setWorkSession(
   id: string,
   sessionId: string | null,

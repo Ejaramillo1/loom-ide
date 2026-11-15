@@ -136,6 +136,7 @@ import {
   renewCertificate,
   runMigration,
   getMcpServer,
+  workMigrationPreview,
 } from "./api";
 import type { SphereState } from "./sphere";
 import { installAppMenu, textEditingActions } from "./app-menu";
@@ -2408,6 +2409,43 @@ function handleTaskBoardEvent(p: StreamEnvelope<unknown>) {
 
 const TASK_LANES = ["open", "in_progress", "blocked", "done", "deferred", "cancelled"] as const;
 
+/** The read-only work→task migration preview (decision 6 / Step 10):
+    lists every local work item's proposed task name, its conflicts and
+    the open decisions. It never migrates anything — the migration stays
+    an explicit, user-triggered, journaled action. */
+async function showMigrationPreview() {
+  const dialog = $("#migration-dialog") as HTMLDialogElement;
+  const list = $("#migration-list");
+  list.replaceChildren();
+  const err = $("#migration-error") as HTMLElement;
+  err.hidden = true;
+  try {
+    const preview = await workMigrationPreview();
+    if (preview.total === 0) {
+      list.append(Object.assign(document.createElement("p"), { className: "empty", textContent: "No local work items to preview." }));
+    }
+    for (const item of preview.items) {
+      const row = document.createElement("div");
+      row.className = "flat-row";
+      const head = document.createElement("strong");
+      head.textContent = `${item.title} → “${item.proposed_task_name || "—"}”`;
+      row.append(head);
+      for (const conflict of item.conflicts) {
+        row.append(Object.assign(document.createElement("p"), { className: "field-error", textContent: `Conflict: ${conflict}` }));
+      }
+      for (const note of item.notes) {
+        row.append(Object.assign(document.createElement("p"), { className: "migration-note", textContent: note }));
+      }
+      list.append(row);
+    }
+    dialog.showModal();
+  } catch (e) {
+    err.textContent = `Could not build the preview: ${e instanceof Error ? e.message : String(e)}`;
+    err.hidden = false;
+    dialog.showModal();
+  }
+}
+
 function buildLoomBoardsSection(): HTMLElement {
   const section = document.createElement("section");
   section.className = "wd-section";
@@ -2435,7 +2473,15 @@ function buildLoomBoardsSection(): HTMLElement {
   newTask.textContent = "New task";
   newTask.disabled = !selectedLoomBoardId;
   newTask.addEventListener("click", openTaskCreateDialog);
-  actions.append(newBoard, newTask, refresh);
+  // Decision 6: the work→task migration is explicitly interactive and
+  // never silent. This button opens the READ-ONLY preview — conflicts
+  // and open decisions are listed, nothing is migrated.
+  const preview = document.createElement("button");
+  preview.type = "button";
+  preview.className = "btn ghost";
+  preview.textContent = "Preview migration";
+  preview.addEventListener("click", () => { void showMigrationPreview(); });
+  actions.append(newBoard, newTask, preview, refresh);
   head.append(h, actions);
   section.append(head);
 
@@ -4159,6 +4205,7 @@ function initAgentsView() {
   $("#agent-create-submit").addEventListener("click", () => { void submitAgentCreate(); });
   $("#agent-describe-btn").addEventListener("click", () => { void describeAgent(); });
   $("#trace-close").addEventListener("click", () => ($("#trace-dialog") as HTMLDialogElement).close());
+  $("#migration-close").addEventListener("click", () => ($("#migration-dialog") as HTMLDialogElement).close());
   $("#tool-submit").addEventListener("click", () => { void submitRegisterTool(); });
   $("#tool-cancel").addEventListener("click", () => ($("#tool-dialog") as HTMLDialogElement).close());
   $("#app-submit").addEventListener("click", () => { void submitAppCreate(); });

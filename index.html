@@ -371,6 +371,15 @@
       </div>
       <div id="trace-body" class="trace-body"></div>
     </dialog>
+    <dialog id="migration-dialog" class="app-help-dialog" aria-labelledby="migration-dialog-title">
+      <h2 id="migration-dialog-title">Work → task migration preview</h2>
+      <p>Read-only preview: proposed Loom task names, conflicts and open decisions. Nothing is migrated here — the migration itself is an explicit, user-triggered action.</p>
+      <div id="migration-list" class="scroll-list"></div>
+      <p id="migration-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="migration-close" class="btn" type="button">Close</button>
+      </div>
+    </dialog>
     <dialog id="mcp-dialog" class="app-help-dialog" aria-labelledby="mcp-dialog-title">
       <h2 id="mcp-dialog-title">Add MCP server</h2>
       <p>Configure a server Loom's agents can call tools from. Test before saving to validate the command.</p>

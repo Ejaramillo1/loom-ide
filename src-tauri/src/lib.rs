@@ -212,6 +212,102 @@ fn add_work_item(
     }
 }
 
+/// One local work item's preview row for the full work→task migration
+/// (decision 6, Step 10): the proposed Loom task and every conflict or
+/// decision it carries. This is a READ-ONLY preview — it never writes,
+/// never calls Loom, and never migrates anything. The migration itself
+/// stays an explicit, user-triggered, journaled action.
+#[derive(Serialize)]
+pub struct MigrationPreviewItem {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub autonomy: String,
+    pub proposed_task_name: String,
+    pub conflicts: Vec<String>,
+    pub notes: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct MigrationPreview {
+    pub items: Vec<MigrationPreviewItem>,
+    pub total: usize,
+    /// Rows with no conflicts and no open decisions.
+    pub ready: usize,
+    /// Rows carrying a conflict or an open decision.
+    pub needs_decision: usize,
+}
+
+fn migration_task_name(title: &str) -> String {
+    let mut slug: String = title
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    while slug.contains("--") {
+        slug = slug.replace("--", "-");
+    }
+    slug.trim_matches('-').to_string()
+}
+
+/// The pure preview mapping: conflict detection only, no I/O (Step 10 —
+/// "full migration is explicitly interactive and must never be silent").
+fn build_migration_preview(items: &[WorkItem]) -> MigrationPreview {
+    let mut rows: Vec<MigrationPreviewItem> = Vec::new();
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut ready = 0usize;
+    let mut needs = 0usize;
+    for item in items {
+        let mut conflicts: Vec<String> = Vec::new();
+        let mut notes: Vec<String> = Vec::new();
+        let name = migration_task_name(&item.title);
+        if name.is_empty() {
+            conflicts.push("No usable title — rename before migrating.".into());
+        } else if let Some(owner) = seen.get(&name) {
+            conflicts.push(format!("Task name \"{name}\" collides with \"{owner}\"."));
+        } else {
+            seen.insert(name.clone(), item.title.clone());
+        }
+        // Loom tasks have no autonomy field: the level stays LOCAL.
+        notes.push(format!(
+            "Autonomy \"{}\" stays local (Loom tasks carry no autonomy field).",
+            item.autonomy
+        ));
+        // Decision 6: the intents/attention mapping is defined before
+        // migrating — an open decision, never guessed here. It applies to
+        // EVERY row today, which is why the preview separates "name-ready"
+        // rows (ready) from conflict rows (needs_decision).
+        notes.push("Intent/attention mapping awaits the decision-6 definition.".into());
+        if conflicts.is_empty() {
+            ready += 1;
+        } else {
+            needs += 1;
+        }
+        rows.push(MigrationPreviewItem {
+            id: item.id.clone(),
+            title: item.title.clone(),
+            status: item.status.clone(),
+            autonomy: item.autonomy.clone(),
+            proposed_task_name: name,
+            conflicts,
+            notes,
+        });
+    }
+    MigrationPreview {
+        total: rows.len(),
+        items: rows,
+        ready,
+        needs_decision: needs,
+    }
+}
+
+#[tauri::command]
+fn work_migration_preview(state: State<AppState>) -> MigrationPreview {
+    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+    build_migration_preview(&work.items())
+}
+
 #[tauri::command]
 fn set_work_status(id: String, status: String, state: State<AppState>) -> Result<WorkItem, String> {
     state
@@ -2142,6 +2238,7 @@ pub fn run() {
             set_work_session,
             set_work_success_criteria,
             set_work_artifacts,
+            work_migration_preview,
             get_intents,
             create_intent,
             update_intent,
