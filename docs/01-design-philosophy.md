@@ -176,14 +176,15 @@ differs today, on `tauri-prototype` at head `faa2338` (and later):
   `docs/QUIET_COMPLEXITY_REFINEMENT.md`).
 - **Water.** §6's discreet water surface exists only as a decorative backdrop
   (`aria-hidden`); no water system was built.
-- **What is still missing.** Code mode is a plain textarea (no Monaco —
-  dependency decision pending). The note editor moved out of Unity IMGUI
-  into the Tauri Notes view, canvas positions persist durably, and a disk
-  watcher picks up external vault edits. There is no Unity failure
-  fallback (Q2, deferred) and no real-window pixel check (D14, blocked;
-  Editor captures exist in `docs/bench-shots/`). The philosophy's §10 rule
-  applies to all of it: refine the existing Tauri / TypeScript / Unity
-  stack, no new framework, no second app.
+- **What is still missing.** Code mode now uses Monaco (decided and
+  implemented, with a diff viewer). The note editor moved out of Unity
+  IMGUI into the Tauri Notes view, canvas positions persist durably, and a
+  disk watcher picks up external vault edits. The Q2 fallback is decided:
+  a static "3D no disponible" panel, kept as a cheap fallback rather than
+  an open question. D14 (real-window pixel check) remains blocked; Editor
+  captures exist in `docs/bench-shots/`. The philosophy's §10 rule applies
+  to all of it: refine the existing Tauri / TypeScript / Unity stack, no
+  new framework, no second app.
 
 # Quiet Complexity
 ## Filosofía de diseño minimalista para Loom
