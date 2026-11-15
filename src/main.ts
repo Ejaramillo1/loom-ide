@@ -3870,6 +3870,7 @@ interface StreamReplyState {
   msg: HTMLElement;
   bubble: HTMLElement;
   text: string;
+  clean: string;
   toolLines: Map<string, HTMLElement>;
   clarifications: Set<string>;
   sessionId: string | null;
@@ -4068,7 +4069,8 @@ function finishStream(
     setSphereState("error");
     // A failed send returns the text to the composer so it survives a close.
     if (!st.text) {
-      ($("#chat-text") as HTMLInputElement).value = st.text || "";
+      ($("#chat-text") as HTMLInputElement).value = st.clean;
+      localStorage.setItem(CHAT_DRAFT_KEY, st.clean);
     }
     return;
   }
@@ -4244,6 +4246,7 @@ async function sendChat(text: string) {
     msg,
     bubble,
     text: "",
+    clean,
     toolLines: new Map(),
     clarifications: new Set(),
     sessionId: selectedSessionId,
