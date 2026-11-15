@@ -1997,6 +1997,8 @@ pub fn run() {
             knowledge::knowledge_save,
             knowledge::knowledge_relate,
             knowledge::knowledge_review,
+            knowledge::knowledge_archive,
+            knowledge::knowledge_restore,
             knowledge::knowledge_pending_count,
             knowledge::knowledge_export_canvas,
             knowledge::knowledge_sync_from_loom,

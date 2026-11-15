@@ -1080,7 +1080,7 @@ export interface KnowledgeNote { meta: KnowledgeMeta; body: string; path: string
 export interface KnowledgeEdge { from: string; to: string; kind: string }
 export interface KnowledgeAudit { at: number; action: string; object: string; actor: string; detail: string }
 export interface KnowledgeListing {
-  notes: KnowledgeNote[]; edges: KnowledgeEdge[]; activity: KnowledgeAudit[];
+  notes: KnowledgeNote[]; archived: KnowledgeNote[]; edges: KnowledgeEdge[]; activity: KnowledgeAudit[];
   pending: number; revision: string; root: string; kinds: string[]; folders: string[]; relations: string[];
 }
 export interface KnowledgeDetail { note: KnowledgeNote; edges: KnowledgeEdge[]; versions: KnowledgeNote[]; backlinks: KnowledgeEdge[]; audit: KnowledgeAudit[]; revision: string }
@@ -1096,5 +1096,9 @@ export const saveKnowledge = (note: KnowledgeNote, revision: string) => vaultInv
 export const relateKnowledge = (edge: KnowledgeEdge, unlink: boolean, revision: string) => vaultInvoke<void>("knowledge_relate", { edge, unlink, revision });
 export const reviewKnowledge = (id: string, approved: boolean, reason: string, original: string, revision: string) =>
   vaultInvoke<void>("knowledge_review", { id, approved, reason, original, revision });
+export const archiveKnowledge = (id: string, original: string, revision: string) =>
+  vaultInvoke<void>("knowledge_archive", { id, original, revision });
+export const restoreKnowledge = (id: string, original: string, revision: string) =>
+  vaultInvoke<void>("knowledge_restore", { id, original, revision });
 export const exportKnowledgeCanvas = () => vaultInvoke<string>("knowledge_export_canvas");
 export const syncKnowledge = () => vaultInvoke<number>("knowledge_sync_from_loom");

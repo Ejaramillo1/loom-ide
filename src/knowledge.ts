@@ -1,4 +1,4 @@
-import { listKnowledge, readKnowledge, createKnowledge, saveKnowledge, relateKnowledge, reviewKnowledge, exportKnowledgeCanvas, syncKnowledge,
+import { listKnowledge, readKnowledge, createKnowledge, saveKnowledge, relateKnowledge, reviewKnowledge, archiveKnowledge, restoreKnowledge, exportKnowledgeCanvas, syncKnowledge,
   type KnowledgeListing, type KnowledgeNote, type KnowledgeEdge, type KnowledgeDetail, type KnowledgeAudit } from "./api";
 
 type Tab = "graph" | "canvas" | "notes" | "review" | "activity";
@@ -45,6 +45,7 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   let data: KnowledgeListing | null = null;
   let tab: Tab = "graph", query = "", kind = "", folder = "";
   let focus: string | null = null;
+  let showArchived = false;
   let dirty = false, busy = false, loading = false;
   let request = 0;
   // shortcut: canvas positions last for this application session; persist only if durable layouts are requested.
@@ -105,9 +106,10 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       const filters = el("div", "", "knowledge-tools");
       const kinds = select("Note kind", data.kinds, kind, "All kinds"), folders = select("Vault folder", data.folders, folder, "All folders");
       kinds.addEventListener("change", () => { kind = kinds.value; render(); }); folders.addEventListener("change", () => { folder = folders.value; render(); });
-      filters.append(kinds, folders, button("Experiment notes", () => { kind = "experiment"; render(); }), button("Decision notes", () => { kind = "decision"; render(); })); content.append(filters);
-      const notes = matchingNotes(data.notes, query, kind, folder);
-      if (!notes.length) empty(data.notes.length ? "No notes match these filters. Clear the search or choose another kind." : "No notes yet. Use New note to begin.");
+      filters.append(kinds, folders, button("Experiment notes", () => { kind = "experiment"; render(); }), button("Decision notes", () => { kind = "decision"; render(); }), button(showArchived ? "Show active notes" : `Show archived (${data.archived.length})`, () => { showArchived = !showArchived; render(); })); content.append(filters);
+      const source = showArchived ? data.archived : data.notes;
+      const notes = matchingNotes(source, query, kind, folder);
+      if (!notes.length) empty(showArchived ? "No archived notes." : data.notes.length ? "No notes match these filters. Clear the search or choose another kind." : "No notes yet. Use New note to begin.");
       for (const n of notes) content.append(noteButton(n));
       return;
     }
@@ -242,7 +244,8 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     for (const line of note.body.split("\n")) preview.append(el(line.startsWith("## ") ? "h3" : "p", line.startsWith("## ") ? line.slice(3) : line));
     dialog.append(preview, button("Edit / Preview", () => { preview.hidden = !preview.hidden; body.hidden = !preview.hidden; if (!preview.hidden) { preview.replaceChildren(); for (const line of body.value.split("\n")) preview.append(el(line.startsWith("## ") ? "h3" : "p", line.startsWith("## ") ? line.slice(3) : line)); } }));
     const controls = el("div", "", "knowledge-tools");
-    controls.append(button("Save", () => { if (!title.reportValidity()) return; void mutation(() => saveKnowledge({ ...note, meta: { ...note.meta, title: title.value, kind: kinds.value }, body: body.value }, detail.revision), () => { dialog.close(); void openNote(note.meta.id); }); }, "btn"), button("Discard", () => { if (!busy) { dirty = false; dialog.close(); } }), button("Focus in graph", () => { if (dirty) { close(); return; } dialog.close(); focus = note.meta.id; openTab("graph"); })); dialog.append(controls);
+    const archived = note.meta.status === "archived";
+    controls.append(button("Save", () => { if (!title.reportValidity()) return; void mutation(() => saveKnowledge({ ...note, meta: { ...note.meta, title: title.value, kind: kinds.value }, body: body.value }, detail.revision), () => { dialog.close(); void openNote(note.meta.id); }); }, "btn"), button("Discard", () => { if (!busy) { dirty = false; dialog.close(); } }), button("Focus in graph", () => { if (dirty) { close(); return; } dialog.close(); focus = note.meta.id; openTab("graph"); }), button(archived ? "Restore note" : "Archive note", () => { if (dirty) { close(); return; } if (!window.confirm(`${archived ? "Restore" : "Archive"} "${note.meta.title}"? The file is preserved on disk and this is reversible.`)) return; void mutation(() => archived ? restoreKnowledge(note.meta.id, note.original, detail.revision) : archiveKnowledge(note.meta.id, note.original, detail.revision), () => dialog.close()); }, "ghost")); dialog.append(controls);
     const provenance = el("details"); provenance.append(el("summary", "Source & provenance"), el("p", `Author: ${note.meta.author}\nStable ID: ${note.meta.id}\nCreated: ${time(note.meta.created)}\nModified: ${time(note.meta.modified)}\nFile: ${data!.root}/${note.path}\nSource: ${note.meta.source}`, "knowledge-provenance")); dialog.append(provenance);
     const connections = el("section"); connections.append(el("h3", "Connections & backlinks"));
     const edges = detail.edges;

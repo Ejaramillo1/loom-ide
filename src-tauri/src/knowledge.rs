@@ -146,6 +146,7 @@ struct Ledger {
 #[derive(Serialize)]
 pub struct Listing {
     pub notes: Vec<Note>,
+    pub archived: Vec<Note>,
     pub edges: Vec<Edge>,
     pub activity: Vec<Audit>,
     pub pending: usize,
@@ -479,11 +480,18 @@ impl Vault {
             notes: self
                 .notes
                 .iter()
+                .filter(|n| n.meta.status != "archived")
                 .filter(|n| {
                     [&n.meta.title, &n.meta.kind, &n.body]
                         .iter()
                         .any(|s| s.to_lowercase().contains(&q))
                 })
+                .cloned()
+                .collect(),
+            archived: self
+                .notes
+                .iter()
+                .filter(|n| n.meta.status == "archived")
                 .cloned()
                 .collect(),
             edges: self.visible_edges(),
@@ -765,6 +773,50 @@ impl Vault {
             reason.trim(),
         )
     }
+    pub fn archive(
+        &mut self,
+        id: &str,
+        original: &str,
+        revision: &str,
+        actor: Actor,
+    ) -> Result<(), String> {
+        self.check(revision)?;
+        if actor != Actor::Human {
+            return Err("Only humans can archive notes".into());
+        }
+        let old = self.get(id)?.clone();
+        if old.original != original {
+            return Err("Note changed; reopen it before archiving".into());
+        }
+        if old.meta.status == "archived" {
+            return Err("This note is already archived".into());
+        }
+        let mut note = old.clone();
+        note.meta.status = "archived".into();
+        self.replace(&old, note, "archived", "Put away; file preserved on disk")
+    }
+    pub fn restore(
+        &mut self,
+        id: &str,
+        original: &str,
+        revision: &str,
+        actor: Actor,
+    ) -> Result<(), String> {
+        self.check(revision)?;
+        if actor != Actor::Human {
+            return Err("Only humans can restore notes".into());
+        }
+        let old = self.get(id)?.clone();
+        if old.original != original {
+            return Err("Note changed; reopen it before restoring".into());
+        }
+        if old.meta.status != "archived" {
+            return Err("This note is not archived".into());
+        }
+        let mut note = old.clone();
+        note.meta.status = "working".into();
+        self.replace(&old, note, "restored", "Returned to active notes")
+    }
     pub fn export_canvas(&self) -> Result<String, String> {
         let nodes: Vec<_> = self.notes.iter().enumerate().map(|(i,n)| serde_json::json!({"id":n.meta.id,"type":"file","file":n.path,"x":(i%4)*240,"y":(i/4)*148,"width":220,"height":128})).collect();
         let edges: Vec<_> = self.visible_edges().iter().enumerate().map(|(i,e)| serde_json::json!({"id":format!("e{i}"),"fromNode":e.from,"toNode":e.to,"label":e.kind})).collect();
@@ -905,6 +957,14 @@ pub fn knowledge_review(
 #[tauri::command]
 pub fn knowledge_pending_count() -> Result<usize, String> {
     with_vault(|v| Ok(v.list("").pending))
+}
+#[tauri::command]
+pub fn knowledge_archive(id: String, original: String, revision: String) -> Result<(), String> {
+    with_vault(|v| v.archive(&id, &original, &revision, Actor::Human))
+}
+#[tauri::command]
+pub fn knowledge_restore(id: String, original: String, revision: String) -> Result<(), String> {
+    with_vault(|v| v.restore(&id, &original, &revision, Actor::Human))
 }
 #[tauri::command]
 pub fn knowledge_export_canvas() -> Result<String, String> {
@@ -1072,6 +1132,42 @@ mod tests {
         )
         .unwrap();
         assert_eq!(v.get(&rejected).unwrap().meta.status, "rejected");
+    }
+    #[test]
+    fn archive_hides_and_restores_without_deleting_the_file() {
+        let mut v = vault();
+        let id = create(&mut v, Actor::Human);
+        let original = v.get(&id).unwrap().original.clone();
+        let path = v.get(&id).unwrap().path.clone();
+        assert!(
+            v.archive(&id, &original, &v.revision.clone(), Actor::Agent)
+                .is_err()
+        );
+        assert!(
+            v.archive(&id, "stale", &v.revision.clone(), Actor::Human)
+                .is_err()
+        );
+        v.archive(&id, &original, &v.revision.clone(), Actor::Human)
+            .unwrap();
+        assert_eq!(v.get(&id).unwrap().meta.status, "archived");
+        assert!(v.list("").notes.is_empty());
+        assert_eq!(v.list("").archived.len(), 1);
+        assert!(v.root.join(&path).exists());
+        assert!(
+            v.archive(
+                &id,
+                &v.get(&id).unwrap().original.clone(),
+                &v.revision.clone(),
+                Actor::Human
+            )
+            .is_err()
+        );
+        let archived = v.get(&id).unwrap().original.clone();
+        v.restore(&id, &archived, &v.revision.clone(), Actor::Human)
+            .unwrap();
+        assert_eq!(v.get(&id).unwrap().meta.status, "working");
+        assert_eq!(v.list("").notes.len(), 1);
+        assert!(v.list("").archived.is_empty());
     }
     #[test]
     fn links_backlinks_duplicates_self_links_and_unlink() {
