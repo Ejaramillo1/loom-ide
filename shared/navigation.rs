@@ -5,6 +5,9 @@ use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 
 pub const TAURI: &str = "127.0.0.1:43761";
+// Retained for the preserved native-app crate, which still claims its own port.
+// Tauri no longer launches the second window, so this reads as unused here.
+#[allow(dead_code)]
 pub const WORKBENCH: &str = "127.0.0.1:43762";
 const REQUEST: &[u8] = b"loom-activate-v1\n";
 const RESPONSE: &[u8] = b"loom-active-v1\n";
