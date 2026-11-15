@@ -146,7 +146,7 @@ import { applyCodeTheme, createCodeEditor, languageForPath, setCodeLanguage, typ
 // State
 // ---------------------------------------------------------------------------
 
-type Mode = "code" | "experiment" | "work" | "agents" | "evidence" | "artifacts" | "spatial" | "knowledge";
+type Mode = "code" | "experiment" | "work" | "agents" | "artifacts" | "spatial" | "knowledge";
 
 type NoteKind = "design" | "scratch";
 type RightTab = "context" | "conversation";
@@ -2835,7 +2835,7 @@ function buildEvidenceSection(workId?: string): HTMLElement {
   browse.className = "quiet-btn";
   browse.textContent = "Open Evidence";
   browse.title = "Open workspace evidence";
-  browse.addEventListener("click", () => setMode("evidence"));
+  browse.addEventListener("click", () => { setMode("knowledge"); knowledge?.showEvidence?.(); });
   head.append(h, browse);
   section.append(head);
 
@@ -2844,7 +2844,7 @@ function buildEvidenceSection(workId?: string): HTMLElement {
     section.append(
       emptyP(
         workId
-          ? "No evidence is linked to this work yet. Decisions and workflow results started from this work appear here; workspace-wide evidence lives in Evidence."
+          ? "No evidence is linked to this work yet. Decisions and workflow results started from this work appear here; workspace-wide evidence lives in Knowledge › Evidence."
           : "No findings yet. Experiment decisions and workflow results appear here as evidence once made.",
       ),
     );
@@ -4495,8 +4495,11 @@ function renderAgentDetail(): HTMLElement {
 // Evidence view — decided experiments + workflow results (workspace-wide)
 // ---------------------------------------------------------------------------
 
+let knowledgeEvidenceHost: HTMLElement | null = null;
+
 function renderEvidence() {
-  const list = $("#evidence-list");
+  const list = knowledgeEvidenceHost ?? $("#evidence-list");
+  if (!list) return;
   list.innerHTML = "";
   const items = evidenceItems();
   if (items.length === 0) {
@@ -6629,7 +6632,6 @@ const ALL_VIEWS: Mode[] = [
   "work",
   "code",
   "agents",
-  "evidence",
   "artifacts",
   "knowledge",
 ];
@@ -6667,7 +6669,7 @@ function initAppMenu() {
     {
       label: "View",
       items: [
-        ...(["code", "experiment", "work", "agents", "evidence", "knowledge"] as const).map((view) => ({
+        ...(["code", "experiment", "work", "agents", "knowledge"] as const).map((view) => ({
           label: view[0].toUpperCase() + view.slice(1),
           radio: true,
           checked: () => mode === view,
@@ -6820,7 +6822,7 @@ function setMode(next: Mode) {
     const el = document.getElementById(`view-${id}`);
     if (el) el.hidden = id !== next;
   }
-  for (const cls of ["code", "experiment", "work", "agents", "evidence", "artifacts", "knowledge"]) {
+  for (const cls of ["code", "experiment", "work", "agents", "artifacts", "knowledge"]) {
     document.body.classList.toggle(`mode-${cls}`, cls === next);
   }
   // The scene follows the mode: water + full atmosphere only in Experiment.
@@ -7002,13 +7004,13 @@ async function init() {
     attributeFilter: ["data-theme"],
   });
   initWorkspaceExplorer();
-  knowledge = installKnowledge(() => setMode("knowledge"), (count, failed) => { pendingKnowledge = count; knowledgeFailed = failed; renderStatusPill(); }, refreshSpatialVault);
+  knowledge = installKnowledge(() => setMode("knowledge"), (count, failed) => { pendingKnowledge = count; knowledgeFailed = failed; renderStatusPill(); }, refreshSpatialVault, (container) => { knowledgeEvidenceHost = container; renderEvidence(); });
   installSpatialWorkbench((object) => {
     switch (object) {
       case "Work": setMode("work"); break;
       case "Code": setMode("code"); break;
       case "Experiments": setMode("experiment"); break;
-      case "Evidence": setMode("evidence"); break;
+      case "Evidence": setMode("knowledge"); knowledge?.showEvidence?.(); break;
       case "Agents": setMode("agents"); break;
       case "Notes": setMode("knowledge"); break;
       default: break;

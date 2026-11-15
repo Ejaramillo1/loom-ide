@@ -196,3 +196,22 @@ it("skills shelf offers add, classify and bulk import (Loom has no list endpoint
   expect(text).toContain("Bulk import");
   expect(text).toContain("no skill list to read");
 });
+
+it("evidence tab mounts the shell's evidence renderer into the content area", async () => {
+  const { nodes } = await mount();
+  const openEvidence = vi.fn();
+  const navigate = vi.fn();
+  const host = nodes["knowledge-content"];
+  vi.mocked(listKnowledge).mockClear();
+  // Re-install with the evidence callback to exercise the host mounting.
+  const reinstall = (await import("./knowledge")).installKnowledge;
+  reinstall(navigate, vi.fn(), undefined, openEvidence);
+  await new Promise((r) => setTimeout(r, 0));
+  const tab = [...nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab")].reverse().find(b => b.dataset.tab === "evidence")!;
+  expect(tab).toBeTruthy();
+  tab.fire("click");
+  expect(openEvidence).toHaveBeenCalledTimes(1);
+  const called = openEvidence.mock.calls[0][0] as { id: string };
+  expect(called.id).toBe("knowledge-evidence-host");
+  expect(host.text()).toContain("");
+});

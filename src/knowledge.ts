@@ -3,7 +3,7 @@ import { listKnowledge, readKnowledge, createKnowledge, saveKnowledge, relateKno
   patternUpdatesStream, addSkill, classifySkill, bulkImportSkills,
   type KnowledgeListing, type KnowledgeNote, type KnowledgeEdge, type KnowledgeDetail, type KnowledgeAudit, type VaultSignature } from "./api";
 
-type Tab = "graph" | "canvas" | "notes" | "patterns" | "skills" | "review" | "activity";
+type Tab = "graph" | "canvas" | "notes" | "patterns" | "skills" | "evidence" | "review" | "activity";
 export function matchingNotes(notes: KnowledgeNote[], query: string, kind = "", folder = "") {
   const q = query.trim().toLowerCase();
   return notes.filter(n => (!kind || n.meta.kind === kind) && (!folder || n.path.startsWith(`${folder}/`)) &&
@@ -34,7 +34,7 @@ function select(label: string, values: string[], value: string, all?: string) {
 }
 const time = (value: number) => new Date(value * 1000).toLocaleString();
 
-export function installKnowledge(navigate: () => void, pendingChanged: (count: number, failed: boolean) => void, onWatcherRefresh?: () => void) {
+export function installKnowledge(navigate: () => void, pendingChanged: (count: number, failed: boolean) => void, onWatcherRefresh?: () => void, openEvidence?: (container: HTMLElement) => void) {
   const host = document.querySelector<HTMLElement>("#view-knowledge")!;
   const content = host.querySelector<HTMLElement>("#knowledge-content")!;
   const notice = host.querySelector<HTMLElement>("#knowledge-notice")!;
@@ -113,7 +113,7 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   }, 3000);
   function empty(text: string) { content.append(el("p", text, "knowledge-empty")); }
   function openTab(next: Tab) { navigate(); tab = next; render(); }
-  for (const [id, label] of [["graph", "Graph"], ["canvas", "Canvas"], ["notes", "Notes"], ["patterns", "Patterns"], ["skills", "Skills"], ["review", "Memory garden"], ["activity", "Activity"]] as const) {
+  for (const [id, label] of [["graph", "Graph"], ["canvas", "Canvas"], ["notes", "Notes"], ["patterns", "Patterns"], ["skills", "Skills"], ["evidence", "Evidence"], ["review", "Memory garden"], ["activity", "Activity"]] as const) {
     const b = button(label, () => openTab(id), "knowledge-tab"); b.dataset.tab = id; tabs.append(b);
   }
   function noteButton(note: KnowledgeNote, review = false) {
@@ -173,7 +173,16 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     if (tab === "canvas") { renderCanvas(); return; }
     if (tab === "patterns") { void renderPatterns(); return; }
     if (tab === "skills") { void renderSkills(); return; }
+    if (tab === "evidence") { renderEvidenceShelf(); return; }
     renderGraph();
+  }
+  /** Evidence is hosted by the shell (its data lives in work/experiment
+      state); this tab mounts the shell's renderer into the content area. */
+  function renderEvidenceShelf() {
+    const hostBox = el("div", "", "knowledge-evidence-host");
+    hostBox.id = "knowledge-evidence-host";
+    content.append(hostBox);
+    openEvidence?.(hostBox);
   }
   /** Loom's pattern library — one shelf of the knowledge surface, next to
       the user's vault. Patterns are HTTP-bound; the shelf also carries the
@@ -509,5 +518,6 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   void refresh();
   return { refresh, newNote, openNote, showNotes: () => openTab("notes"), search: (value: string) => { query = value; if (tab === "notes") render(); },
     searchResults: (value: string) => data ? matchingNotes(data.notes, value) : [], isDialogOpen: () => dialog.open,
-    notifySkillProgress: (text: string) => { showNotice(text); } };
+    notifySkillProgress: (text: string) => { showNotice(text); },
+    showEvidence: () => openTab("evidence") };
 }

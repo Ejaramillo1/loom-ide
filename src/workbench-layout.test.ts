@@ -7,7 +7,7 @@ async function shell(width: number) {
   const paneCode = source.slice(source.indexOf("let rightTab: RightTab"), source.indexOf("// Agents view —"));
   const routeCode = source.slice(source.indexOf("function setMode(next: Mode)"), source.indexOf("// File canvas. Legacy"));
   const railCode = source.slice(source.indexOf('  $("#spatial-knowledge").hidden = mode'), source.indexOf('  $("#left-close").addEventListener'));
-  const views = ["spatial", "work", "experiment", "code", "agents", "evidence", "artifacts", "knowledge"];
+  const views = ["spatial", "work", "experiment", "code", "agents", "artifacts", "knowledge"];
   const nodes = new Map<string, any>();
   let active: any = null;
   const node = (id: string) => {
