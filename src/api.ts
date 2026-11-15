@@ -129,6 +129,9 @@ export interface ChatReply {
   // The trace id the server reports when tracing is enabled — the
   // handle for the observability surface (GetTrace).
   trace_id?: string | null;
+  // The turn's cost from the server's CostInfo (USD). Missing means
+  // unknown — never treated as zero.
+  cost_usd?: number | null;
 }
 
 /// One WeaveProgress event from POST /v1/weave:stream, re-emitted by the

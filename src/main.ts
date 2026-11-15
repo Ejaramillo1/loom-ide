@@ -5042,9 +5042,10 @@ function addChatMessage(
     const src = document.createElement("span");
     src.className = "chat-source";
     const parts: string[] = ["Live — answered by the Loom server"];
-    if (reply?.evidenceKind) {
-      parts.push(evidenceKindLabel(reply.evidenceKind));
-    }
+    // Every live reply is observed evidence of a real execution; the
+    // server never reports a stronger kind, so default to observed
+    // rather than leaving the claim unlabeled (issue 008).
+    parts.push(evidenceKindLabel(reply?.evidenceKind ?? "observed"));
     src.textContent = parts.join(" · ");
     msg.append(src);
   }
@@ -5079,6 +5080,11 @@ interface StreamReplyState {
   toolLines: Map<string, HTMLElement>;
   clarifications: Set<string>;
   sessionId: string | null;
+  agentId: string | null;
+  intentId: string | null;
+  startedAt: number;
+  /** The turn's cost from the completion event (USD); null = unknown. */
+  costUsd: number | null;
   finished: boolean;
 }
 
@@ -5117,6 +5123,12 @@ function handleStreamEvent(p: LoomStreamEvent) {
       st.text = e.partial_content;
       st.bubble.textContent = st.text;
       scrollChat();
+    }
+    // The completion event carries the turn's CostInfo (snake_case on the
+    // SSE wire). First observation wins; absent cost stays unknown.
+    const cost = (e as { cost?: { total_cost_usd?: number } }).cost?.total_cost_usd;
+    if (typeof cost === "number" && st.costUsd === null) {
+      st.costUsd = cost;
     }
     if (e.is_tool_started || e.is_tool_completed) {
       renderToolLine(st, e);
@@ -5341,6 +5353,17 @@ function finishStream(
     note.className = "chat-stopped";
     note.textContent = st.text ? "Stopped. The reply above is partial." : "Stopped before Loom answered.";
     st.msg.append(note);
+    recordRun({
+      workId: st.workId,
+      intentId: st.intentId,
+      sessionId: st.sessionId,
+      agentId: st.agentId,
+      status: "cancelled",
+      partial: st.text.trim() !== "",
+      startedAt: st.startedAt,
+      costUsd: st.costUsd,
+      costSource: st.costUsd === null ? undefined : "weave completion event",
+    });
     setSphereState("idle");
     return;
   }
@@ -5370,10 +5393,34 @@ function finishStream(
       partial.textContent = "The reply above is partial — the stream ended before completion.";
       st.msg.append(partial);
       cacheChatMessage(st.cacheKey, "loom", st.text);
+      recordRun({
+        workId: st.workId,
+        intentId: st.intentId,
+        sessionId: st.sessionId,
+        agentId: st.agentId,
+        status: "failed",
+        partial: true,
+        startedAt: st.startedAt,
+        error,
+        costUsd: st.costUsd,
+        costSource: st.costUsd === null ? undefined : "weave completion event",
+      });
       setSphereState("error");
       return;
     }
     addChatError(`Could not reach Loom: ${error ?? "unknown error"}. Start the Loom service and send your message again.`);
+    recordRun({
+      workId: st.workId,
+      intentId: st.intentId,
+      sessionId: st.sessionId,
+      agentId: st.agentId,
+      status: "failed",
+      partial: false,
+      startedAt: st.startedAt,
+      error,
+      costUsd: st.costUsd,
+      costSource: st.costUsd === null ? undefined : "weave completion event",
+    });
     setSphereState("error");
     // Return the failed text to the composer so it survives a close —
     // but never overwrite text the human typed while the request ran.
@@ -5394,6 +5441,17 @@ function finishStream(
     loomVerified = true;
     setLoomReachable(true);
     cacheChatMessage(st.cacheKey, "loom", st.bubble.textContent || "");
+    recordRun({
+      workId: st.workId,
+      intentId: st.intentId,
+      sessionId: st.sessionId,
+      agentId: st.agentId,
+      status: "succeeded",
+      partial: false,
+      startedAt: st.startedAt,
+      costUsd: st.costUsd,
+      costSource: st.costUsd === null ? undefined : "weave completion event",
+    });
     if (st.sessionId && !sessions.some((s) => s.id === st.sessionId)) {
       await refreshSessions();
     }
@@ -5440,19 +5498,28 @@ function finishStream(
 }
 
 /** The unary path, kept as the fallback when the stream cannot start (a
-    server that doesn't offer streaming, or a start failure). */
+    server that doesn't offer streaming, or a start failure). The captured
+    selection travels with it: the fallback must address exactly what was
+    selected when the message was sent. */
 async function sendChatUnary(
   clean: string,
   workId: string | null,
   cacheKey: string,
   typing: HTMLElement,
+  captured: {
+    sessionId: string | null;
+    agentId: string | null;
+    intentId: string | null;
+    startedAt: number;
+    context: Record<string, string> | undefined;
+  },
 ) {
   try {
     const reply = await askLoom(
       clean,
-      selectedSessionId ?? undefined,
-      selectedAgentId ?? undefined,
-      buildChatContext(),
+      captured.sessionId ?? undefined,
+      captured.agentId ?? undefined,
+      captured.context,
     );
     typing.remove();
     loomVerified = true;
@@ -5463,6 +5530,18 @@ async function sendChatUnary(
       addChatMessage("loom", reply.text, reply);
     }
     cacheChatMessage(cacheKey, "loom", reply.text);
+    recordRun({
+      workId,
+      intentId: captured.intentId,
+      sessionId: captured.sessionId ?? reply.session_id ?? null,
+      agentId: captured.agentId,
+      status: "succeeded",
+      partial: false,
+      startedAt: captured.startedAt,
+      costUsd: typeof reply.cost_usd === "number" ? reply.cost_usd : null,
+      costSource: typeof reply.cost_usd === "number" ? "unary weave response" : undefined,
+      traceId: reply.trace_id ?? null,
+    });
     // Refresh agent activity: the answering agent's counters just changed.
     await refreshAgents();
     // Adopt the session the server reports (it may have auto-created one)
@@ -5496,15 +5575,30 @@ async function sendChatUnary(
   } catch (err) {
     typing.remove();
     // Keep the failed text in the composer and in storage so it survives
-    // an app close after a failed send.
-    ($("#chat-text") as HTMLInputElement).value = clean;
-    localStorage.setItem(CHAT_DRAFT_KEY, clean);
+    // an app close after a failed send — but never overwrite text the
+    // human typed while the request ran.
+    const composer = $("#chat-text") as HTMLInputElement;
+    if (!composer.value.trim()) {
+      composer.value = clean;
+      localStorage.setItem(CHAT_DRAFT_KEY, clean);
+    }
     if (isLoomConnectionError(err)) setLoomReachable(false);
     const detail = err instanceof Error ? err.message : String(err);
     const guidance = /looms serve|Start the Loom/i.test(detail)
       ? ""
       : " Start the Loom service and send your message again.";
     addChatError(`Could not reach Loom: ${detail}.${guidance}`);
+    recordRun({
+      workId,
+      intentId: captured.intentId,
+      sessionId: captured.sessionId,
+      agentId: captured.agentId,
+      status: "failed",
+      partial: false,
+      startedAt: captured.startedAt,
+      error: detail,
+      costUsd: null,
+    });
     setSphereState("error");
   } finally {
     chatInFlight--;
@@ -5522,9 +5616,11 @@ async function sendChat(text: string) {
   const workId = selectedWorkId;
   const sessionId = selectedSessionId;
   const agentId = selectedAgentId;
+  const intentId = activeIntentId;
   const context = buildChatContext();
   const cacheKey = workId ?? UNASSIGNED_KEY;
   const requestId = `r-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const startedAt = Date.now();
   addChatMessage("user", clean);
   cacheChatMessage(cacheKey, "user", clean);
   chatInFlight++;
@@ -5558,6 +5654,10 @@ async function sendChat(text: string) {
     toolLines: new Map(),
     clarifications: new Set(),
     sessionId,
+    agentId,
+    intentId,
+    startedAt,
+    costUsd: null,
     finished: false,
   };
   activeStreams.set(requestId, state);
@@ -5579,7 +5679,13 @@ async function sendChat(text: string) {
     if (activeStreamId === requestId) activeStreamId = null;
     // The empty stream bubble gives way to the unary reply.
     msg.remove();
-    await sendChatUnary(clean, workId, cacheKey, typing);
+    await sendChatUnary(clean, workId, cacheKey, typing, {
+      sessionId,
+      agentId,
+      intentId,
+      startedAt,
+      context,
+    });
     return;
   }
 
@@ -5868,6 +5974,89 @@ function cacheChatMessage(workId: string, who: "user" | "loom", text: string) {
   msgs.push({ who, text });
   chatCache.set(workId, msgs.slice(-CHAT_CACHE_MAX_PER_WORK));
   saveChatCache();
+}
+
+// ---------------------------------------------------------------------------
+// Durable run records (Step 6 / QC-14)
+// ---------------------------------------------------------------------------
+// A minimal record of every chat turn the IDE executed, persisted in the
+// same local store as the chat cache: originating work/intent/session/
+// agent captured at send time, the event-derived outcome, and the
+// server-supplied cost when one exists. This is not a billing ledger and
+// not a workflow engine — it is the execution↔work link that survives a
+// restart. A run is only recorded when it settles (success, error or
+// cancel observed on the wire); a crash mid-run leaves no record rather
+// than an invented cancelled/succeeded one.
+
+const RUNS_KEY = "loom-ide-tauri:runs";
+const RUNS_CORRUPT_KEY = "loom-ide-tauri:runs-corrupt";
+const RUNS_MAX = 200;
+
+interface RunRecord {
+  id: string;
+  workId: string | null;
+  intentId: string | null;
+  sessionId: string | null;
+  agentId: string | null;
+  status: "succeeded" | "failed" | "cancelled" | "unknown";
+  partial: boolean;
+  startedAt: number;
+  endedAt: number;
+  error?: string;
+  costUsd?: number | null;
+  costSource?: string;
+  traceId?: string | null;
+}
+
+let runRecords: RunRecord[] = [];
+let runStoreWarned = false;
+
+function loadRunRecords() {
+  try {
+    const raw = localStorage.getItem(RUNS_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) throw new Error("run store is not an array");
+    runRecords = (parsed as RunRecord[]).filter(
+      (r) => r && typeof r === "object" && typeof r.id === "string" && typeof r.status === "string",
+    ).slice(-RUNS_MAX);
+  } catch {
+    // Never silently replace damaged state with empty data: the corrupt
+    // bytes are preserved under a backup key, and a fresh list starts
+    // only alongside the retained copy.
+    try {
+      const raw = localStorage.getItem(RUNS_KEY);
+      if (raw) localStorage.setItem(RUNS_CORRUPT_KEY, raw);
+    } catch {
+      /* best-effort retention */
+    }
+    runRecords = [];
+  }
+}
+
+function saveRunRecords() {
+  try {
+    localStorage.setItem(RUNS_KEY, JSON.stringify(runRecords.slice(-RUNS_MAX)));
+  } catch {
+    if (!runStoreWarned) {
+      runStoreWarned = true;
+      addChatError(
+        "Run records could not be saved on this device. Current turns still work; their records may not survive a restart.",
+      );
+    }
+  }
+}
+
+function recordRun(record: Omit<RunRecord, "id" | "endedAt">) {
+  runRecords.push({ ...record, id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, endedAt: Date.now() });
+  if (runRecords.length > RUNS_MAX) runRecords = runRecords.slice(-RUNS_MAX);
+  saveRunRecords();
+}
+
+/** The sum of recorded runs that carry a server cost. Scope: IDE-recorded
+    turns only — not complete billing, not an enforceable cap. */
+function recordedTotalUsd(): number {
+  return runRecords.reduce((sum, r) => sum + (typeof r.costUsd === "number" ? r.costUsd : 0), 0);
 }
 
 function renderChatMessages(msgs: CachedChatMsg[]) {
@@ -6953,6 +7142,12 @@ function renderStatusPill() {
     text.textContent = "Connected to Loom";
     pill.classList.add("live");
     pill.title = "A verified Loom response was received from localhost:5006.";
+    // A running total of IDE-recorded turns, scope stated: this is the
+    // IDE's own record, not complete server billing or an enforceable cap.
+    const total = recordedTotalUsd();
+    if (total > 0) {
+      pill.title += ` IDE-recorded turns: $${total.toFixed(4)} USD across ${runRecords.length} runs (IDE-side record only — not complete billing).`;
+    }
   } else if (loomReachable) {
     text.textContent = "Server reachable";
     pill.classList.remove("live");
@@ -7479,6 +7674,7 @@ async function init() {
   await refreshAgents();
   await refreshSessions();
   loadChatCache();
+  loadRunRecords();
   syncSessionToWork();
   // Restore the saved session/agent selection when no work item supplies
   // one (the keys were previously written but never read back).

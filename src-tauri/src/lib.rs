@@ -1108,6 +1108,9 @@ struct ChatReply {
     // The trace id the server reports, when tracing is enabled — the
     // handle for the observability surface (GetTrace).
     trace_id: Option<String>,
+    // The turn's cost from the server's CostInfo (USD). Missing cost is
+    // unknown, never zero (QC-14/Step 6).
+    cost_usd: Option<f64>,
 }
 
 /// Summarize the non-healthy components of a /v1/health body, if any.
@@ -1829,12 +1832,21 @@ async fn ask_loom(
             .and_then(|v| v.as_str())
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.to_string());
+        // WeaveResponse.cost (CostInfo.total_cost_usd); protojson emits
+        // camelCase, the SSE handler snake_case — accept both at the
+        // boundary. Absent cost stays None (unknown), never 0.
+        let cost_usd = value.get("cost").and_then(|c| {
+            c.get("totalCostUsd")
+                .or_else(|| c.get("total_cost_usd"))
+                .and_then(|v| v.as_f64())
+        });
         Ok(ChatReply {
             text: text.into(),
             source: "live".into(),
             card: None,
             session_id,
             trace_id,
+            cost_usd,
         })
     })
     .await
