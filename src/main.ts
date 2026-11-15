@@ -1356,13 +1356,11 @@ function renderWorkDetail() {
     if (!item) {
       const empty = document.createElement("div");
       empty.className = "wd-empty";
-      const title = document.createElement("strong");
-      title.textContent = "No work selected";
       const text = document.createElement("p");
       text.textContent = isLeftDrawer()
-        ? "Open Work to choose an item from the catalogue."
-        : "Choose an item from the work catalogue on the left.";
-      empty.append(title, text);
+        ? "No work selected. Open Work to choose an item from the catalogue."
+        : "No work selected. Choose an item from the work catalogue on the left.";
+      empty.append(text);
       wrap.append(empty);
       return;
     }
@@ -1561,7 +1559,7 @@ function buildWorkflowsSection(): HTMLElement {
     return section;
   }
   if (!loomReachable) {
-    section.append(emptyP("The Loom server is offline — workflows are not available."));
+    section.append(emptyP("The Loom server is offline. Workflows are not available."));
     return section;
   }
   if (workflows.length === 0) {
@@ -1620,7 +1618,7 @@ function buildWorkflowsSection(): HTMLElement {
   execLabel.textContent = "Recent executions (all work)";
   section.append(execLabel);
   if (executions.length === 0) {
-    section.append(emptyP("No executions yet."));
+    section.append(emptyP("No executions yet. Run a workflow to see its execution here."));
   } else {
     const ul = document.createElement("ul");
     ul.className = "execution-list";
@@ -1817,7 +1815,7 @@ function buildArtifactsSection(item: WorkItem): HTMLElement {
     return section;
   }
   if (!loomReachable) {
-    section.append(emptyP("The Loom server is offline, so artifacts are not available."));
+    section.append(emptyP("The Loom server is offline. Artifacts are not available."));
     return section;
   }
 
@@ -2057,6 +2055,9 @@ function buildEvidenceSection(workId?: string): HTMLElement {
   return section;
 }
 
+// D9: every empty state is one line stating what is missing plus the next
+// step. The next step names an existing control; never a second creation
+// button (see D1/D2). Offline states all use "The Loom server is offline."
 function emptyP(text: string): HTMLElement {
   const p = document.createElement("p");
   p.className = "empty";
@@ -2757,21 +2758,16 @@ function renderAgents() {
   const list = $("#agents-list");
   list.innerHTML = "";
   if (agents.length === 0) {
+    // D9: one line stating what is missing plus the next step.
     const empty = document.createElement("div");
     empty.className = "flat-row empty-row";
-    const title = document.createElement("strong");
-    title.textContent = !loomStatusKnown
-      ? "Checking the Loom server…"
-      : loomReachable
-        ? "No agents registered"
-        : "Loom offline";
     const text = document.createElement("p");
     text.textContent = !loomStatusKnown
-      ? "Waiting for the Loom server status."
+      ? "Checking the Loom server…"
       : loomReachable
-        ? "No agents are registered with the Loom server yet. When you send a message, the answering agent appears here."
-        : "The Loom server is not reachable, so no agents are visible.";
-    empty.append(title, text);
+        ? "No agents registered yet. Send a message and the answering agent appears here."
+        : "The Loom server is offline. No agents are visible.";
+    empty.append(text);
     list.append(empty);
     return;
   }
@@ -2913,12 +2909,10 @@ function renderEvidence() {
   if (items.length === 0) {
     const empty = document.createElement("div");
     empty.className = "flat-row empty-row";
-    const title = document.createElement("strong");
-    title.textContent = "No evidence yet";
     const text = document.createElement("p");
     text.textContent =
-      "Evidence appears here when experiment decisions are made or workflows produce results.";
-    empty.append(title, text);
+      "No evidence yet. Evidence appears here when experiment decisions are made or workflows produce results.";
+    empty.append(text);
     list.append(empty);
     return;
   }
@@ -3093,11 +3087,9 @@ function renderArtifacts() {
   if (artifacts.length === 0) {
     const empty = document.createElement("div");
     empty.className = "flat-row empty-row";
-    const title = document.createElement("strong");
-    title.textContent = "No artifacts yet";
     const text = document.createElement("p");
-    text.textContent = "Artifacts appear here when the Loom server shares them.";
-    empty.append(title, text);
+    text.textContent = "No artifacts yet. Artifacts appear here when the Loom server shares them.";
+    empty.append(text);
     list.append(empty);
     return;
   }
@@ -3479,7 +3471,7 @@ function renderSessionBar() {
     sessions.length === 0
       ? loomReachable
         ? "No sessions yet"
-        : "The Loom server is offline — sessions are unavailable"
+        : "The Loom server is offline. Sessions are unavailable"
       : sessions.length === SESSIONS_LIMIT
         ? "Showing 500 sessions — there may be more"
         : "Conversation session";
@@ -4138,7 +4130,7 @@ function renderExperiments() {
     if (experiments.length === 0) {
       const empty = document.createElement("li");
       empty.className = "exp-empty";
-      empty.textContent = "No experiments yet.";
+      empty.textContent = "No experiments yet. Use New experiment to begin.";
       list.append(empty);
     } else {
       for (const e of experiments) {
@@ -4184,12 +4176,10 @@ function renderExperimentDetail() {
   if (!exp) {
     const empty = document.createElement("div");
     empty.className = "exp-detail-empty";
-    const title = document.createElement("strong");
-    title.textContent = "No experiment selected";
     const text = document.createElement("p");
     text.textContent =
-      "Create an experiment to state a question, define arms, and compare real results.";
-    empty.append(title, text);
+      "No experiment selected. Create an experiment to state a question, define arms, and compare real results.";
+    empty.append(text);
     wrap.append(empty);
     return;
   }
