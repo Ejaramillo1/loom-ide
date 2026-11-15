@@ -125,3 +125,12 @@ arrive). Live trace lookup is pending the unary weave completing.
 Still open, all registered: D14 real-window captures (permission), Q2
 fallback, Monaco/benchmark dependencies, the gRPC-only services, the
 harness MCP connection, and every decision in `docs/DECISIONS.md`.
+
+## Build sizes at head (15 Nov ~01:00)
+
+- `public/spatial/Build/spatial.wasm`: 25,530,368 bytes (was 35 MB before
+  IL2CPP OptimizeSize + managed stripping High; the §7.4 settings paid).
+- `dist/spatial/Build` matches `public/spatial/Build` (`cmp` on wasm and
+  data files, identical hashes).
+- Release binary rebuilt at head (see below; ~24 MB, grown with the new
+  backend surfaces).
