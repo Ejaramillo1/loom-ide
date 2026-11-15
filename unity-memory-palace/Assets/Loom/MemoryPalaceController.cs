@@ -36,9 +36,9 @@ namespace Loom.MemoryPalace
         static readonly Color DarkGreen = Rgb(147, 177, 159);
         static readonly Color DarkRed = Rgb(211, 146, 138);
         static readonly Color DarkPurple = Rgb(185, 164, 144);
-        static readonly Color DarkSky = Rgb(26, 32, 42);
-        static readonly Color DarkEquator = Rgb(20, 24, 32);
-        static readonly Color DarkGround = Rgb(12, 15, 22);
+        static readonly Color DarkSky = Rgb(44, 52, 66);
+        static readonly Color DarkEquator = Rgb(34, 40, 52);
+        static readonly Color DarkGround = Rgb(22, 26, 34);
         static readonly Color DarkOrbitInner = Rgb(120, 105, 95);
         static readonly Color DarkOrbitOuter = Rgb(100, 88, 80);
         static readonly Color DarkKeyLight = Rgb(255, 240, 225);
@@ -88,7 +88,7 @@ namespace Loom.MemoryPalace
         MemoryAnchor selected;
         MemoryAnchor hovered;
         Vector2 look;
-        float distance = 11f;
+        float distance = 12.76f;
         float orbitAngle;
         bool reduceMotion;
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -399,14 +399,14 @@ namespace Loom.MemoryPalace
             // §5.6: the scene has no baked indirect light, so the grade must
             // lift, not darken — post-exposure well above neutral and a
             // shadows lift keep the near-blacks separable instead of crushed.
-            adjustments.postExposure.Override(0.35f);
-            adjustments.contrast.Override(10f);
+            adjustments.postExposure.Override(0.45f);
+            adjustments.contrast.Override(8f);
             adjustments.saturation.Override(-5f);
             adjustments.colorFilter.Override(new Color(1f, 0.95f, 0.9f));
             var shadows = profile.Add<ShadowsMidtonesHighlights>(true);
-            shadows.shadows.Override(new Vector4(1f, 1f, 1f, 0.06f));
+            shadows.shadows.Override(new Vector4(1f, 1f, 1f, 0.07f));
             var vignette = profile.Add<Vignette>(true);
-            vignette.intensity.Override(0.25f);
+            vignette.intensity.Override(0.18f);
             vignette.smoothness.Override(0.4f);
             grade.sharedProfile = profile;
 
@@ -783,9 +783,12 @@ namespace Loom.MemoryPalace
         {
             var target = new Vector3(0f, 1.25f, 0f);
             var parallax = reduceMotion ? Vector2.zero : look;
-            // Keep all six tools within the narrower center column without changing user zoom.
+            // Keep all six tools within the narrower center column without
+            // changing user zoom. The 4.12/12.76 constants keep the same
+            // 17.9° pitch and bench coverage at the product-shot FOV of 42°
+            // (the previous 3.55/11 were tuned for 48°).
             var framing = Mathf.Max(1f, 1.1f / sceneCamera.aspect);
-            var desired = new Vector3(parallax.x * 0.25f, 1.25f + 3.55f * framing + parallax.y * 0.12f, -distance * framing);
+            var desired = new Vector3(parallax.x * 0.25f, 1.25f + 4.12f * framing + parallax.y * 0.12f, -distance * framing);
             sceneCamera.transform.position = Vector3.Lerp(sceneCamera.transform.position, desired, reduceMotion ? 1f : Time.deltaTime * 1.8f);
             sceneCamera.transform.rotation = Quaternion.Slerp(sceneCamera.transform.rotation,
                 Quaternion.LookRotation(target - sceneCamera.transform.position), reduceMotion ? 1f : Time.deltaTime * 3.5f);

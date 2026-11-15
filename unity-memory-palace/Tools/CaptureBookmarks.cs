@@ -67,24 +67,35 @@ async Task Bookmark(string name, Vector3 position, Vector3 target)
 }
 
 var sphere = new Vector3(0f, 1.75f, 0f);
+// The front bookmark matches the runtime camera (MoveCamera's 17.9° pitch
+// at aspect ≥ 1.1); the other two are look-dev views.
+var bench = new Vector3(0f, 1.25f, 0f);
 
 // Dark theme — the shipping default from the Tauri shell.
 controller.ApplyTheme("dark");
 controller.ApplyLoomState("idle");
-await Bookmark("bench-dark-front.png", new Vector3(0f, 1.9f, -7.1f), sphere);
-await Bookmark("bench-dark-three-quarter.png", new Vector3(-4.9f, 2.5f, -5.2f), sphere);
-await Bookmark("bench-dark-top-down.png", new Vector3(0f, 8.4f, 0.25f), sphere);
+await Bookmark("bench-dark-front.png", new Vector3(0f, 5.37f, -12.76f), bench);
+await Bookmark("bench-dark-three-quarter.png", new Vector3(-9.8f, 5.37f, -8.2f), bench);
+await Bookmark("bench-dark-top-down.png", new Vector3(0f, 13f, 0.4f), bench);
 if (volume)
 {
     volume.enabled = false;
-    await Bookmark("bench-dark-front-no-post.png", new Vector3(0f, 1.9f, -7.1f), sphere);
+    await Bookmark("bench-dark-front-no-post.png", new Vector3(0f, 5.37f, -12.76f), bench);
     volume.enabled = true;
 }
 
 // Light theme — §12 of the philosophy requires both modes to read.
 controller.ApplyTheme("white");
 controller.ApplyLoomState("idle");
-await Bookmark("bench-light-front.png", new Vector3(0f, 1.9f, -7.1f), sphere);
+await Bookmark("bench-light-front.png", new Vector3(0f, 5.37f, -12.76f), bench);
+
+// The narrow centre-column framing the app actually uses (aspect ≈ 0.6):
+// the camera pulls back further, so judge at that size too.
+controller.ApplyTheme("dark");
+camera.aspect = 0.6f;
+controller.SendMessage("MoveCamera");
+await Bookmark("bench-column.png", new Vector3(0f, 8.8f, -23.3f), bench);
+camera.aspect = 1280f / 548f;
 
 controller.enabled = true;
 EditorApplication.ExitPlaymode();
