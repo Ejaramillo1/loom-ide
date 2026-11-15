@@ -635,15 +635,12 @@ namespace Loom.MemoryPalace
         void OnGUI()
         {
             EnsureStyles();
-            var scale = Mathf.Min(1f, Screen.width / 1000f, Screen.height / 520f);
-            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
-            var width = Screen.width / scale;
-            GUI.Label(new Rect(28f, 22f, 620f, 38f), "Loom · Resolute Workbench", titleStyle);
-            GUI.Label(new Rect(30f, 60f, 700f, 28f), "A spatial bench for making knowledge · select a tool or workpiece", smallStyle);
-
-
+            // The scene title and instructions live in the host's HTML header,
+            // so Unity reserves its surface for the objects. The object-memory
+            // note panel is drawn at its real size — no matrix scaling that
+            // would shrink the text below its reading size.
             if (selected == null) return;
-            var panel = new Rect(width - 352f, 82f, 324f, 360f);
+            var panel = new Rect(Screen.width - 348f, 20f, 328f, 360f);
             GUI.Box(panel, GUIContent.none);
             GUI.Label(new Rect(panel.x + 20f, panel.y + 18f, panel.width - 40f, 32f), selected.Key, titleStyle);
             GUI.Label(new Rect(panel.x + 20f, panel.y + 56f, panel.width - 40f, 50f), selected.Description, bodyStyle);
