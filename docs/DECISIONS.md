@@ -5,31 +5,31 @@ need Eduardo; "taken" items are recorded defaults he can override.
 
 ## Open — Eduardo's call
 
-1. **Monaco or CodeMirror** for Code mode (dependency decision; Monaco MIT
-   closes editor + diff in one, CodeMirror 6 is lighter). Textarea until
-   decided.
-2. **Benchmark components**: xterm.js (terminal), filex / FileBrowser
+1. **Benchmark components**: xterm.js (terminal), filex / FileBrowser
    Quantum / Filestash (file explorer), promptfoo, Docling, Cognee/Mem0/
    Graphiti, E2B, Opik, LiteLLM — one decision per dependency.
-3. **Phase 5 transport** for the genuinely gRPC-only services (judge,
+2. **Phase 5 transport** for the genuinely gRPC-only services (judge,
    graph memory, memory layer, tool registry beyond HTTP, teleprompter,
    learning, scheduler): gateway bindings in Loom vs a Rust gRPC client
    vs per-service mix. Tasks and skills are NOT in this decision — both
    are 100% HTTP.
-4. **Q2**: Unity-failure fallback stays deferred (the "3D unavailable"
+3. **Q2**: Unity-failure fallback stays deferred (the "3D unavailable"
    panel exists as the cheap option if approved).
-5. **Loom-as-MCP-server ↔ MuseBridge harness** connection.
-6. **Task migration**: read-bridge only (current) vs full migration vs
+4. **Loom-as-MCP-server ↔ MuseBridge harness** connection.
+5. **Task migration**: read-bridge only (current) vs full migration vs
    local forever.
-7. **Avatar**: wire it or remove it.
-8. **One Loom-state surface**: pill or sphere (both exist; roles to be
+6. **Avatar**: wire it or remove it.
+7. **One Loom-state surface**: pill or sphere (both exist; roles to be
    defined).
-9. **Canvas 2D `sphere.ts`**: delete the dead class or resurrect it.
-10. **Tenth relation type**: already resolved — nine, not ten (miscount).
+8. **Canvas 2D `sphere.ts`**: delete the dead class or resurrect it.
+9. **Tenth relation type**: already resolved — nine, not ten (miscount).
 
 ## Taken (recorded defaults, override-able)
 
 - Home view: Spatial (Unity-first). Experiment is a bottom-nav tab.
+- Code mode editor: Monaco (`monaco-editor`, MIT) — Eduardo's "Pon Monaco"
+  resolves the former open item. One dependency; workers wired for Vite,
+  theme follows Dark/White, language from the file path.
 - Vault: the markdown vault stays the shared store behind the adapter.
 - Sphere: kept; it is the live Loom-state indicator; decorative copies
   kept by decision (D6).
