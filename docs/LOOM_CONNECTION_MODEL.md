@@ -49,9 +49,9 @@ audit checks the code against this document, not the other way around.
 
 - Endpoints: `/v1/weave:stream`, `/v1/workflows:stream`,
   `/v1/sessions/{id}:subscribe`, `/v1/providers:abtest`,
-  `/v1/patterns:stream`, `/v1/boards/{id}/updates:stream`,
-  `/v1/skills:bulkImport`. All ride one SSE consumer (`loom_stream.rs`)
-  that re-emits `data:` payloads as Tauri events keyed by request id.
+  `/v1/patterns:stream`, `/v1/boards/{id}/updates:stream`. All ride one SSE
+  consumer (`loom_stream.rs`) that re-emits `data:` payloads as Tauri
+  events keyed by request id.
 - Stop: `cancel_loom_stream` sets a flag checked on every wake — a silent
   stream cancels within ~20 s. Unknown request ids are an error.
 - Non-JSON `data:` chunks are counted and reported in a final progress
