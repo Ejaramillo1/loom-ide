@@ -1305,6 +1305,88 @@ mod tests {
     }
 
     #[test]
+    fn error_after_completion_is_an_error_not_a_success() {
+        // A completed stage followed by an error-bearing event must end
+        // the stream as an error — "errors after completion" (QC-04).
+        let body = b"data: {\"stage\":7}\n\ndata: {\"error\":\"late failure\"}\n\n".to_vec();
+        let mut response =
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len()).into_bytes();
+        response.extend_from_slice(&body);
+        let (result, events) = drive(&response, "loom-stream");
+        assert_eq!(result.unwrap_err(), "late failure");
+        assert_eq!(
+            events.len(),
+            1,
+            "the completion event itself was delivered before the error"
+        );
+    }
+
+    #[test]
+    fn cancel_after_completion_data_still_reports_cancelled() {
+        // Stop pressed near EOF: the completion event was delivered, but
+        // the pending cancel must surface as cancelled, never as a false
+        // success (cancellation near EOF — QC-04). The connection stays
+        // open with the promised body byte outstanding, so the Stop lands
+        // before EOF and the reader must observe it.
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut response =
+            b"HTTP/1.1 200 OK\r\nContent-Length: 21\r\n\r\ndata: {\"stage\":7}\n\n".to_vec();
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut req = [0u8; 1024];
+            let mut seen = 0usize;
+            loop {
+                use std::io::Read;
+                let n = socket.read(&mut req[seen..]).unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                seen += n;
+                if req[..seen].windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            use std::io::Write;
+            let _ = socket.write_all(&response);
+            // Hold the connection open: the completion data is all sent,
+            // but the client's Stop lands before EOF.
+            std::thread::sleep(Duration::from_millis(1500));
+        });
+        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
+        let _ = stream
+            .write_all(b"POST /v1/weave:stream HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{}");
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut reader = BufReader::new(stream);
+        let mut saw_completion = false;
+        let result = read_response_events(
+            &mut reader,
+            &cancel,
+            "loom-stream",
+            Instant::now(),
+            |value| {
+                if value.get("stage").and_then(Value::as_i64) == Some(7) {
+                    saw_completion = true;
+                    // The human pressed Stop right after the completion
+                    // event arrived — before the stream reached EOF.
+                    cancel.store(true, Ordering::SeqCst);
+                }
+                Ok(())
+            },
+        );
+        server.join().unwrap();
+        assert!(
+            saw_completion,
+            "the fixture must deliver the completion event"
+        );
+        assert_eq!(result.unwrap_err(), "Cancelled.");
+    }
+
+    #[test]
     fn cancel_during_silence_stops_the_reader() {
         use std::net::TcpListener;
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();

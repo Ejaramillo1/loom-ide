@@ -1331,6 +1331,9 @@ export const deleteWorkflowSchedule = (scheduleId: string) =>
   invokeCmd<string>("workflow_schedule_delete", { scheduleId });
 export const triggerWorkflowSchedule = (scheduleId: string) =>
   invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId });
+export const cancelScheduleExecution = (executionId: string) =>
+  invokeCmd<unknown>("workflow_schedule_cancel_execution", { executionId });
+
 export const workflowScheduleHistory = (scheduleId: string) =>
   invokeCmd<unknown[]>("workflow_schedule_history", { scheduleId });
 export const pauseWorkflowSchedule = (scheduleId: string) =>

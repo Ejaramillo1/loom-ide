@@ -371,6 +371,25 @@
       </div>
       <div id="trace-body" class="trace-body"></div>
     </dialog>
+    <dialog id="permission-dialog" class="app-help-dialog" aria-labelledby="permission-dialog-title">
+      <h2 id="permission-dialog-title">Request tool permission</h2>
+      <p>Ask Loom to hold <strong id="permission-tool-name"></strong> behind a human decision for a session.</p>
+      <label for="permission-session">Session</label>
+      <input id="permission-session" type="text" autocomplete="off" spellcheck="false" />
+      <label for="permission-risk">Risk level</label>
+      <select id="permission-risk">
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+      </select>
+      <label for="permission-args">Arguments (JSON, optional)</label>
+      <textarea id="permission-args" rows="3" spellcheck="false"></textarea>
+      <p id="permission-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="permission-submit" class="btn" type="button">Submit request</button>
+        <button id="permission-close" class="btn ghost" type="button">Close</button>
+      </div>
+    </dialog>
     <dialog id="migration-dialog" class="app-help-dialog" aria-labelledby="migration-dialog-title">
       <h2 id="migration-dialog-title">Work → task migration preview</h2>
       <p>Read-only preview: proposed Loom task names, conflicts and open decisions. Nothing is migrated here — the migration itself is an explicit, user-triggered action.</p>
@@ -520,12 +539,6 @@
       <p>Loom is a human-centered development environment for work, experiments, and collaboration with AI agents.</p>
       <button id="app-help-close" class="btn" type="button" autofocus>Close</button>
     </dialog>
-    <script>
-      if (location.protocol === "file:") {
-        document.body.style.cssText = "margin:0;padding:48px;background:#10121f;color:#f5f5fa;font:16px/1.6 system-ui";
-        document.body.innerHTML = '<main style="max-width:640px;margin:auto"><h1>Open Loom through its application server</h1><p>This is the source HTML. Its styles and TypeScript need Vite or the Tauri app.</p><p><a style="color:#8ec8ff" href="http://127.0.0.1:1420/">Open the running Loom preview</a></p><p>If the preview is unavailable, run <code>npm run dev</code> from the repository.</p></main>';
-      }
-    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
