@@ -58,6 +58,10 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   const positions = new Map<string, { x: number; y: number }>();
   let layoutLoaded = false;
   let layoutSaveTimer: number | null = null;
+  /** True when the saved layout failed to load: automatic persistence is
+      disabled until an explicit recovery, so a plain click can never
+      overwrite the unreadable file (review #13). */
+  let layoutPersistBlocked = false;
   /** The last vault signature the watcher saw; null until the first probe. */
   let lastSignature: VaultSignature | null = null;
   const showNotice = (text = "", error = false) => { notice.textContent = text; notice.hidden = !text; notice.classList.toggle("error", error); };
@@ -66,6 +70,7 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   /** Persist canvas positions (debounced) — the durable-layout store.
       Failures surface in the notice instead of being swallowed (QC-19). */
   function scheduleLayoutSave() {
+    if (layoutPersistBlocked) return;
     if (layoutSaveTimer !== null) clearTimeout(layoutSaveTimer);
     layoutSaveTimer = setTimeout(() => {
       layoutSaveTimer = null;
@@ -88,9 +93,11 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
           renderBench();
         } catch {
           // A corrupt layout is never overwritten with a fallback: the
-          // default arrangement renders, the file stays untouched, and
-          // the failure is visible (QC-19).
-          showNotice("The saved canvas layout is unreadable — showing the default arrangement. The layout file was left untouched.", true);
+          // default arrangement renders, the file stays untouched, the
+          // failure is visible, and automatic saves are blocked until an
+          // explicit recovery (QC-19, review #13).
+          layoutPersistBlocked = true;
+          showNotice("The saved canvas layout is unreadable — showing the default arrangement. The layout file was left untouched and auto-save is paused.", true);
         }
       }
       try { lastSignature = await knowledgeSignature(); } catch { lastSignature = null; }
@@ -410,7 +417,7 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       const place = () => { card.style.left = `${p.x}px`; card.style.top = `${p.y}px`; }; place();
       card.addEventListener("pointerdown", e => { if (e.button !== 0) return; moved = false; start = { x: e.clientX, y: e.clientY, left: p.x, top: p.y }; card.setPointerCapture(e.pointerId); });
       card.addEventListener("pointermove", e => { if (!start) return; const dx = e.clientX - start.x, dy = e.clientY - start.y; if (Math.hypot(dx, dy) > 4) moved = true; if (!moved) return; p.x = Math.max(0, start.left + dx / scale); p.y = Math.max(0, start.top + dy / scale); place(); drawLines(); });
-      card.addEventListener("pointerup", () => { start = null; scheduleLayoutSave(); }); card.addEventListener("pointercancel", () => { start = null; });
+      card.addEventListener("pointerup", () => { start = null; if (moved) scheduleLayoutSave(); }); card.addEventListener("pointercancel", () => { start = null; });
       card.addEventListener("keydown", e => { const delta: Record<string, [number, number]> = { ArrowLeft: [-20,0], ArrowRight: [20,0], ArrowUp: [0,-20], ArrowDown: [0,20] }; if (delta[e.key]) { e.preventDefault(); p.x = Math.max(0, p.x + delta[e.key][0]); p.y = Math.max(0, p.y + delta[e.key][1]); place(); drawLines(); scheduleLayoutSave(); } else moved = false; });
       plane.append(card);
     }

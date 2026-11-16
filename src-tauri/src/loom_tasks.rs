@@ -73,6 +73,11 @@ pub async fn task_board_create(board: Value) -> Result<Value, String> {
 fn tasks_of(value: Value) -> Vec<Value> {
     match value {
         Value::Object(mut obj) => {
+            if obj.is_empty() {
+                // A valid empty response ({} — omitted fields) means zero
+                // tasks, never one blank row (review QC-11 note).
+                return vec![];
+            }
             if let Some(list) = obj.remove("tasks").and_then(|v| v.as_array().cloned()) {
                 list
             } else if let Some(list) = obj.remove("results").and_then(|v| v.as_array().cloned()) {

@@ -139,6 +139,7 @@ import {
   getMcpServer,
   workMigrationPreview,
   cancelScheduleExecution,
+  respondHumanRequest,
 } from "./api";
 import type { SphereState } from "./sphere";
 
@@ -280,6 +281,8 @@ let workflowStreamState: { progress: number; message: string; executionId: strin
 let workflowStreamOrigin: string | null = null;
 /** The active session subscription (GET /v1/sessions/{id}:subscribe). */
 let sessionSubId: string | null = null;
+/** The session the current subscription targets (ids are generation-unique). */
+let sessionSubTarget: string | null = null;
 /** Workflow schedules (HTTP-bound; no transport decision needed). */
 let workflowSchedules: unknown[] = [];
 let schedulesLoadError: string | null = null;
@@ -305,6 +308,33 @@ let workflowError: string | null = null;
     in-memory: nothing is implied to survive a restart. */
 const executionWorkIds = new Map<string, string>();
 const experimentWorkIds = new Map<string, string>();
+/** Persistence for the ownership maps: work-scoped workflow/experiment
+    evidence must survive a restart (review #5 / QC-14). */
+const EXEC_WORK_KEY = "loom-ide-tauri:exec-work";
+const EXP_WORK_KEY = "loom-ide-tauri:exp-work";
+
+function loadOwnershipMaps() {
+  for (const [key, map] of [[EXEC_WORK_KEY, executionWorkIds], [EXP_WORK_KEY, experimentWorkIds]] as const) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const obj = JSON.parse(raw) as Record<string, string>;
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof k === "string" && typeof v === "string") map.set(k, v);
+      }
+    } catch {
+      /* corrupt bytes stay in place; the maps start fresh */
+    }
+  }
+}
+
+function saveOwnershipMap(key: string, map: Map<string, string>) {
+  try {
+    localStorage.setItem(key, JSON.stringify(Object.fromEntries(map)));
+  } catch {
+    /* best-effort persistence; the in-memory maps stay authoritative */
+  }
+}
 /** When true, stop polling the current workflow run and clear the
     running state. The server-side execution continues (there is no cancel
     endpoint), but the UI stops tracking it — honest about the limit
@@ -1871,14 +1901,22 @@ async function runWorkflow(name: string) {
   // The stream's final event carries the execution id for the post-run
   // polling; the unary path stays as the fallback.
   const requestId = `wf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // Register the stream handle BEFORE invoking (review #3): the Rust side
+  // spawns the emitting thread and returns immediately, so an early
+  // terminal event must never be discarded — the same race the chat path
+  // fixed.
+  workflowStreamActive = requestId;
+  renderWorkDetail();
   try {
     await executeWorkflowStream(requestId, name);
   } catch {
+    // Only the pre-spawn rejection falls back to unary. If a terminal
+    // already raced the rejection, the run was settled — fall back only
+    // when this request is still the registered handle.
+    if (workflowStreamActive !== requestId) return;
     await runWorkflowUnary(name, token, startedFromWork);
     return;
   }
-  workflowStreamActive = requestId;
-  renderWorkDetail();
 }
 
 function finishWorkflowRun(
@@ -1896,7 +1934,10 @@ function finishWorkflowRun(
       setLoomReachable(true);
       if (executionId) {
         executionWorkflowNames.set(executionId, runningWorkflow ?? "");
-        if (startedFromWork) executionWorkIds.set(executionId, startedFromWork);
+        if (startedFromWork) {
+          executionWorkIds.set(executionId, startedFromWork);
+          saveOwnershipMap(EXEC_WORK_KEY, executionWorkIds);
+        }
       }
       try {
         await refreshExecutionsList();
@@ -1973,7 +2014,10 @@ async function runWorkflowUnary(name: string, token: number, startedFromWork: st
     setLoomReachable(true);
     if (res.execution_id) {
       executionWorkflowNames.set(res.execution_id, name);
-      if (startedFromWork) executionWorkIds.set(res.execution_id, startedFromWork);
+      if (startedFromWork) {
+        executionWorkIds.set(res.execution_id, startedFromWork);
+        saveOwnershipMap(EXEC_WORK_KEY, executionWorkIds);
+      }
       await refreshExecutionsList();
       await pollWorkflowExecution(res.execution_id);
     } else {
@@ -2022,20 +2066,25 @@ async function ensureSessionSubscription() {
     if (sessionSubId) {
       const old = sessionSubId;
       sessionSubId = null;
+      sessionSubTarget = null;
       void cancelLoomStream(old).catch(() => { /* already ended */ });
     }
     return;
   }
-  if (sessionSubId === `sess-${id}`) return;
+  if (sessionSubTarget === id && sessionSubId) return;
   if (sessionSubId) {
     const old = sessionSubId;
     void cancelLoomStream(old).catch(() => { /* already ended */ });
   }
-  sessionSubId = `sess-${id}`;
+  // Generation-unique ids (review #12): A→B→A must not let an old A
+  // stream delete or clear its replacement's handles.
+  sessionSubTarget = id;
+  sessionSubId = `sess-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   try {
     await sessionSubscribe(sessionSubId, id);
   } catch {
     sessionSubId = null;
+    sessionSubTarget = null;
   }
 }
 
@@ -2047,6 +2096,7 @@ function handleSessionEvent(p: StreamEnvelope<unknown>) {
     // The server closed the stream (session deleted server-side, or the
     // subscription window ended). A new selection re-subscribes.
     sessionSubId = null;
+    sessionSubTarget = null;
   }
 }
 
@@ -4132,14 +4182,17 @@ async function submitAppCreate() {
   try {
     // CreateUIAppRequest { name, display_name, description, spec }: the
     // API is declarative (UIAppSpec), not an HTML upload (QC-22). The
-    // spec carries the title/description; components start empty and can
-    // be authored from the component-type catalog later.
+    // compiler rejects an empty component list, so the spec carries one
+    // supported component from the live catalog: text { content }
+    // (review #4 — the shape matches the server's published schema).
     const spec = {
       version: "1.0",
       title: name,
       description,
       layout: "stack",
-      components: [],
+      components: [
+        { type: "text", props: { content: description || name } },
+      ],
     };
     await createApp({ name, displayName: name, description, spec });
     ($("#app-dialog") as HTMLDialogElement).close();
@@ -4620,7 +4673,12 @@ function renderSessionDetail(): HTMLElement {
         // model's provider (QC-21): the backend changes agent-level
         // configuration, so both must be explicit.
         const result = await switchModel(detail.id, detail.agent_id, picked?.provider, modelSel.value);
-        const effective = (result as { new_model?: { id?: string; name?: string } }).new_model;
+        const res = result as {
+          new_model?: { id?: string; name?: string };
+          newModel?: { id?: string; name?: string };
+        };
+        // The gateway returns protojson camelCase (review #14).
+        const effective = res.newModel ?? res.new_model;
         const shown = effective?.name ?? effective?.id ?? modelSel.value;
         showSessionNote(
           effective
@@ -5198,11 +5256,13 @@ function addChatMessage(
   if (who === "loom" && live) {
     const src = document.createElement("span");
     src.className = "chat-source";
+    // Transport provenance is stated; the CONTENT's evidence kind is
+    // claimed only when a kind actually exists (review #17): receiving
+    // model text proves delivery, not the truth of its claims.
     const parts: string[] = ["Live — answered by the Loom server"];
-    // Every live reply is observed evidence of a real execution; the
-    // server never reports a stronger kind, so default to observed
-    // rather than leaving the claim unlabeled (issue 008).
-    parts.push(evidenceKindLabel(reply?.evidenceKind ?? "observed"));
+    if (reply?.evidenceKind) {
+      parts.push(evidenceKindLabel(reply.evidenceKind));
+    }
     src.textContent = parts.join(" · ");
     msg.append(src);
   }
@@ -5240,6 +5300,9 @@ interface StreamReplyState {
   agentId: string | null;
   intentId: string | null;
   startedAt: number;
+  /** The durable run record's id (review #5): the record exists from
+      send time and settles with the stream. */
+  runId: string;
   /** The turn's cost from the completion event (USD); null = unknown. */
   costUsd: number | null;
   finished: boolean;
@@ -5255,13 +5318,6 @@ function scrollChat() {
 function renderChatControls() {
   const stop = $("#chat-stop") as HTMLButtonElement | null;
   if (stop) stop.hidden = !(chatInFlight > 0 && activeStreamId !== null);
-}
-
-/** Adopt the most recently updated session when the server auto-created
-    one mid-stream (clarifications must be answered against a session). */
-function newestSessionId(): string | null {
-  const sorted = [...sessions].sort((a, b) => b.updated_at - a.updated_at);
-  return sorted[0]?.id ?? null;
 }
 
 /** A streamed weave's progress: partial tokens, tool lifecycle, and
@@ -5338,11 +5394,11 @@ function renderToolLine(st: StreamReplyState, e: LoomStreamEvent["event"] & obje
 
 /** A mid-turn human-in-the-loop card. Question cards (kind "question" or
     unclassified) answer through the legacy clarification map with their
-    `question_id`. Approval/resource cards belong to Loom's stored-request
-    store, which exposes no network answer route (only the `looms hitl`
-    CLI resolves it) — those cards are display-only and say so (QC-07):
-    submitting approve/deny to the clarification map would answer the
-    wrong store. */
+    `question_id`. Approval cards answer through the gateway's stored-
+    request route (POST /v1/human-requests/{id}:respond) with the
+    approved/rejected vocabulary; resource holds stay display-only. One
+    card-level guard disables every response control together, so a card
+    can never submit twice (review #16). */
 function renderHitlCard(
   st: StreamReplyState,
   hitl: {
@@ -5374,7 +5430,7 @@ function renderHitlCard(
   card.append(q);
 
   // The held call's parameters: untrusted structured data, rendered only
-  // as inert text (textContent), never parsed into the DOM (Step 5).
+  // as inert text (textContent), never parsed into the DOM.
   if (hitl.params_json) {
     const pre = document.createElement("pre");
     pre.className = "chat-clarification-params";
@@ -5395,42 +5451,86 @@ function renderHitlCard(
     card.append(timeout);
   }
 
-  const deliver = async (answer: string, buttons: HTMLButtonElement[]) => {
-    for (const b of buttons) b.disabled = true;
-    try {
-      let sid = st.sessionId ?? activeStreamSessionId;
-      if (!sid) {
-        await refreshSessions();
-        sid = newestSessionId();
-        if (sid) st.sessionId = sid;
-      }
-      if (!sid) throw new Error("The conversation session is not known yet.");
-      await answerClarification(sid, hitl.question_id ?? "", answer);
-      const done = document.createElement("p");
-      done.className = "chat-clarification-done";
-      done.textContent = "Answered — the agent continues.";
-      card.append(done);
-      row.hidden = true;
-    } catch (err) {
-      const fail = document.createElement("p");
-      fail.className = "chat-clarification-done error";
-      fail.textContent = `Could not deliver the answer: ${err instanceof Error ? err.message : String(err)}`;
-      card.append(fail);
-      for (const b of buttons) b.disabled = false;
+  // Card-level controls: every response control in one list, disabled
+  // together while a decision is in flight, re-enabled only on a real
+  // rejection (review #16).
+  const controls: HTMLButtonElement[] = [];
+  let resolving = false;
+
+  const finishCard = (text: string, isError: boolean) => {
+    const note = document.createElement("p");
+    note.className = isError ? "chat-clarification-done error" : "chat-clarification-done";
+    note.textContent = text;
+    card.append(note);
+    if (!isError) {
+      for (const control of controls) control.hidden = true;
+      resolving = true;
     }
   };
 
-  const row = document.createElement("div");
-  row.className = "chat-clarification-row";
+  const deliverClarification = async (answer: string) => {
+    if (resolving) return;
+    resolving = true;
+    for (const control of controls) control.disabled = true;
+    try {
+      // The answer needs an authoritative session identity: the session
+      // captured for this request, never a guessed newest session
+      // (review #6).
+      const sid = st.sessionId ?? activeStreamSessionId;
+      if (!sid) throw new Error("The conversation session is not known yet — no answer was sent.");
+      await answerClarification(sid, hitl.question_id ?? "", answer);
+      finishCard("Answered — the agent continues.", false);
+    } catch (err) {
+      const text = `Could not deliver the answer: ${err instanceof Error ? err.message : String(err)}`;
+      finishCard(text, true);
+      resolving = false;
+      for (const control of controls) control.disabled = false;
+    }
+  };
 
-  if (isApproval || isResource) {
-    // The stored-request store has no network answer route; the hold is
-    // resolved server-side (its timeout) or via `looms hitl`. Do not
-    // pretend Approve/Deny can deliver (QC-07).
+  const deliverApproval = async (status: "approved" | "rejected") => {
+    if (resolving) return;
+    resolving = true;
+    for (const control of controls) control.disabled = true;
+    try {
+      await respondHumanRequest(hitl.request_id, status);
+      finishCard(status === "approved" ? "Approved — the hold is released." : "Denied — the hold is released.", false);
+    } catch (err) {
+      const text = `Could not answer the hold: ${err instanceof Error ? err.message : String(err)}`;
+      finishCard(text, true);
+      resolving = false;
+      for (const control of controls) control.disabled = false;
+    }
+  };
+
+  if (isApproval) {
+    // The stored-request route exists on current Loom builds; a failure
+    // (e.g. an older server without it) is surfaced verbatim.
+    const approve = document.createElement("button");
+    approve.type = "button";
+    approve.className = "btn";
+    approve.textContent = "Approve";
+    const deny = document.createElement("button");
+    deny.type = "button";
+    deny.className = "btn ghost";
+    deny.textContent = "Deny";
+    controls.push(approve, deny);
+    const row = document.createElement("div");
+    row.className = "chat-clarification-row";
+    row.append(approve, deny);
+    card.append(row);
+    approve.addEventListener("click", () => { void deliverApproval("approved"); });
+    deny.addEventListener("click", () => { void deliverApproval("rejected"); });
+    st.msg.append(card);
+    scrollChat();
+    return;
+  }
+
+  if (isResource) {
     const unavailable = document.createElement("p");
     unavailable.className = "chat-clarification-unavailable";
     unavailable.textContent =
-      "This hold can't be answered from the IDE yet: Loom exposes no network route to its stored-request store (only the looms hitl CLI resolves it). The hold stays pending on the server until its timeout. No request was sent.";
+      "Resource holds can't be answered from the IDE: they resolve when the resource frees or the hold times out.";
     card.append(unavailable);
     st.msg.append(card);
     scrollChat();
@@ -5457,7 +5557,8 @@ function renderHitlCard(
       btn.type = "button";
       btn.className = "btn ghost";
       btn.textContent = option;
-      btn.addEventListener("click", () => { void deliver(option, [btn, ...Array.from(optionsRow.querySelectorAll("button"))]); });
+      controls.push(btn);
+      btn.addEventListener("click", () => { void deliverClarification(option); });
       optionsRow.append(btn);
     }
     card.append(optionsRow);
@@ -5471,13 +5572,16 @@ function renderHitlCard(
   answer.type = "button";
   answer.className = "btn";
   answer.textContent = "Answer";
+  controls.push(answer);
+  const row = document.createElement("div");
+  row.className = "chat-clarification-row";
   row.append(input, answer);
   card.append(row);
   answer.addEventListener("click", () => {
     const value = input.value.trim();
     if (!value || answer.disabled) return;
     input.disabled = true;
-    void deliver(value, [answer]);
+    void deliverClarification(value);
   });
   st.msg.append(card);
   scrollChat();
@@ -5502,6 +5606,11 @@ function finishStream(
 ) {
   if (!settleStreamState(requestId, st)) return;
   chatInFlight--;
+  // With overlapping sends, the finished request must not take Stop with
+  // it while another stream is still running (review #11).
+  if (activeStreamId === null && activeStreams.size > 0) {
+    activeStreamId = [...activeStreams.keys()][0] ?? null;
+  }
   renderChatControls();
   renderStatusPill();
 
@@ -5510,16 +5619,17 @@ function finishStream(
     note.className = "chat-stopped";
     note.textContent = st.text ? "Stopped. The reply above is partial." : "Stopped before Loom answered.";
     st.msg.append(note);
-    recordRun({
-      workId: st.workId,
-      intentId: st.intentId,
-      sessionId: st.sessionId,
-      agentId: st.agentId,
+    // A cancelled turn's partial output is real content: keep it for the
+    // conversation, marked partial (review #10).
+    if (st.text.trim()) {
+      cacheChatMessage(st.cacheKey, "loom", st.text, true);
+    }
+    recordRunSettle(st.runId, {
       status: "cancelled",
       partial: st.text.trim() !== "",
-      startedAt: st.startedAt,
       costUsd: st.costUsd,
       costSource: st.costUsd === null ? undefined : "weave completion event",
+      sessionId: st.sessionId,
     });
     setSphereState("idle");
     return;
@@ -5554,18 +5664,14 @@ function finishStream(
       partial.className = "chat-partial-note";
       partial.textContent = "The reply above is partial — the stream ended before completion.";
       st.msg.append(partial);
-      cacheChatMessage(st.cacheKey, "loom", st.text);
-      recordRun({
-        workId: st.workId,
-        intentId: st.intentId,
-        sessionId: st.sessionId,
-        agentId: st.agentId,
+      cacheChatMessage(st.cacheKey, "loom", st.text, true);
+      recordRunSettle(st.runId, {
         status: "failed",
         partial: true,
-        startedAt: st.startedAt,
         error,
         costUsd: st.costUsd,
         costSource: st.costUsd === null ? undefined : "weave completion event",
+        sessionId: st.sessionId,
       });
       setSphereState("error");
       return;
@@ -5575,17 +5681,13 @@ function finishStream(
         ? `Could not reach Loom: ${error ?? "unknown error"}. Start the Loom service and send your message again.`
         : `Loom rejected the message: ${error ?? "unknown error"}.`,
     );
-    recordRun({
-      workId: st.workId,
-      intentId: st.intentId,
-      sessionId: st.sessionId,
-      agentId: st.agentId,
+    recordRunSettle(st.runId, {
       status: "failed",
       partial: false,
-      startedAt: st.startedAt,
       error,
       costUsd: st.costUsd,
       costSource: st.costUsd === null ? undefined : "weave completion event",
+      sessionId: st.sessionId,
     });
     setSphereState("error");
     // Return the failed text to the composer so it survives a close —
@@ -5607,16 +5709,12 @@ function finishStream(
     loomVerified = true;
     setLoomReachable(true);
     cacheChatMessage(st.cacheKey, "loom", st.bubble.textContent || "");
-    recordRun({
-      workId: st.workId,
-      intentId: st.intentId,
-      sessionId: st.sessionId,
-      agentId: st.agentId,
+    recordRunSettle(st.runId, {
       status: "succeeded",
       partial: false,
-      startedAt: st.startedAt,
       costUsd: st.costUsd,
       costSource: st.costUsd === null ? undefined : "weave completion event",
+      sessionId: st.sessionId,
     });
     if (st.sessionId && !sessions.some((s) => s.id === st.sessionId)) {
       await refreshSessions();
@@ -5678,6 +5776,7 @@ async function sendChatUnary(
     intentId: string | null;
     startedAt: number;
     context: Record<string, string> | undefined;
+    runId: string;
   },
 ) {
   try {
@@ -5696,14 +5795,10 @@ async function sendChatUnary(
       addChatMessage("loom", reply.text, reply);
     }
     cacheChatMessage(cacheKey, "loom", reply.text);
-    recordRun({
-      workId,
-      intentId: captured.intentId,
-      sessionId: captured.sessionId ?? reply.session_id ?? null,
-      agentId: captured.agentId,
+    recordRunSettle(captured.runId, {
       status: "succeeded",
       partial: false,
-      startedAt: captured.startedAt,
+      sessionId: captured.sessionId ?? reply.session_id ?? null,
       costUsd: typeof reply.cost_usd === "number" ? reply.cost_usd : null,
       costSource: typeof reply.cost_usd === "number" ? "unary weave response" : undefined,
       traceId: reply.trace_id ?? null,
@@ -5760,14 +5855,10 @@ async function sendChatUnary(
       // A validation rejection is not a disconnection (issue 014).
       addChatError(`Loom rejected the message: ${detail}.`);
     }
-    recordRun({
-      workId,
-      intentId: captured.intentId,
-      sessionId: captured.sessionId,
-      agentId: captured.agentId,
+    recordRunSettle(captured.runId, {
       status: "failed",
       partial: false,
-      startedAt: captured.startedAt,
+      sessionId: captured.sessionId,
       error: detail,
       costUsd: null,
     });
@@ -5796,6 +5887,7 @@ async function sendChat(text: string) {
   const cacheKey = workId ?? UNASSIGNED_KEY;
   const requestId = `r-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAt = Date.now();
+  const runId = recordRunStart({ workId, intentId, sessionId, agentId, startedAt });
   addChatMessage("user", clean);
   cacheChatMessage(cacheKey, "user", clean);
   chatInFlight++;
@@ -5832,6 +5924,7 @@ async function sendChat(text: string) {
     agentId,
     intentId,
     startedAt,
+    runId,
     costUsd: null,
     finished: false,
   };
@@ -5860,6 +5953,7 @@ async function sendChat(text: string) {
       intentId,
       startedAt,
       context,
+      runId,
     });
     return;
   }
@@ -6083,6 +6177,9 @@ function clearChat() {
 interface CachedChatMsg {
   who: "user" | "loom";
   text: string;
+  /** True when the reply is a partial that never completed (review #10):
+      reopening the conversation must keep the partial warning. */
+  partial?: boolean;
 }
 
 const CHAT_CACHE_KEY = "loom-ide-tauri:chat-cache";
@@ -6144,9 +6241,9 @@ function saveChatCache() {
   }
 }
 
-function cacheChatMessage(workId: string, who: "user" | "loom", text: string) {
+function cacheChatMessage(workId: string, who: "user" | "loom", text: string, partial = false) {
   const msgs = chatCache.get(workId) ?? [];
-  msgs.push({ who, text });
+  msgs.push({ who, text, ...(partial ? { partial: true } : {}) });
   chatCache.set(workId, msgs.slice(-CHAT_CACHE_MAX_PER_WORK));
   saveChatCache();
 }
@@ -6173,7 +6270,7 @@ interface RunRecord {
   intentId: string | null;
   sessionId: string | null;
   agentId: string | null;
-  status: "succeeded" | "failed" | "cancelled" | "unknown";
+  status: "succeeded" | "failed" | "cancelled" | "unknown" | "running";
   partial: boolean;
   startedAt: number;
   endedAt: number;
@@ -6195,6 +6292,16 @@ function loadRunRecords() {
     runRecords = (parsed as RunRecord[]).filter(
       (r) => r && typeof r === "object" && typeof r.id === "string" && typeof r.status === "string",
     ).slice(-RUNS_MAX);
+    // Crash recovery is honest (review #5): a run that was still
+    // "running" when the app closed becomes "unknown" — the backend job
+    // may have kept running or died; neither cancelled nor succeeded is
+    // invented.
+    for (const run of runRecords) {
+      if (run.status === "running") {
+        run.status = "unknown";
+        run.error = "The app closed while this turn was running; its outcome on the server is unknown.";
+      }
+    }
   } catch {
     // Never silently replace damaged state with empty data: the corrupt
     // bytes are preserved under a backup key, and a fresh list starts
@@ -6222,9 +6329,41 @@ function saveRunRecords() {
   }
 }
 
-function recordRun(record: Omit<RunRecord, "id" | "endedAt">) {
-  runRecords.push({ ...record, id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, endedAt: Date.now() });
+function recordRunStart(
+  record: Omit<RunRecord, "id" | "endedAt" | "status" | "partial">,
+): string {
+  // The run exists from the moment the request leaves the IDE: a crash
+  // mid-turn leaves an "unknown" record instead of erasing the turn
+  // (review #5 / QC-14).
+  const id = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  runRecords.push({ ...record, id, status: "running", partial: false, endedAt: 0 });
   if (runRecords.length > RUNS_MAX) runRecords = runRecords.slice(-RUNS_MAX);
+  saveRunRecords();
+  return id;
+}
+
+function recordRunSettle(
+  id: string,
+  update: {
+    status: RunRecord["status"];
+    partial: boolean;
+    error?: string;
+    costUsd?: number | null;
+    costSource?: string;
+    traceId?: string | null;
+    sessionId?: string | null;
+  },
+) {
+  const run = runRecords.find((r) => r.id === id);
+  if (!run) return;
+  run.status = update.status;
+  run.partial = update.partial;
+  run.endedAt = Date.now();
+  if (update.error !== undefined) run.error = update.error;
+  if (update.costUsd !== undefined) run.costUsd = update.costUsd;
+  if (update.costSource !== undefined) run.costSource = update.costSource;
+  if (update.traceId !== undefined) run.traceId = update.traceId;
+  if (update.sessionId !== undefined) run.sessionId = update.sessionId;
   saveRunRecords();
 }
 
@@ -6243,6 +6382,12 @@ function renderChatMessages(msgs: CachedChatMsg[]) {
   }
   for (const m of msgs) {
     addChatMessage(m.who, m.text, undefined, false);
+    if (m.partial) {
+      const note = document.createElement("p");
+      note.className = "chat-partial-note";
+      note.textContent = "The reply above is partial — the stream ended before completion.";
+      log.append(note);
+    }
   }
 }
 
@@ -7089,7 +7234,10 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
 
   addChatMessage("user", `Run experiment arm: ${arm.label}`);
   cacheChatMessage(cacheKey, "user", `Run experiment arm: ${arm.label}`);
-  if (workId) experimentWorkIds.set(exp.id, workId);
+  if (workId) {
+    experimentWorkIds.set(exp.id, workId);
+    saveOwnershipMap(EXP_WORK_KEY, experimentWorkIds);
+  }
   setSphereState("executing");
   const log = $("#chat-log");
   const typing = document.createElement("div");
@@ -7850,6 +7998,7 @@ async function init() {
   await refreshSessions();
   loadChatCache();
   loadRunRecords();
+  loadOwnershipMaps();
   syncSessionToWork();
   // Restore the saved session/agent selection when no work item supplies
   // one (the keys were previously written but never read back).

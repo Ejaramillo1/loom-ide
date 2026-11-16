@@ -2263,6 +2263,7 @@ pub fn run() {
             loom_http::mcp_server_delete,
             loom_http::mcp_server_restart,
             loom_http::mcp_servers_health_check,
+            loom_http::respond_human_request,
             loom_http::mcp_server_test,
             loom_http::mcp_server_tools,
             loom_http::agent_create,

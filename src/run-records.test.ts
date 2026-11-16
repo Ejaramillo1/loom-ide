@@ -22,7 +22,7 @@ async function build(raw: string | null = null) {
   const { code } = await transformWithOxc(
     `function install() {
       ${storeCode}
-      return { loadRunRecords, recordRun, recordedTotalUsd, getRecords: () => runRecords };
+      return { loadRunRecords, recordRunStart, recordRunSettle, recordedTotalUsd, getRecords: () => runRecords };
     }`,
     "run-records-check.ts",
   );
@@ -52,31 +52,46 @@ it("preserves corrupt bytes under a backup key instead of silently replacing the
   expect(storage.get("loom-ide-tauri:runs-corrupt")).toBe(corrupt);
 });
 
-it("appends run records, persists them, and caps the store", async () => {
+it("run records persist from start to settle, cap, and recover interrupted runs honestly", async () => {
   const { api, storage } = await build();
   api.loadRunRecords();
-  for (let i = 0; i < 205; i++) {
-    api.recordRun(base({ status: "succeeded" }));
+  const started = base({ status: "running" as never });
+  for (let i = 0; i < 204; i++) {
+    api.recordRunStart(started);
   }
+  const id = api.recordRunStart(started);
+  api.recordRunSettle(id, { status: "succeeded", partial: false, costUsd: null });
   expect(api.getRecords().length).toBe(200);
   const saved = JSON.parse(storage.get("loom-ide-tauri:runs") as string);
   expect(saved.length).toBe(200);
   expect(saved[199].status).toBe("succeeded");
+  expect(saved[199].endedAt).toBeGreaterThan(0);
+  expect(saved[198].status).toBe("running");
+
+  // A fresh load marks still-running records unknown — a crash mid-turn
+  // keeps the turn's existence without inventing an outcome.
+  const second = await build(storage.get("loom-ide-tauri:runs"));
+  second.api.loadRunRecords();
+  expect(second.api.getRecords()[198].status).toBe("unknown");
 });
 
 it("the recorded total sums only runs with a numeric server cost", async () => {
   const { api } = await build();
   api.loadRunRecords();
-  api.recordRun(base({ costUsd: 0.0042 }));
-  api.recordRun(base({ costUsd: 0.0018 }));
-  api.recordRun(base({ costUsd: null, status: "failed" }));
+  const a = api.recordRunStart(base({ status: "running" as never }));
+  const b = api.recordRunStart(base({ status: "running" as never }));
+  const c = api.recordRunStart(base({ status: "running" as never }));
+  api.recordRunSettle(a, { status: "succeeded", partial: false, costUsd: 0.0042 });
+  api.recordRunSettle(b, { status: "succeeded", partial: false, costUsd: 0.0018 });
+  api.recordRunSettle(c, { status: "failed", partial: false, costUsd: null });
   expect(api.recordedTotalUsd()).toBeCloseTo(0.006, 10);
 });
 
 it("missing cost is unknown, never counted as zero spend", async () => {
   const { api } = await build();
   api.loadRunRecords();
-  api.recordRun(base({ costUsd: null }));
+  const id = api.recordRunStart(base({ status: "running" as never }));
+  api.recordRunSettle(id, { status: "succeeded", partial: false, costUsd: null });
   expect(api.getRecords()[0].costUsd).toBeNull();
   expect(api.recordedTotalUsd()).toBe(0);
 });

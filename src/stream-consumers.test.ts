@@ -120,7 +120,7 @@ it("workflow stream errors keep the real workflow name and clear state after cap
 
 it("changing sessions cancels the old subscription and clearing cancels too (QC-17)", async () => {
   const cancelLoomStream = vi.fn(async () => {});
-  const sessionSubscribe = vi.fn(async () => {});
+  const sessionSubscribe = vi.fn(async (_id: string, _session: string) => {});
   const refreshSessionDetail = vi.fn(async () => {});
   const api = await build(
     sessionCode,
@@ -129,33 +129,42 @@ it("changing sessions cancels the old subscription and clearing cancels too (QC-
       ensureSessionSubscription, handleSessionEvent,
       getSubId: () => sessionSubId,
     };`,
-    ["isTauri", "sessionSubId", "selectedSessionId", "cancelLoomStream", "sessionSubscribe", "refreshSessionDetail"],
-    [true, null, null, cancelLoomStream, sessionSubscribe, refreshSessionDetail],
+    ["isTauri", "sessionSubId", "sessionSubTarget", "selectedSessionId", "cancelLoomStream", "sessionSubscribe", "refreshSessionDetail"],
+    [true, null, null, null, cancelLoomStream, sessionSubscribe, refreshSessionDetail],
   );
 
   api.setSelectedSessionId("a");
   await api.ensureSessionSubscription();
-  expect(sessionSubscribe).toHaveBeenCalledWith("sess-a", "a");
+  expect(sessionSubscribe).toHaveBeenCalledWith(expect.stringMatching(/^sess-a-/), "a");
   expect(cancelLoomStream).not.toHaveBeenCalled();
+  const idA = sessionSubscribe.mock.calls[0][0];
 
   api.setSelectedSessionId("b");
   await api.ensureSessionSubscription();
-  expect(cancelLoomStream).toHaveBeenCalledWith("sess-a");
-  expect(sessionSubscribe).toHaveBeenCalledWith("sess-b", "b");
+  expect(cancelLoomStream).toHaveBeenCalledWith(idA);
+  expect(sessionSubscribe).toHaveBeenCalledWith(expect.stringMatching(/^sess-b-/), "b");
+  const idB = sessionSubscribe.mock.calls[1][0];
 
   // A stale terminal from the old subscription must not clear the new one.
-  api.handleSessionEvent({ requestId: "sess-a", kind: "error", error: "closed" });
-  expect(api.getSubId()).toBe("sess-b");
+  api.handleSessionEvent({ requestId: idA, kind: "error", error: "closed" });
+  expect(api.getSubId()).toBe(idB);
 
   api.setSelectedSessionId(null);
   await api.ensureSessionSubscription();
-  expect(cancelLoomStream).toHaveBeenCalledWith("sess-b");
+  expect(cancelLoomStream).toHaveBeenCalledWith(idB);
   expect(api.getSubId()).toBeNull();
+
+  // Review #12: A→B→A must generate a NEW id for the second A.
+  api.setSelectedSessionId("a");
+  await api.ensureSessionSubscription();
+  const idA2 = sessionSubscribe.mock.calls[2][0];
+  expect(idA2).not.toBe(idA);
+  expect(idA2).toMatch(/^sess-a-/);
 });
 
 it("re-ensuring the same session does not re-subscribe", async () => {
   const cancelLoomStream = vi.fn(async () => {});
-  const sessionSubscribe = vi.fn(async () => {});
+  const sessionSubscribe = vi.fn(async (_id: string, _session: string) => {});
   const api = await build(
     sessionCode,
     `return {
@@ -163,8 +172,8 @@ it("re-ensuring the same session does not re-subscribe", async () => {
       ensureSessionSubscription,
       getSubId: () => sessionSubId,
     };`,
-    ["isTauri", "sessionSubId", "selectedSessionId", "cancelLoomStream", "sessionSubscribe", "refreshSessionDetail"],
-    [true, null, null, cancelLoomStream, sessionSubscribe, vi.fn(async () => {})],
+    ["isTauri", "sessionSubId", "sessionSubTarget", "selectedSessionId", "cancelLoomStream", "sessionSubscribe", "refreshSessionDetail"],
+    [true, null, null, null, cancelLoomStream, sessionSubscribe, vi.fn(async () => {})],
   );
   api.setSelectedSessionId("a");
   await api.ensureSessionSubscription();

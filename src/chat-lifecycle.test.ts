@@ -76,7 +76,8 @@ type ChatStubs = {
   buildChatContext: ReturnType<typeof vi.fn>;
   askLoomStream: ReturnType<typeof vi.fn>;
   askLoom: ReturnType<typeof vi.fn>;
-  recordRun: ReturnType<typeof vi.fn>;
+  recordRunStart: ReturnType<typeof vi.fn>;
+  recordRunSettle: ReturnType<typeof vi.fn>;
 };
 
 function defaultStubs(): ChatStubs {
@@ -101,7 +102,8 @@ function defaultStubs(): ChatStubs {
     buildChatContext: vi.fn(() => ({ active_work: "w1" })),
     askLoomStream: vi.fn(() => new Promise<void>(() => {})),
     askLoom: vi.fn(async () => ({ text: "unary reply" })),
-    recordRun: vi.fn(),
+    recordRunStart: vi.fn(() => "run-1"),
+    recordRunSettle: vi.fn(),
   };
 }
 
@@ -151,7 +153,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     "refreshSessions", "refreshAgents", "setWorkSession",
     "renderWorkList", "renderSessionBar", "loadWorkArtifacts",
     "getLoomStatus", "answerClarification", "buildChatContext",
-    "askLoomStream", "askLoom", "recordRun",
+    "askLoomStream", "askLoom", "recordRunStart", "recordRunSettle",
     code + "\nreturn install();",
   )(
     document, window, (sel: string) => node(sel.slice(1)), localStorage,
@@ -164,7 +166,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     stubs.refreshSessions, stubs.refreshAgents, stubs.setWorkSession,
     stubs.renderWorkList, stubs.renderSessionBar, stubs.loadWorkArtifacts,
     stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext,
-    stubs.askLoomStream, stubs.askLoom, stubs.recordRun,
+    stubs.askLoomStream, stubs.askLoom, stubs.recordRunStart, stubs.recordRunSettle,
   );
   return { api, stubs, node, window, localStorage };
 }
@@ -289,6 +291,11 @@ it("a start rejection falls back to unary exactly once and never strands the cou
   expect(api.getChatInFlight()).toBe(0);
   expect(stubs.askLoom).toHaveBeenCalledTimes(1);
   expect(stubs.addChatMessage).toHaveBeenCalledWith("loom", "unary reply", expect.anything());
+  expect(stubs.recordRunStart).toHaveBeenCalledTimes(1);
+  expect(stubs.recordRunSettle).toHaveBeenCalledWith(
+    "run-1",
+    expect.objectContaining({ status: "succeeded", sessionId: "sess-1" }),
+  );
 });
 
 it("skips the unary fallback when a terminal already settled before the rejection", async () => {
@@ -325,7 +332,7 @@ it("keeps partial replies on error, marks them partial, and never overwrites a n
   api.handleStreamEvent({ requestId: sends[0], kind: "error", error: "boom" });
   await tick();
 
-  expect(stubs.cacheChatMessage).toHaveBeenCalledWith("__unassigned", "loom", "Hel");
+  expect(stubs.cacheChatMessage).toHaveBeenCalledWith("__unassigned", "loom", "Hel", true);
   expect(node("chat-text").value).toBe("newer human draft");
   expect(localStorage.setItem).not.toHaveBeenCalled();
   expect(api.getChatInFlight()).toBe(0);
@@ -400,8 +407,10 @@ it("writes exactly one run record per terminal and passes the stream cost (no do
   api.handleStreamEvent({ requestId: sends[0], kind: "done" });
   api.handleStreamEvent({ requestId: sends[0], kind: "done" });
   await tick();
-  expect(stubs.recordRun).toHaveBeenCalledTimes(1);
-  expect(stubs.recordRun).toHaveBeenCalledWith(
+  expect(stubs.recordRunStart).toHaveBeenCalledTimes(1);
+  expect(stubs.recordRunSettle).toHaveBeenCalledTimes(1);
+  expect(stubs.recordRunSettle).toHaveBeenCalledWith(
+    "run-1",
     expect.objectContaining({ status: "succeeded", partial: false, costUsd: 0.0042 }),
   );
 });
@@ -418,13 +427,50 @@ it("records cancelled and failed outcomes with partial flags", async () => {
   void api.sendChat("first");
   api.handleStreamEvent({ requestId: sends[0], kind: "progress", event: { partial_content: "par" } });
   api.handleStreamEvent({ requestId: sends[0], kind: "cancelled" });
-  expect(stubs.recordRun).toHaveBeenCalledWith(
+  expect(stubs.recordRunSettle).toHaveBeenCalledWith(
+    "run-1",
     expect.objectContaining({ status: "cancelled", partial: true }),
   );
 
   void api.sendChat("second");
   api.handleStreamEvent({ requestId: sends[1], kind: "error", error: "boom" });
-  expect(stubs.recordRun).toHaveBeenCalledWith(
+  expect(stubs.recordRunSettle).toHaveBeenCalledWith(
+    "run-1",
     expect.objectContaining({ status: "failed", partial: false, error: "boom" }),
   );
+});
+
+
+it("keeps the Stop control when the finished request was not the only stream (review #11)", async () => {
+  const stubs = defaultStubs();
+  const sends: string[] = [];
+  stubs.askLoomStream = vi.fn((requestId: string) => {
+    sends.push(requestId);
+    return new Promise<void>(() => {});
+  });
+  const { api } = await shell(stubs);
+
+  void api.sendChat("first");
+  void api.sendChat("second");
+  // Finish the SECOND request first: the first is still running, and the
+  // Stop handle must move to it instead of disappearing.
+  api.handleStreamEvent({ requestId: sends[1], kind: "done" });
+  await tick();
+  expect(api.getChatInFlight()).toBe(1);
+  expect(api.getActiveStreamId()).toBe(sends[0]);
+});
+
+it("cancelled turns keep their partial output marked partial (review #10)", async () => {
+  const stubs = defaultStubs();
+  const sends: string[] = [];
+  stubs.askLoomStream = vi.fn((requestId: string) => {
+    sends.push(requestId);
+    return new Promise<void>(() => {});
+  });
+  const { api } = await shell(stubs);
+
+  void api.sendChat("hello");
+  api.handleStreamEvent({ requestId: sends[0], kind: "progress", event: { partial_content: "partial value" } });
+  api.handleStreamEvent({ requestId: sends[0], kind: "cancelled" });
+  expect(stubs.cacheChatMessage).toHaveBeenCalledWith("__unassigned", "loom", "partial value", true);
 });

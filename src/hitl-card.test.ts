@@ -65,28 +65,29 @@ const el = (tag = "div") => {
   return e;
 };
 
-const codeSlice =
-  source.slice(source.indexOf("function newestSessionId("), source.indexOf("function handleStreamEvent(")) +
-  "\n" +
-  source.slice(source.indexOf("function renderHitlCard("), source.indexOf("function finishStream("));
+const codeSlice = source.slice(
+  source.indexOf("function renderHitlCard("),
+  source.indexOf("/** Settle one streamed request exactly once."),
+);
 
 async function build() {
   const { code } = await transformWithOxc(
     `function install() {
       ${codeSlice}
-      return { renderHitlCard, newestSessionId };
+      return { renderHitlCard };
     }`,
     "hitl-card-check.ts",
   );
   const answerClarification = vi.fn(async () => "accepted");
+  const respondHumanRequest = vi.fn(async () => ({ status: "approved" }));
   const refreshSessions = vi.fn(async () => {});
   const scrollChat = vi.fn();
   const document = { getElementById: () => el(), createElement: el };
   const api = new Function(
-    "document", "scrollChat", "answerClarification", "refreshSessions", "activeStreamSessionId",
+    "document", "scrollChat", "answerClarification", "respondHumanRequest", "refreshSessions", "activeStreamSessionId",
     code + "\nreturn install();",
-  )(document, scrollChat, answerClarification, refreshSessions, null);
-  return { api, answerClarification, refreshSessions };
+  )(document, scrollChat, answerClarification, respondHumanRequest, refreshSessions, null);
+  return { api, answerClarification, respondHumanRequest, refreshSessions };
 }
 
 function state(): any {
@@ -110,8 +111,8 @@ const flatText = (node: any): string => {
   return out;
 };
 
-it("approval cards are display-only: no Approve/Deny and nothing is submitted (QC-07)", async () => {
-  const { api, answerClarification } = await build();
+it("approval cards answer through the gateway's stored-request route (QC-07)", async () => {
+  const { api, respondHumanRequest, answerClarification } = await build();
   const st = state();
   api.renderHitlCard(st, {
     request_id: "req-1",
@@ -124,11 +125,31 @@ it("approval cards are display-only: no Approve/Deny and nothing is submitted (Q
   const text = flatText(card);
   expect(text).toContain("git push --force");
   expect(text).toContain("expires after 300s");
-  expect(text).toContain("can't be answered from the IDE yet");
-  const buttons = card.querySelectorAll("button").filter((b: any) =>
-    /approve|deny/i.test(b.textContent ?? ""));
-  expect(buttons.length).toBe(0);
+  const approve = card.querySelectorAll("button").find((b: any) => b.textContent === "Approve");
+  const deny = card.querySelectorAll("button").find((b: any) => b.textContent === "Deny");
+  expect(approve).toBeTruthy();
+  expect(deny).toBeTruthy();
+  approve.handlers.click();
+  await new Promise((r) => setTimeout(r, 0));
+  expect(respondHumanRequest).toHaveBeenCalledWith("req-1", "approved");
+  expect(flatText(card)).toContain("hold is released");
+  // The card-level guard: the other control is gone with the resolved card.
+  expect(deny.hidden).toBe(true);
+  // Never the legacy clarification map.
   expect(answerClarification).not.toHaveBeenCalled();
+});
+
+it("approval failures re-enable the card controls instead of allowing double submits (review #16)", async () => {
+  const { api, respondHumanRequest } = await build();
+  respondHumanRequest.mockRejectedValueOnce(new Error("older server: not found"));
+  const st = state();
+  api.renderHitlCard(st, { request_id: "req-2", kind: "approval", summary: "Run tool" });
+  const card = st.msg.children[0];
+  const approve = card.querySelectorAll("button").find((b: any) => b.textContent === "Approve");
+  approve.handlers.click();
+  await new Promise((r) => setTimeout(r, 0));
+  expect(flatText(card)).toContain("older server: not found");
+  expect(approve.disabled).toBe(false);
 });
 
 it("resource holds are display-only too", async () => {
@@ -136,7 +157,7 @@ it("resource holds are display-only too", async () => {
   const st = state();
   api.renderHitlCard(st, { request_id: "req-2", kind: "resource", summary: "Waiting on a lock" });
   const text = flatText(st.msg.children[0]);
-  expect(text).toContain("can't be answered from the IDE yet");
+  expect(text).toContain("can't be answered from the IDE");
   expect(answerClarification).not.toHaveBeenCalled();
 });
 

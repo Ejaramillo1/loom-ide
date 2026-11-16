@@ -247,10 +247,15 @@ pub async fn mcp_servers_health_check() -> Result<Vec<McpServer>, String> {
     // the existing configuration rows by name so a health check never
     // erases configured servers (QC-12).
     let value = loom_get("/v1/mcp/servers:health".into()).await?;
-    let map = value
-        .get("servers")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "Unexpected MCP health response shape (no servers map).".to_string())?;
+    // Protojson omits an empty map entirely: a healthy zero-server
+    // configuration returns {} with no `servers` key (review #15). Only a
+    // present-but-non-object field is malformed.
+    let map = match value.get("servers") {
+        None => &serde_json::Map::new(),
+        Some(v) => v.as_object().ok_or_else(|| {
+            "Unexpected MCP health response shape (servers is not a map).".to_string()
+        })?,
+    };
     let mut rows = Vec::with_capacity(map.len());
     for (name, health) in map {
         rows.push(McpServer {
@@ -286,6 +291,38 @@ pub struct McpTestResult {
     pub success: bool,
     pub message: String,
     pub tool_count: i64,
+}
+
+/// Answer a stored HITL request (approval hold) over the gateway's
+/// POST /v1/human-requests/{id}:respond — the same store `looms hitl`
+/// resolves. The status vocabulary is validated verbatim (approved /
+/// rejected / responded); anything else is rejected before the network.
+#[tauri::command]
+pub async fn respond_human_request(
+    request_id: String,
+    status: String,
+    response: Option<String>,
+) -> Result<Value, String> {
+    if request_id.trim().is_empty() {
+        return Err("No hold selected.".into());
+    }
+    let status = status.trim().to_string();
+    if !matches!(status.as_str(), "approved" | "rejected" | "responded") {
+        return Err("Status must be approved, rejected, or responded.".into());
+    }
+    let body = serde_json::json!({
+        "status": status,
+        "response": response.unwrap_or_default().trim(),
+    });
+    loom_send(
+        "POST",
+        format!(
+            "/v1/human-requests/{}:respond",
+            percent_encode(request_id.trim())
+        ),
+        Some(body),
+    )
+    .await
 }
 
 #[tauri::command]

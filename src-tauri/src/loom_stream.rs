@@ -374,30 +374,70 @@ struct ResponseHead {
     content_length: Option<u64>,
 }
 
-fn checked_read_line<R: BufRead>(
+/// Read one line with cancel/deadline wakeups and an INCREMENTAL size
+/// bound (review #7/#9): bytes are appended only after the bound check, so
+/// a header/body line without a newline can never grow past `max`, and a
+/// timeout mid-line retains the bytes already appended — the returned
+/// count covers the whole logical line across wakeups. `Ok(0)` means EOF
+/// before any byte.
+fn checked_read_until_bounded<R: BufRead>(
     reader: &mut R,
-    line: &mut String,
+    byte: u8,
+    buf: &mut Vec<u8>,
+    max: usize,
     cancel: &AtomicBool,
     started: Instant,
 ) -> Result<usize, String> {
+    let start = buf.len();
     loop {
-        match reader.read_line(line) {
-            Ok(n) => return Ok(n),
+        if cancel.load(Ordering::SeqCst) {
+            return Err("Cancelled.".into());
+        }
+        if started.elapsed() > Duration::from_secs(1800) {
+            return Err("The Loom stream exceeded 30 minutes.".into());
+        }
+        let available = match reader.fill_buf() {
+            Ok(bytes) => bytes,
             Err(e)
                 if e.kind() == std::io::ErrorKind::TimedOut
                     || e.kind() == std::io::ErrorKind::WouldBlock =>
             {
-                if cancel.load(Ordering::SeqCst) {
-                    return Err("Cancelled.".into());
-                }
-                if started.elapsed() > Duration::from_secs(1800) {
-                    return Err("The Loom stream exceeded 30 minutes.".into());
-                }
                 continue;
             }
             Err(e) => return Err(e.to_string()),
+        };
+        if available.is_empty() {
+            return Ok(buf.len() - start);
+        }
+        let take = match available.iter().position(|&b| b == byte) {
+            Some(pos) => pos + 1,
+            None => available.len(),
+        };
+        if buf.len() + take - start > max {
+            return Err(format!(
+                "A Loom response line exceeded the {max}-byte limit."
+            ));
+        }
+        let terminator = available[take - 1] == byte;
+        buf.extend_from_slice(&available[..take]);
+        reader.consume(take);
+        if terminator {
+            return Ok(buf.len() - start);
         }
     }
+}
+
+fn checked_read_line<R: BufRead>(
+    reader: &mut R,
+    line: &mut String,
+    max: usize,
+    cancel: &AtomicBool,
+    started: Instant,
+) -> Result<usize, String> {
+    let mut raw: Vec<u8> = Vec::new();
+    let n = checked_read_until_bounded(reader, b'\n', &mut raw, max, cancel, started)?;
+    line.push_str(&String::from_utf8_lossy(&raw[..n]));
+    Ok(n)
 }
 
 fn read_response_head<R: BufRead>(
@@ -414,7 +454,7 @@ fn read_response_head<R: BufRead>(
         line.clear();
         // The head phase honors the same cancel/deadline wakeups as the
         // body: a Stop pending while Loom is slow to respond still lands.
-        let n = match checked_read_line(reader, &mut line, cancel, started) {
+        let n = match checked_read_line(reader, &mut line, MAX_HEADER_BYTES, cancel, started) {
             Ok(n) => n,
             Err(e) if e == "Cancelled." => return Err(e),
             Err(e) => return Err(format!("Could not read Loom's response head: {e}")),
@@ -458,36 +498,6 @@ fn read_response_head<R: BufRead>(
         }
     }
     Err("Loom's response headers exceeded the line limit.".into())
-}
-
-/// Read with cancel and deadline wakeups: a socket read timeout (20 s) is
-/// how Stop actually stops — the flag is re-checked on every wake, so a
-/// silent stream cancels within ~20 s instead of waiting out a 310 s read.
-fn checked_read_until<R: BufRead>(
-    reader: &mut R,
-    byte: u8,
-    buf: &mut Vec<u8>,
-    cancel: &AtomicBool,
-    started: Instant,
-) -> Result<usize, String> {
-    loop {
-        match reader.read_until(byte, buf) {
-            Ok(n) => return Ok(n),
-            Err(e)
-                if e.kind() == std::io::ErrorKind::TimedOut
-                    || e.kind() == std::io::ErrorKind::WouldBlock =>
-            {
-                if cancel.load(Ordering::SeqCst) {
-                    return Err("Cancelled.".into());
-                }
-                if started.elapsed() > Duration::from_secs(1800) {
-                    return Err("The Loom stream exceeded 30 minutes.".into());
-                }
-                continue;
-            }
-            Err(e) => return Err(e.to_string()),
-        }
-    }
 }
 
 fn checked_read_exact<R: BufRead>(
@@ -546,6 +556,8 @@ struct BodyDecoder<R: BufRead> {
     /// Bytes of the current chunk read past a newline, served before the
     /// next socket read.
     carry: Vec<u8>,
+    /// Aggregate bytes consumed by the chunk trailer block (review #9).
+    trailer_bytes: usize,
 }
 
 impl<R: BufRead> BodyDecoder<R> {
@@ -562,6 +574,7 @@ impl<R: BufRead> BodyDecoder<R> {
             mode,
             total: 0,
             carry: Vec::new(),
+            trailer_bytes: 0,
         }
     }
 
@@ -596,7 +609,14 @@ impl<R: BufRead> BodyDecoder<R> {
                 BodyMode::Done => return Ok(false),
                 BodyMode::Fixed(mut remaining) => {
                     let mut tmp: Vec<u8> = Vec::new();
-                    let n = checked_read_until(&mut self.inner, b'\n', &mut tmp, cancel, started)?;
+                    let n = checked_read_until_bounded(
+                        &mut self.inner,
+                        b'\n',
+                        &mut tmp,
+                        MAX_LINE_BYTES,
+                        cancel,
+                        started,
+                    )?;
                     if n == 0 {
                         if remaining != 0 {
                             return Err(
@@ -622,6 +642,12 @@ impl<R: BufRead> BodyDecoder<R> {
                         ChunkedResult::Continue(next) => mode = BodyMode::Chunked(next),
                         ChunkedResult::Line(next) => {
                             self.mode = BodyMode::Chunked(next);
+                            // Strip the CR/LF terminator ONCE on the fully
+                            // assembled line: a CR and its LF can arrive in
+                            // different transfer chunks (review #8).
+                            let stripped = strip_line_endings(out).to_vec();
+                            out.clear();
+                            out.extend_from_slice(&stripped);
                             return Ok(true);
                         }
                         ChunkedResult::Done => {
@@ -630,6 +656,9 @@ impl<R: BufRead> BodyDecoder<R> {
                                 // A body whose last event line lacked its
                                 // terminator: deliver the tail once, then
                                 // report EOF on the next call.
+                                let stripped = strip_line_endings(out).to_vec();
+                                out.clear();
+                                out.extend_from_slice(&stripped);
                                 return Ok(true);
                             }
                             mode = BodyMode::Done;
@@ -638,7 +667,14 @@ impl<R: BufRead> BodyDecoder<R> {
                 }
                 BodyMode::UntilEof => {
                     let mut tmp: Vec<u8> = Vec::new();
-                    let n = checked_read_until(&mut self.inner, b'\n', &mut tmp, cancel, started)?;
+                    let n = checked_read_until_bounded(
+                        &mut self.inner,
+                        b'\n',
+                        &mut tmp,
+                        MAX_LINE_BYTES,
+                        cancel,
+                        started,
+                    )?;
                     if n == 0 {
                         self.mode = BodyMode::Done;
                         if tmp.is_empty() {
@@ -650,6 +686,10 @@ impl<R: BufRead> BodyDecoder<R> {
                     self.charge(n)?;
                     let content = strip_line_endings(&tmp[..n]);
                     self.push_line(out, content)?;
+                    // UntilEof must stay UntilEof until real EOF: restoring
+                    // the mode here keeps every line of an EOF-framed body
+                    // (review #2).
+                    self.mode = BodyMode::UntilEof;
                     return Ok(true);
                 }
             }
@@ -669,8 +709,14 @@ impl<R: BufRead> BodyDecoder<R> {
         match state {
             ChunkedState::Size => {
                 let mut size_line: Vec<u8> = Vec::new();
-                let n =
-                    checked_read_until(&mut self.inner, b'\n', &mut size_line, cancel, started)?;
+                let n = checked_read_until_bounded(
+                    &mut self.inner,
+                    b'\n',
+                    &mut size_line,
+                    MAX_CHUNK_SIZE_LINE,
+                    cancel,
+                    started,
+                )?;
                 if n == 0 {
                     return Err(
                         "Loom's chunked response was truncated before the final chunk.".into(),
@@ -699,7 +745,7 @@ impl<R: BufRead> BodyDecoder<R> {
                 // carried blank line would be lost.
                 if let Some(pos) = self.carry.iter().position(|&b| b == b'\n') {
                     let line_bytes: Vec<u8> = self.carry.drain(..=pos).collect();
-                    self.push_line(out, strip_line_endings(&line_bytes))?;
+                    self.push_line(out, &line_bytes)?;
                     return Ok(ChunkedResult::Line(ChunkedState::Data { remaining }));
                 }
                 if !self.carry.is_empty() {
@@ -725,7 +771,7 @@ impl<R: BufRead> BodyDecoder<R> {
                     Some(pos) => {
                         let line_bytes: Vec<u8> = buf[..=pos].to_vec();
                         self.carry = buf[pos + 1..].to_vec();
-                        self.push_line(out, strip_line_endings(&line_bytes))?;
+                        self.push_line(out, &line_bytes)?;
                         Ok(ChunkedResult::Line(ChunkedState::Data {
                             remaining: remaining - buf.len() as u64,
                         }))
@@ -740,12 +786,25 @@ impl<R: BufRead> BodyDecoder<R> {
             }
             ChunkedState::Trailer => {
                 let mut trailer: Vec<u8> = Vec::new();
-                let n = checked_read_until(&mut self.inner, b'\n', &mut trailer, cancel, started)?;
+                let n = checked_read_until_bounded(
+                    &mut self.inner,
+                    b'\n',
+                    &mut trailer,
+                    MAX_HEADER_BYTES,
+                    cancel,
+                    started,
+                )?;
                 if n == 0 {
                     return Err(
                         "Loom's chunked response was truncated before the trailer terminator."
                             .into(),
                     );
+                }
+                // Trailers get an aggregate cap too (review #9): the whole
+                // trailer block is bounded like the response head.
+                self.trailer_bytes += n;
+                if self.trailer_bytes > MAX_HEADER_BYTES {
+                    return Err("Loom's chunk trailers exceeded the size limit.".into());
                 }
                 let t = String::from_utf8_lossy(&trailer[..n]);
                 if t.trim_end_matches(['\r', '\n']).is_empty() {
@@ -1231,7 +1290,11 @@ mod tests {
         response.extend_from_slice(&vec![b'f'; 2048]);
         response.extend_from_slice(b"\r\n");
         let (result, _) = drive(&response, "loom-patterns");
-        assert!(result.unwrap_err().contains("chunk-size line"));
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("chunk-size line") || err.contains("1024-byte limit"),
+            "expected a bounded chunk-size error, got {err:?}"
+        );
     }
 
     #[test]
@@ -1384,6 +1447,102 @@ mod tests {
             "the fixture must deliver the completion event"
         );
         assert_eq!(result.unwrap_err(), "Cancelled.");
+    }
+
+    #[test]
+    fn eof_framed_bodies_deliver_every_line() {
+        // Review #2: no Content-Length and no chunked — the body runs to
+        // EOF, and EVERY line must be delivered, not just the first.
+        let body = b"data: {\"partial_content\":\"one\"}\n\ndata: {\"stage\":7}\n\n".to_vec();
+        let mut response = b"HTTP/1.1 200 OK\r\n\r\n".to_vec();
+        response.extend_from_slice(&body);
+        let (result, events) = drive(&response, "loom-stream");
+        let read = result.expect("EOF-framed SSE must parse");
+        assert!(read.completed);
+        assert_eq!(events.len(), 2, "both events must be delivered");
+        assert_eq!(events[0]["partial_content"], "one");
+        assert_eq!(events[1]["stage"], 7);
+
+        let ndjson = b"{\"result\":{\"runId\":\"r1\"}}\n{\"result\":{\"runId\":\"r2\"}}\n".to_vec();
+        let mut response = b"HTTP/1.1 200 OK\r\n\r\n".to_vec();
+        response.extend_from_slice(&ndjson);
+        let (result, events) = drive(&response, "loom-workflow");
+        assert!(result.is_ok());
+        assert_eq!(events.len(), 2, "both NDJSON rows must be delivered");
+        assert_eq!(events[1]["runId"], "r2");
+    }
+
+    #[test]
+    fn crlf_split_across_transfer_chunks_keeps_sse_boundaries() {
+        // Review #8: the CR and LF of one terminator can arrive in
+        // different transfer chunks. The fully assembled line must be
+        // stripped once, or the blank SSE separator becomes a CR line.
+        let mut response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        response.extend_from_slice(&chunked(&[b"data: {\"stage\":7}\r", b"\n\r", b"\n"]));
+        let (result, events) = drive(&response, "loom-stream");
+        let read = result.expect("CRLF-split chunk framing must parse");
+        assert!(read.completed);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["stage"], 7);
+    }
+
+    #[test]
+    fn timeout_inside_a_line_does_not_corrupt_accumulated_bytes() {
+        // Review #7: a socket timeout mid-line must keep the bytes
+        // already appended; the next wake completes the same line.
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let head = b"HTTP/1.1 200 OK\r\nContent-Length: 53\r\n\r\n";
+        let part1 = b"data: {\"stage\":7}";
+        let part2 = b"\n\ndata: {\"partial_content\":\"tail\"}\n\n";
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut req = [0u8; 1024];
+            let mut seen = 0usize;
+            loop {
+                use std::io::Read;
+                let n = socket.read(&mut req[seen..]).unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                seen += n;
+                if req[..seen].windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            use std::io::Write;
+            let _ = socket.write_all(head);
+            let _ = socket.write_all(part1);
+            std::thread::sleep(Duration::from_millis(400));
+            let _ = socket.write_all(part2);
+            std::thread::sleep(Duration::from_millis(200));
+        });
+        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
+        let _ = stream
+            .write_all(b"POST /v1/weave:stream HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{}");
+        let cancel = AtomicBool::new(false);
+        let mut reader = BufReader::new(stream);
+        let mut events = Vec::new();
+        let read = read_response_events(
+            &mut reader,
+            &cancel,
+            "loom-stream",
+            Instant::now(),
+            |value| {
+                events.push(value);
+                Ok(())
+            },
+        )
+        .expect("a timeout mid-line must not corrupt the event");
+        server.join().unwrap();
+        assert!(read.completed);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["stage"], 7);
+        assert_eq!(events[1]["partial_content"], "tail");
     }
 
     #[test]

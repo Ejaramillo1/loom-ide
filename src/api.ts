@@ -1230,6 +1230,10 @@ export const deleteMcpServer = (serverName: string) =>
   invokeCmd<string>("mcp_server_delete", { serverName });
 export const restartMcpServer = (serverName: string) =>
   invokeCmd<McpServer>("mcp_server_restart", { serverName });
+export const respondHumanRequest = (
+  requestId: string, status: "approved" | "rejected" | "responded", response?: string,
+) => invokeCmd<unknown>("respond_human_request", { requestId, status, response });
+
 export const healthCheckMcpServers = () =>
   invokeCmd<McpServer[]>("mcp_servers_health_check");
 export interface McpTestResult {
