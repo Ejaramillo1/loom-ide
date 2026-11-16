@@ -47,6 +47,7 @@ it("workflow completion stays owned by the work it was started from, even after 
       "workflowError", "sphereState",
       "renderWorkDetail", "renderEvidence", "setSphereState", "setLoomReachable",
       "refreshExecutionsList", "pollWorkflowExecution", "isLoomConnectionError",
+      "saveOwnershipMap", "EXEC_WORK_KEY",
     ],
     [
       { setTimeout: vi.fn() },
@@ -57,6 +58,7 @@ it("workflow completion stays owned by the work it was started from, even after 
       vi.fn(), vi.fn(), vi.fn(), vi.fn(),
       vi.fn(async () => {}), vi.fn(async () => {}),
       vi.fn((e: Error) => /ECONNREFUSED|Loom is unavailable/i.test(String(e))),
+      vi.fn(), "loom-ide-tauri:exec-work",
     ],
   );
 
@@ -94,6 +96,7 @@ it("workflow stream errors keep the real workflow name and clear state after cap
       "workflowError", "sphereState",
       "renderWorkDetail", "renderEvidence", "setSphereState", "setLoomReachable",
       "refreshExecutionsList", "pollWorkflowExecution", "isLoomConnectionError",
+      "saveOwnershipMap", "EXEC_WORK_KEY",
     ],
     [
       { setTimeout: vi.fn() },
@@ -104,6 +107,7 @@ it("workflow stream errors keep the real workflow name and clear state after cap
       vi.fn(), vi.fn(), vi.fn(), vi.fn(),
       vi.fn(async () => {}), vi.fn(async () => {}),
       vi.fn((e: Error) => /ECONNREFUSED|Loom is unavailable/i.test(String(e))),
+      vi.fn(), "loom-ide-tauri:exec-work",
     ],
   );
 
