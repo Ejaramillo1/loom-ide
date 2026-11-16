@@ -323,3 +323,24 @@ Verification: vitest 90/90 · build ✓ · cargo lib 122/2 · native 22 ✓ ·
 fmt ✓ · live probes above. Remaining: release-binary rebuild (running),
 real-window CSP/UI check (D14 environment limit), a real model turn
 still not executed (no disposable profile).
+
+
+## Round 3 — review repairs (REVIEW-11ead3c.md) + Loom approval route
+
+All 17 review items + the QC-11 note repaired (commit `de3b4fc`, IDE
+side; approvals now answer through the gateway's
+POST /v1/human-requests/{id}:respond route built in Loom commit
+`8082078`). Reader bugs fixed with fixtures: UntilEof multi-line,
+timeout-mid-line, CRLF-split-across-chunks, incremental bounds; run
+records now start at send and settle by id, with honest 'unknown'
+recovery; ownership maps persist; Stop adoption, unique subscription
+ids, layout auto-save guard, newModel casing, empty MCP health, HITL
+card guard, no invented evidence labels.
+
+Verification: vitest 93/93 (12 files) · build ✓ · cargo lib 125/2 ·
+native 22 ✓ · fmt ✓ · release binary rebuilt at head (de3b4fc). Live
+probes earlier this round: tasks 200 (15 tasks), boards 200 (5 boards),
+ready-front 200, skills 400-validated, respond route answering, trace
+route present. Remaining limits: no disposable profile (no live model
+turn), Unity recompile unavailable (EDITOR_NOT_RUNNING), real-window
+CSP/UI check still environment-blocked.
