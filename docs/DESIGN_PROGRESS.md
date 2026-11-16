@@ -166,3 +166,34 @@ recorded in `docs/DECISIONS.md`; nothing there awaits Eduardo's call.
   CLI reports v2.2.7. A real short pass is Eduardo's to run from the
   laptop terminal — the script itself warns against running it through
   the harness shell.
+
+## Scene fix pass (assistant, 15 Nov ~22:15, Eduardo: the 3D scene looks bad in the real capture)
+
+Five scene fixes in `MemoryPalaceController.cs`, verified with Editor
+bench-shots (pixel analysis; the real Tauri window stays blocked — D14):
+
+- **Background depth**: the cold blue-black backdrop (`#0A0E14`) was
+  replaced with the shell's warm charcoal (`#1d1b1a`, matching `--bg`) plus a
+  generated radial-gradient backdrop and a visible warm floor; the trilight
+  ambient was warmed. Measured: `bench-dark-front.png` near-black pixels
+  14.6% → 0.18%, `bench-column.png` 16.2% → 0.03% (top band was pure black,
+  now a gradient).
+- **Sphere volume**: emission 2.0× → 1.0×, pulse 0.3 → 0.12, smoothness
+  0.68 → 0.55, bloom threshold 1.05 → 1.15 and intensity 0.45 → 0.3. The
+  sphere now shows a light-to-shadow gradient (53% of its region below 120
+  luminance, zero clipped pixels) instead of a flat white disc; state colour
+  unchanged.
+- **Column fill**: the backdrop + floor fill the narrow center column, so
+  the canvas no longer reads as a letterboxed photo against the UI.
+- **Dust motes**: particle count/rate halved and size/brightness reduced so
+  they read as depth, not screen noise.
+- **Labels**: portal labels moved from 3D TextMesh to screen-space IMGUI with
+  a rounded reading-surface plate, drawn after the scene, so they are always
+  legible and never occluded by the sphere or another object.
+
+`Tools/CaptureLabels.cs` was added to capture the game view (scene + IMGUI
+labels) since `CaptureBookmarks.cs` disables the controller and its render
+texture excludes OnGUI. Verified in Play Mode: 6 portals, 154 parts,
+CheckWorkbench green. The object ring still rotates (labels are on top), so
+an object can still pass behind another during orbit; its label no longer
+goes with it.
