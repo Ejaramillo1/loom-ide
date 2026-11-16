@@ -289,3 +289,37 @@ Plan:
 ## Blockers
 
 (none yet)
+
+
+## Round 2 — "fix everything" (owner authorization, 15 Nov evening)
+
+Loom-side (repo `/home/ed/work/loom`, commit `8082078`, local only, no
+push): TaskService + SkillsImportService registered on the HTTP gateway
+(kanban and Skills shelf now have real data sources — verified live:
+`/v1/tasks` 200, `/v1/boards` 200, `/v1/skills:bulkImport` 400
+validation instead of 404); `POST /v1/human-requests/{id}:respond`
+answers stored approvals over HTTP with `looms hitl respond` semantics;
+`WeaveResponse.TraceId` populated from the active span (unary +
+dedupe-final); `WeaveRequest.context` consumed into the prompt as a
+bounded labeled section (1200 chars, file content 600, truncation
+stated; untrusted-data label). Server rebuilt and restarted
+(`/home/ed/.local/bin/looms`, pid changed, same `looms serve` config);
+health 200. Pre-existing FTS5-sqlite test failure noted (environment,
+not these changes).
+
+IDE-side (commits `1c6efb8`, `+harness`, `+docs`):
+- Context delivery moved server-side; client query composition removed
+  (no double injection); context-section.test.ts retired (coverage in
+  Loom request_context_test.go).
+- Issue 014 captions split rejection vs disconnection on both paths.
+- Issue 010 webview CSP set; inline file:// guard moved into main.ts.
+- Issues 001/002 boards error names the missing registration on 404.
+- Issue 012: schedule-history 'Cancel run' + tools 'Request permission…'
+  dialogs wired to the bridged commands; history reads protojson
+  executionId.
+- QC-04 residue fixtures: error-after-completion, cancel-near-EOF.
+
+Verification: vitest 90/90 · build ✓ · cargo lib 122/2 · native 22 ✓ ·
+fmt ✓ · live probes above. Remaining: release-binary rebuild (running),
+real-window CSP/UI check (D14 environment limit), a real model turn
+still not executed (no disposable profile).
