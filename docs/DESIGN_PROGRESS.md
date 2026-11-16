@@ -90,7 +90,9 @@ A second read of the build plan against the repo found the remaining gaps; the i
 
 The 343-item remaining-work plan (`docs/REMAINING_WORK_PLAN_7X7X7.md`) was
 audited against the repo. Its two corrections drove this pass: tasks and
-skills are 100% HTTP (no transport decision), and the blur had causes in
+skills ride HTTP (the gateway now registers TaskService and
+SkillsImportService — Loom commit 8082078 — so the kanban and the Skills
+shelf serve real data over HTTP; verified live 15 Nov), and the blur had causes in
 code. Implemented:
 
 - **Loom tasks + boards** (`loom_tasks.rs`): boards CRUD, task CRUD,

@@ -62,8 +62,11 @@ audit checks the code against this document, not the other way around.
 
 ## Response limits
 
-- 16 MB per response; larger bodies error. Chunked bodies read to EOF
-  within the read timeout.
+- 16 MB per response; larger bodies error. Both readers decode HTTP body
+  framing before parsing: chunked bodies (sizes, trailers, zero chunk)
+  and Content-Length bodies are read to EOF within the read timeout —
+  the stream reader gained the same framing the unary reader always had
+  (commit bdb92bb).
 
 ## Cancellation of the unary fallback
 

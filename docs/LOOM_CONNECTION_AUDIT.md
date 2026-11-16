@@ -11,8 +11,11 @@ The living surface is documented in `docs/DESIGN_PROGRESS.md`,
 `docs/LOOM_CONNECTION_MODEL.md` and `docs/DECISIONS.md`. The key facts:
 
 - **Commands and endpoints:** ~100 Tauri command functions are registered;
-  40+ HTTP endpoints are wired. Tasks and skills are 100% HTTP (`task.proto`
-  has 19 `google.api.http` annotations; `skills_import.proto` has 3).
+  40+ HTTP endpoints are wired. Tasks and skills are served over HTTP: the
+  protos carry `google.api.http` annotations AND the gateway registers the
+  services (Loom commit 8082078, verified live 15 Nov — `/v1/tasks` and
+  `/v1/boards` return data, `/v1/skills:bulkImport` validates instead of
+  404ing).
 - **Streaming:** six SSE endpoints ride one consumer (`loom_stream.rs`):
   `/v1/weave:stream`, `/v1/workflows:stream`, `/v1/sessions/{id}:subscribe`,
   `/v1/providers:abtest`, `/v1/patterns:stream`,
