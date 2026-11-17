@@ -2,10 +2,11 @@ import { expect, it, vi } from "vitest";
 import { transformWithOxc } from "vite";
 import source from "./main.ts?raw";
 
-// Exercises the real renderHitlCard code: approval/resource cards must be
-// display-only (QC-07 — no network route to the stored-request store),
-// question cards answer through the legacy clarification map with their
-// question_id, and parameters render as inert text.
+// Exercises the real renderHitlCard code: approval cards answer through
+// the gateway's stored-request route (POST /v1/human-requests/{id}:respond
+// — QC-07), resource holds are display-only, question cards answer through
+// the legacy clarification map with their question_id, and parameters
+// render as inert text.
 
 const el = (tag = "div") => {
   const classes = new Set<string>();
