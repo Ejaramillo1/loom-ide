@@ -1,0 +1,17 @@
+[
+  {
+    "with_name": true,
+    "status": 400,
+    "body": {
+      "code": 3,
+      "message": "proto: (line 1:69): unknown field \"name\""
+    }
+  },
+  {
+    "with_name": false,
+    "status": 200,
+    "body": {
+      "error": "command not found: /__audit_nonexistent_command__ (stat /__audit_nonexistent_command__: no such file or directory)"
+    }
+  }
+]

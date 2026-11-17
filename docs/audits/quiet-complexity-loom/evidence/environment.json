@@ -1,0 +1,29 @@
+{
+  "/health": {
+    "status": 200,
+    "content_type": "text/plain; charset=utf-8",
+    "bytes": 20
+  },
+  "/v1/sessions?limit=1": {
+    "status": 200,
+    "content_type": "application/json",
+    "bytes": 233
+  },
+  "/v1/agents": {
+    "status": 200,
+    "content_type": "application/json",
+    "bytes": 634
+  },
+  "/v1/server/health": {
+    "error": "HTTP Error 404: Not Found"
+  },
+  "tools": {
+    "go": "/usr/bin/go",
+    "unity": "/home/ed/.local/bin/unity",
+    "looms": "/home/ed/.local/bin/looms",
+    "chromium": "/snap/bin/chromium",
+    "firefox": "/usr/bin/firefox",
+    "node": "/home/ed/work/.node-24/bin/node"
+  },
+  "display_available": true
+}

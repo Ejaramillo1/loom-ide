@@ -1,0 +1,976 @@
+[
+  {
+    "command": "knowledge_list",
+    "backend": "src-tauri/src/knowledge.rs:946",
+    "frontend_wrappers": [
+      "src/api.ts:1145"
+    ]
+  },
+  {
+    "command": "knowledge_read",
+    "backend": "src-tauri/src/knowledge.rs:950",
+    "frontend_wrappers": [
+      "src/api.ts:1146"
+    ]
+  },
+  {
+    "command": "knowledge_create",
+    "backend": "src-tauri/src/knowledge.rs:954",
+    "frontend_wrappers": [
+      "src/api.ts:1148"
+    ]
+  },
+  {
+    "command": "knowledge_save",
+    "backend": "src-tauri/src/knowledge.rs:965",
+    "frontend_wrappers": [
+      "src/api.ts:1149"
+    ]
+  },
+  {
+    "command": "knowledge_relate",
+    "backend": "src-tauri/src/knowledge.rs:969",
+    "frontend_wrappers": [
+      "src/api.ts:1150"
+    ]
+  },
+  {
+    "command": "knowledge_review",
+    "backend": "src-tauri/src/knowledge.rs:973",
+    "frontend_wrappers": [
+      "src/api.ts:1152"
+    ]
+  },
+  {
+    "command": "knowledge_archive",
+    "backend": "src-tauri/src/knowledge.rs:983",
+    "frontend_wrappers": [
+      "src/api.ts:1154"
+    ]
+  },
+  {
+    "command": "knowledge_restore",
+    "backend": "src-tauri/src/knowledge.rs:987",
+    "frontend_wrappers": [
+      "src/api.ts:1156"
+    ]
+  },
+  {
+    "command": "knowledge_export_canvas",
+    "backend": "src-tauri/src/knowledge.rs:991",
+    "frontend_wrappers": [
+      "src/api.ts:1157"
+    ]
+  },
+  {
+    "command": "knowledge_sync_from_loom",
+    "backend": "src-tauri/src/knowledge.rs:1063",
+    "frontend_wrappers": [
+      "src/api.ts:1158"
+    ]
+  },
+  {
+    "command": "knowledge_signature",
+    "backend": "src-tauri/src/knowledge.rs:1014",
+    "frontend_wrappers": [
+      "src/api.ts:1159"
+    ]
+  },
+  {
+    "command": "knowledge_canvas_layout_save",
+    "backend": "src-tauri/src/knowledge.rs:1043",
+    "frontend_wrappers": [
+      "src/api.ts:1161"
+    ]
+  },
+  {
+    "command": "knowledge_canvas_layout_load",
+    "backend": "src-tauri/src/knowledge.rs:1053",
+    "frontend_wrappers": [
+      "src/api.ts:1163"
+    ]
+  },
+  {
+    "command": "get_work_items",
+    "backend": "src-tauri/src/lib.rs:141",
+    "frontend_wrappers": [
+      "src/api.ts:482"
+    ]
+  },
+  {
+    "command": "add_work_item",
+    "backend": "src-tauri/src/lib.rs:146",
+    "frontend_wrappers": [
+      "src/api.ts:527"
+    ]
+  },
+  {
+    "command": "set_work_status",
+    "backend": "src-tauri/src/lib.rs:215",
+    "frontend_wrappers": [
+      "src/api.ts:546"
+    ]
+  },
+  {
+    "command": "set_work_autonomy",
+    "backend": "src-tauri/src/lib.rs:224",
+    "frontend_wrappers": [
+      "src/api.ts:594"
+    ]
+  },
+  {
+    "command": "set_work_session",
+    "backend": "src-tauri/src/lib.rs:275",
+    "frontend_wrappers": [
+      "src/api.ts:612"
+    ]
+  },
+  {
+    "command": "set_work_success_criteria",
+    "backend": "src-tauri/src/lib.rs:288",
+    "frontend_wrappers": [
+      "src/api.ts:992"
+    ]
+  },
+  {
+    "command": "set_work_artifacts",
+    "backend": "src-tauri/src/lib.rs:301",
+    "frontend_wrappers": [
+      "src/api.ts:999"
+    ]
+  },
+  {
+    "command": "get_intents",
+    "backend": "src-tauri/src/lib.rs:326",
+    "frontend_wrappers": [
+      "src/api.ts:619"
+    ]
+  },
+  {
+    "command": "create_intent",
+    "backend": "src-tauri/src/lib.rs:339",
+    "frontend_wrappers": [
+      "src/api.ts:633"
+    ]
+  },
+  {
+    "command": "update_intent",
+    "backend": "src-tauri/src/lib.rs:354",
+    "frontend_wrappers": [
+      "src/api.ts:717"
+    ]
+  },
+  {
+    "command": "set_intent_acceptance",
+    "backend": "src-tauri/src/lib.rs:412",
+    "frontend_wrappers": [
+      "src/api.ts:745"
+    ]
+  },
+  {
+    "command": "set_active_intent",
+    "backend": "src-tauri/src/lib.rs:425",
+    "frontend_wrappers": [
+      "src/api.ts:760"
+    ]
+  },
+  {
+    "command": "delete_intent",
+    "backend": "src-tauri/src/lib.rs:434",
+    "frontend_wrappers": [
+      "src/api.ts:779"
+    ]
+  },
+  {
+    "command": "get_attention",
+    "backend": "src-tauri/src/lib.rs:539",
+    "frontend_wrappers": [
+      "src/api.ts:788"
+    ]
+  },
+  {
+    "command": "get_loom_status",
+    "backend": "src-tauri/src/lib.rs:1132",
+    "frontend_wrappers": [
+      "src/api.ts:837"
+    ]
+  },
+  {
+    "command": "ask_loom",
+    "backend": "src-tauri/src/lib.rs:1731",
+    "frontend_wrappers": [
+      "src/api.ts:861"
+    ]
+  },
+  {
+    "command": "ask_loom_stream",
+    "backend": "src-tauri/src/loom_stream.rs:85",
+    "frontend_wrappers": [
+      "src/api.ts:1174"
+    ]
+  },
+  {
+    "command": "cancel_loom_stream",
+    "backend": "src-tauri/src/loom_stream.rs:130",
+    "frontend_wrappers": [
+      "src/api.ts:1178"
+    ]
+  },
+  {
+    "command": "answer_clarification",
+    "backend": "src-tauri/src/loom_stream.rs:277",
+    "frontend_wrappers": [
+      "src/api.ts:1186"
+    ]
+  },
+  {
+    "command": "execute_workflow_stream",
+    "backend": "src-tauri/src/loom_stream.rs:153",
+    "frontend_wrappers": [
+      "src/api.ts:1274"
+    ]
+  },
+  {
+    "command": "session_subscribe",
+    "backend": "src-tauri/src/loom_stream.rs:175",
+    "frontend_wrappers": [
+      "src/api.ts:1276"
+    ]
+  },
+  {
+    "command": "provider_abtest",
+    "backend": "src-tauri/src/loom_stream.rs:200",
+    "frontend_wrappers": [
+      "src/api.ts:1279"
+    ]
+  },
+  {
+    "command": "pattern_updates_stream",
+    "backend": "src-tauri/src/loom_stream.rs:241",
+    "frontend_wrappers": [
+      "src/api.ts:1305"
+    ]
+  },
+  {
+    "command": "task_updates_stream",
+    "backend": "src-tauri/src/loom_stream.rs:255",
+    "frontend_wrappers": [
+      "src/api.ts:1307"
+    ]
+  },
+  {
+    "command": "mcp_servers_list",
+    "backend": "src-tauri/src/loom_http.rs:109",
+    "frontend_wrappers": [
+      "src/api.ts:1191"
+    ]
+  },
+  {
+    "command": "mcp_server_get",
+    "backend": "src-tauri/src/loom_http.rs:118",
+    "frontend_wrappers": [
+      "src/api.ts:1193"
+    ]
+  },
+  {
+    "command": "mcp_server_add",
+    "backend": "src-tauri/src/loom_http.rs:124",
+    "frontend_wrappers": [
+      "src/api.ts:1197"
+    ]
+  },
+  {
+    "command": "mcp_server_update",
+    "backend": "src-tauri/src/loom_http.rs:157",
+    "frontend_wrappers": [
+      "src/api.ts:1201"
+    ]
+  },
+  {
+    "command": "mcp_server_delete",
+    "backend": "src-tauri/src/loom_http.rs:197",
+    "frontend_wrappers": [
+      "src/api.ts:1203"
+    ]
+  },
+  {
+    "command": "mcp_server_restart",
+    "backend": "src-tauri/src/loom_http.rs:215",
+    "frontend_wrappers": [
+      "src/api.ts:1205"
+    ]
+  },
+  {
+    "command": "mcp_servers_health_check",
+    "backend": "src-tauri/src/loom_http.rs:229",
+    "frontend_wrappers": [
+      "src/api.ts:1207"
+    ]
+  },
+  {
+    "command": "mcp_server_test",
+    "backend": "src-tauri/src/loom_http.rs:238",
+    "frontend_wrappers": [
+      "src/api.ts:1211"
+    ]
+  },
+  {
+    "command": "mcp_server_tools",
+    "backend": "src-tauri/src/loom_http.rs:260",
+    "frontend_wrappers": [
+      "src/api.ts:1213"
+    ]
+  },
+  {
+    "command": "agent_create",
+    "backend": "src-tauri/src/loom_http.rs:277",
+    "frontend_wrappers": [
+      "src/api.ts:1218"
+    ]
+  },
+  {
+    "command": "agent_start",
+    "backend": "src-tauri/src/loom_http.rs:293",
+    "frontend_wrappers": [
+      "src/api.ts:1219"
+    ]
+  },
+  {
+    "command": "agent_stop",
+    "backend": "src-tauri/src/loom_http.rs:306",
+    "frontend_wrappers": [
+      "src/api.ts:1220"
+    ]
+  },
+  {
+    "command": "agent_reload",
+    "backend": "src-tauri/src/loom_http.rs:319",
+    "frontend_wrappers": [
+      "src/api.ts:1221"
+    ]
+  },
+  {
+    "command": "agent_delete",
+    "backend": "src-tauri/src/loom_http.rs:332",
+    "frontend_wrappers": [
+      "src/api.ts:1222"
+    ]
+  },
+  {
+    "command": "agent_presets_list",
+    "backend": "src-tauri/src/loom_http.rs:349",
+    "frontend_wrappers": [
+      "src/api.ts:1223"
+    ]
+  },
+  {
+    "command": "workflow_templates_list",
+    "backend": "src-tauri/src/loom_http.rs:355",
+    "frontend_wrappers": [
+      "src/api.ts:1224"
+    ]
+  },
+  {
+    "command": "workflow_schedules_list",
+    "backend": "src-tauri/src/loom_http.rs:411",
+    "frontend_wrappers": [
+      "src/api.ts:1283"
+    ]
+  },
+  {
+    "command": "workflow_schedule_get",
+    "backend": "src-tauri/src/loom_http.rs:417",
+    "frontend_wrappers": [
+      "src/api.ts:1285"
+    ]
+  },
+  {
+    "command": "workflow_schedule_create",
+    "backend": "src-tauri/src/loom_http.rs:429",
+    "frontend_wrappers": [
+      "src/api.ts:1288"
+    ]
+  },
+  {
+    "command": "workflow_schedule_update",
+    "backend": "src-tauri/src/loom_http.rs:456",
+    "frontend_wrappers": [
+      "src/api.ts:1291"
+    ]
+  },
+  {
+    "command": "workflow_schedule_delete",
+    "backend": "src-tauri/src/loom_http.rs:489",
+    "frontend_wrappers": [
+      "src/api.ts:1293"
+    ]
+  },
+  {
+    "command": "workflow_schedule_trigger",
+    "backend": "src-tauri/src/loom_http.rs:507",
+    "frontend_wrappers": [
+      "src/api.ts:1295"
+    ]
+  },
+  {
+    "command": "workflow_schedule_history",
+    "backend": "src-tauri/src/loom_http.rs:523",
+    "frontend_wrappers": [
+      "src/api.ts:1297"
+    ]
+  },
+  {
+    "command": "workflow_schedule_pause",
+    "backend": "src-tauri/src/loom_http.rs:536",
+    "frontend_wrappers": [
+      "src/api.ts:1299"
+    ]
+  },
+  {
+    "command": "workflow_schedule_resume",
+    "backend": "src-tauri/src/loom_http.rs:552",
+    "frontend_wrappers": [
+      "src/api.ts:1301"
+    ]
+  },
+  {
+    "command": "workflow_schedule_cancel_execution",
+    "backend": "src-tauri/src/loom_http.rs:568",
+    "frontend_wrappers": [
+      "src/api.ts:1303"
+    ]
+  },
+  {
+    "command": "skills_add",
+    "backend": "src-tauri/src/loom_http.rs:588",
+    "frontend_wrappers": [
+      "src/api.ts:1362"
+    ]
+  },
+  {
+    "command": "skills_classify",
+    "backend": "src-tauri/src/loom_http.rs:611",
+    "frontend_wrappers": [
+      "src/api.ts:1364"
+    ]
+  },
+  {
+    "command": "skills_bulk_import",
+    "backend": "src-tauri/src/loom_http.rs:624",
+    "frontend_wrappers": [
+      "src/api.ts:1366"
+    ]
+  },
+  {
+    "command": "apps_get",
+    "backend": "src-tauri/src/loom_http.rs:654",
+    "frontend_wrappers": [
+      "src/api.ts:1370"
+    ]
+  },
+  {
+    "command": "apps_create",
+    "backend": "src-tauri/src/loom_http.rs:662",
+    "frontend_wrappers": [
+      "src/api.ts:1372"
+    ]
+  },
+  {
+    "command": "apps_update",
+    "backend": "src-tauri/src/loom_http.rs:667",
+    "frontend_wrappers": [
+      "src/api.ts:1374"
+    ]
+  },
+  {
+    "command": "apps_delete",
+    "backend": "src-tauri/src/loom_http.rs:680",
+    "frontend_wrappers": [
+      "src/api.ts:1375"
+    ]
+  },
+  {
+    "command": "apps_component_types",
+    "backend": "src-tauri/src/loom_http.rs:698",
+    "frontend_wrappers": [
+      "src/api.ts:1376"
+    ]
+  },
+  {
+    "command": "tools_register",
+    "backend": "src-tauri/src/loom_http.rs:709",
+    "frontend_wrappers": [
+      "src/api.ts:1381"
+    ]
+  },
+  {
+    "command": "tool_permission_request",
+    "backend": "src-tauri/src/loom_http.rs:719",
+    "frontend_wrappers": [
+      "src/api.ts:1385"
+    ]
+  },
+  {
+    "command": "tls_status",
+    "backend": "src-tauri/src/loom_http.rs:756",
+    "frontend_wrappers": [
+      "src/api.ts:1389"
+    ]
+  },
+  {
+    "command": "tls_renew",
+    "backend": "src-tauri/src/loom_http.rs:761",
+    "frontend_wrappers": [
+      "src/api.ts:1390"
+    ]
+  },
+  {
+    "command": "run_migration",
+    "backend": "src-tauri/src/loom_http.rs:771",
+    "frontend_wrappers": [
+      "src/api.ts:1391"
+    ]
+  },
+  {
+    "command": "task_boards_list",
+    "backend": "src-tauri/src/loom_tasks.rs:40",
+    "frontend_wrappers": [
+      "src/api.ts:1325"
+    ]
+  },
+  {
+    "command": "task_board_get",
+    "backend": "src-tauri/src/loom_tasks.rs:46",
+    "frontend_wrappers": [
+      "src/api.ts:1326"
+    ]
+  },
+  {
+    "command": "task_board_create",
+    "backend": "src-tauri/src/loom_tasks.rs:55",
+    "frontend_wrappers": [
+      "src/api.ts:1328"
+    ]
+  },
+  {
+    "command": "loom_tasks_list",
+    "backend": "src-tauri/src/loom_tasks.rs:88",
+    "frontend_wrappers": [
+      "src/api.ts:1330"
+    ]
+  },
+  {
+    "command": "loom_task_get",
+    "backend": "src-tauri/src/loom_tasks.rs:119",
+    "frontend_wrappers": [
+      "src/api.ts:1331"
+    ]
+  },
+  {
+    "command": "loom_task_create",
+    "backend": "src-tauri/src/loom_tasks.rs:128",
+    "frontend_wrappers": [
+      "src/api.ts:1333"
+    ]
+  },
+  {
+    "command": "loom_task_update",
+    "backend": "src-tauri/src/loom_tasks.rs:142",
+    "frontend_wrappers": [
+      "src/api.ts:1335"
+    ]
+  },
+  {
+    "command": "loom_task_delete",
+    "backend": "src-tauri/src/loom_tasks.rs:158",
+    "frontend_wrappers": [
+      "src/api.ts:1337"
+    ]
+  },
+  {
+    "command": "loom_task_claim",
+    "backend": "src-tauri/src/loom_tasks.rs:176",
+    "frontend_wrappers": [
+      "src/api.ts:1339"
+    ]
+  },
+  {
+    "command": "loom_task_release",
+    "backend": "src-tauri/src/loom_tasks.rs:204",
+    "frontend_wrappers": [
+      "src/api.ts:1341"
+    ]
+  },
+  {
+    "command": "loom_task_close",
+    "backend": "src-tauri/src/loom_tasks.rs:217",
+    "frontend_wrappers": [
+      "src/api.ts:1343"
+    ]
+  },
+  {
+    "command": "loom_task_transition",
+    "backend": "src-tauri/src/loom_tasks.rs:230",
+    "frontend_wrappers": [
+      "src/api.ts:1345"
+    ]
+  },
+  {
+    "command": "loom_task_add_dependency",
+    "backend": "src-tauri/src/loom_tasks.rs:253",
+    "frontend_wrappers": [
+      "src/api.ts:1347"
+    ]
+  },
+  {
+    "command": "loom_task_remove_dependency",
+    "backend": "src-tauri/src/loom_tasks.rs:271",
+    "frontend_wrappers": [
+      "src/api.ts:1349"
+    ]
+  },
+  {
+    "command": "task_board_ready",
+    "backend": "src-tauri/src/loom_tasks.rs:292",
+    "frontend_wrappers": [
+      "src/api.ts:1351"
+    ]
+  },
+  {
+    "command": "task_board_blocked",
+    "backend": "src-tauri/src/loom_tasks.rs:301",
+    "frontend_wrappers": [
+      "src/api.ts:1353"
+    ]
+  },
+  {
+    "command": "loom_task_decompose",
+    "backend": "src-tauri/src/loom_tasks.rs:310",
+    "frontend_wrappers": [
+      "src/api.ts:1355"
+    ]
+  },
+  {
+    "command": "loom_task_context",
+    "backend": "src-tauri/src/loom_tasks.rs:333",
+    "frontend_wrappers": [
+      "src/api.ts:1357"
+    ]
+  },
+  {
+    "command": "patterns_list",
+    "backend": "src-tauri/src/loom_http.rs:365",
+    "frontend_wrappers": [
+      "src/api.ts:1228"
+    ]
+  },
+  {
+    "command": "pattern_get",
+    "backend": "src-tauri/src/loom_http.rs:371",
+    "frontend_wrappers": [
+      "src/api.ts:1229"
+    ]
+  },
+  {
+    "command": "pattern_create",
+    "backend": "src-tauri/src/loom_http.rs:379",
+    "frontend_wrappers": [
+      "src/api.ts:1231"
+    ]
+  },
+  {
+    "command": "patterns_load",
+    "backend": "src-tauri/src/loom_http.rs:384",
+    "frontend_wrappers": [
+      "src/api.ts:1232"
+    ]
+  },
+  {
+    "command": "apps_list",
+    "backend": "src-tauri/src/loom_http.rs:401",
+    "frontend_wrappers": [
+      "src/api.ts:1236"
+    ]
+  },
+  {
+    "command": "session_delete",
+    "backend": "src-tauri/src/loom_http.rs:785",
+    "frontend_wrappers": [
+      "src/api.ts:1241"
+    ]
+  },
+  {
+    "command": "session_resume",
+    "backend": "src-tauri/src/loom_http.rs:803",
+    "frontend_wrappers": [
+      "src/api.ts:1243"
+    ]
+  },
+  {
+    "command": "session_resolve_gap",
+    "backend": "src-tauri/src/loom_http.rs:816",
+    "frontend_wrappers": [
+      "src/api.ts:1245"
+    ]
+  },
+  {
+    "command": "list_sessions",
+    "backend": "src-tauri/src/lib.rs:1371",
+    "frontend_wrappers": [
+      "src/api.ts:884"
+    ]
+  },
+  {
+    "command": "create_session",
+    "backend": "src-tauri/src/lib.rs:1383",
+    "frontend_wrappers": [
+      "src/api.ts:891"
+    ]
+  },
+  {
+    "command": "list_agents",
+    "backend": "src-tauri/src/lib.rs:1405",
+    "frontend_wrappers": [
+      "src/api.ts:895"
+    ]
+  },
+  {
+    "command": "get_session_history",
+    "backend": "src-tauri/src/lib.rs:1415",
+    "frontend_wrappers": [
+      "src/api.ts:899"
+    ]
+  },
+  {
+    "command": "list_workflows",
+    "backend": "src-tauri/src/lib.rs:1434",
+    "frontend_wrappers": [
+      "src/api.ts:1005"
+    ]
+  },
+  {
+    "command": "execute_workflow",
+    "backend": "src-tauri/src/lib.rs:1444",
+    "frontend_wrappers": [
+      "src/api.ts:1011"
+    ]
+  },
+  {
+    "command": "get_workflow_execution",
+    "backend": "src-tauri/src/lib.rs:1462",
+    "frontend_wrappers": [
+      "src/api.ts:1017"
+    ]
+  },
+  {
+    "command": "list_workflow_executions",
+    "backend": "src-tauri/src/lib.rs:1482",
+    "frontend_wrappers": [
+      "src/api.ts:1021"
+    ]
+  },
+  {
+    "command": "list_artifacts",
+    "backend": "src-tauri/src/lib.rs:1494",
+    "frontend_wrappers": [
+      "src/api.ts:1026",
+      "src/api.ts:1027"
+    ]
+  },
+  {
+    "command": "get_session",
+    "backend": "src-tauri/src/lib.rs:1513",
+    "frontend_wrappers": [
+      "src/api.ts:1033"
+    ]
+  },
+  {
+    "command": "list_tools",
+    "backend": "src-tauri/src/lib.rs:1531",
+    "frontend_wrappers": [
+      "src/api.ts:1039"
+    ]
+  },
+  {
+    "command": "get_trace",
+    "backend": "src-tauri/src/lib.rs:1542",
+    "frontend_wrappers": [
+      "src/api.ts:1096"
+    ]
+  },
+  {
+    "command": "get_agent",
+    "backend": "src-tauri/src/lib.rs:1560",
+    "frontend_wrappers": [
+      "src/api.ts:1045"
+    ]
+  },
+  {
+    "command": "list_models",
+    "backend": "src-tauri/src/lib.rs:1578",
+    "frontend_wrappers": [
+      "src/api.ts:1051"
+    ]
+  },
+  {
+    "command": "list_providers",
+    "backend": "src-tauri/src/lib.rs:1589",
+    "frontend_wrappers": [
+      "src/api.ts:1055"
+    ]
+  },
+  {
+    "command": "switch_model",
+    "backend": "src-tauri/src/lib.rs:1600",
+    "frontend_wrappers": [
+      "src/api.ts:1104"
+    ]
+  },
+  {
+    "command": "get_artifact",
+    "backend": "src-tauri/src/lib.rs:1639",
+    "frontend_wrappers": [
+      "src/api.ts:1083"
+    ]
+  },
+  {
+    "command": "get_artifact_content",
+    "backend": "src-tauri/src/lib.rs:1659",
+    "frontend_wrappers": [
+      "src/api.ts:1111"
+    ]
+  },
+  {
+    "command": "search_artifacts",
+    "backend": "src-tauri/src/lib.rs:1682",
+    "frontend_wrappers": [
+      "src/api.ts:1115"
+    ]
+  },
+  {
+    "command": "get_artifact_stats",
+    "backend": "src-tauri/src/lib.rs:1700",
+    "frontend_wrappers": [
+      "src/api.ts:1087"
+    ]
+  },
+  {
+    "command": "get_server_config",
+    "backend": "src-tauri/src/lib.rs:1710",
+    "frontend_wrappers": [
+      "src/api.ts:1121"
+    ]
+  },
+  {
+    "command": "get_storage_status",
+    "backend": "src-tauri/src/lib.rs:1720",
+    "frontend_wrappers": [
+      "src/api.ts:1125"
+    ]
+  },
+  {
+    "command": "get_experiments",
+    "backend": "src-tauri/src/lib.rs:447",
+    "frontend_wrappers": [
+      "src/api.ts:940"
+    ]
+  },
+  {
+    "command": "add_experiment",
+    "backend": "src-tauri/src/lib.rs:456",
+    "frontend_wrappers": [
+      "src/api.ts:948"
+    ]
+  },
+  {
+    "command": "add_experiment_arm",
+    "backend": "src-tauri/src/lib.rs:470",
+    "frontend_wrappers": [
+      "src/api.ts:956"
+    ]
+  },
+  {
+    "command": "set_experiment_arm_status",
+    "backend": "src-tauri/src/lib.rs:484",
+    "frontend_wrappers": [
+      "src/api.ts:964"
+    ]
+  },
+  {
+    "command": "set_experiment_arm_result",
+    "backend": "src-tauri/src/lib.rs:498",
+    "frontend_wrappers": [
+      "src/api.ts:972"
+    ]
+  },
+  {
+    "command": "choose_experiment_arm",
+    "backend": "src-tauri/src/lib.rs:512",
+    "frontend_wrappers": [
+      "src/api.ts:979"
+    ]
+  },
+  {
+    "command": "clear_experiment_decision",
+    "backend": "src-tauri/src/lib.rs:525",
+    "frontend_wrappers": [
+      "src/api.ts:983"
+    ]
+  },
+  {
+    "command": "get_workspace",
+    "backend": "src-tauri/src/lib.rs:1801",
+    "frontend_wrappers": [
+      "src/api.ts:906"
+    ]
+  },
+  {
+    "command": "open_workspace",
+    "backend": "src-tauri/src/lib.rs:1810",
+    "frontend_wrappers": [
+      "src/api.ts:910"
+    ]
+  },
+  {
+    "command": "list_workspace",
+    "backend": "src-tauri/src/lib.rs:1848",
+    "frontend_wrappers": [
+      "src/api.ts:914"
+    ]
+  },
+  {
+    "command": "list_directory",
+    "backend": "src-tauri/src/lib.rs:1859",
+    "frontend_wrappers": [
+      "src/api.ts:918"
+    ]
+  },
+  {
+    "command": "create_workspace_file",
+    "backend": "src-tauri/src/lib.rs:1929",
+    "frontend_wrappers": [
+      "src/api.ts:922"
+    ]
+  },
+  {
+    "command": "create_workspace_directory",
+    "backend": "src-tauri/src/lib.rs:1947",
+    "frontend_wrappers": [
+      "src/api.ts:926"
+    ]
+  },
+  {
+    "command": "read_file",
+    "backend": "src-tauri/src/lib.rs:1965",
+    "frontend_wrappers": [
+      "src/api.ts:930"
+    ]
+  },
+  {
+    "command": "write_file",
+    "backend": "src-tauri/src/lib.rs:1971",
+    "frontend_wrappers": [
+      "src/api.ts:934"
+    ]
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "check": "frontend-tests",
+    "command": "npm test -- --run",
+    "exit_code": 0,
+    "seconds": 3.35
+  },
+  {
+    "check": "frontend-build",
+    "command": "npm run build",
+    "exit_code": 0,
+    "seconds": 10.09
+  },
+  {
+    "check": "tauri-tests",
+    "command": "cargo test --offline --locked --manifest-path src-tauri/Cargo.toml --lib",
+    "exit_code": 0,
+    "seconds": 3.52
+  },
+  {
+    "check": "native-tests",
+    "command": "cargo test --offline --locked --manifest-path native-app/Cargo.toml",
+    "exit_code": 0,
+    "seconds": 3.15
+  },
+  {
+    "check": "rustfmt",
+    "command": "cargo fmt --check --manifest-path src-tauri/Cargo.toml",
+    "exit_code": 0,
+    "seconds": 0.78
+  },
+  {
+    "check": "unity-recompile",
+    "command": "unity recompile --project-path \"$PWD/unity-memory-palace\" --format json",
+    "exit_code": 0,
+    "seconds": 2.41
+  }
+]

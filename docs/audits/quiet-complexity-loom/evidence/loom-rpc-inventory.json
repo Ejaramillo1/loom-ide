@@ -1,0 +1,2342 @@
+[
+  {
+    "service": "GraphMemoryService",
+    "rpc": "CreateEntity",
+    "request": "CreateEntityRequest",
+    "response": "CreateEntityResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:18",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:53"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "GetEntity",
+    "request": "GetEntityRequest",
+    "response": "GetEntityResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:19",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:78"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "UpdateEntity",
+    "request": "UpdateEntityRequest",
+    "response": "UpdateEntityResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:20",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:98"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "ListEntities",
+    "request": "ListEntitiesRequest",
+    "response": "ListEntitiesResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:21",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:125"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "DeleteEntity",
+    "request": "DeleteEntityRequest",
+    "response": "DeleteEntityResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:22",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:153"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "Relate",
+    "request": "RelateRequest",
+    "response": "RelateResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:25",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:177"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "Unrelate",
+    "request": "UnrelateRequest",
+    "response": "UnrelateResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:26",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:224"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "Neighbors",
+    "request": "NeighborsRequest",
+    "response": "NeighborsResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:27",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:263"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "Remember",
+    "request": "RememberRequest",
+    "response": "RememberResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:30",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:317"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "Recall",
+    "request": "RecallRequest",
+    "response": "RecallResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:31",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:354"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "Forget",
+    "request": "ForgetRequest",
+    "response": "ForgetResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:32",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:391"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "Supersede",
+    "request": "SupersedeRequest",
+    "response": "SupersedeResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:33",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:408"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "Consolidate",
+    "request": "ConsolidateRequest",
+    "response": "ConsolidateResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:34",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:461"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "ContextFor",
+    "request": "ContextForRequest",
+    "response": "ContextForResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:37",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:507"
+    ]
+  },
+  {
+    "service": "GraphMemoryService",
+    "rpc": "GetGraphStats",
+    "request": "GetGraphStatsRequest",
+    "response": "GetGraphStatsResponse",
+    "schema": "proto/loom/v1/graph_memory.proto:40",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/graph_memory_server.go:540"
+    ]
+  },
+  {
+    "service": "JudgeService",
+    "rpc": "EvaluateWithJudges",
+    "request": "EvaluateRequest",
+    "response": "EvaluateResponse",
+    "schema": "proto/loom/v1/judge.proto:20",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/judge_server.go:127"
+    ]
+  },
+  {
+    "service": "JudgeService",
+    "rpc": "EvaluateWithJudgesStream",
+    "request": "EvaluateRequest",
+    "response": "stream EvaluateProgress",
+    "schema": "proto/loom/v1/judge.proto:24",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/judge_server.go:141"
+    ]
+  },
+  {
+    "service": "JudgeService",
+    "rpc": "RegisterJudge",
+    "request": "RegisterJudgeRequest",
+    "response": "RegisterJudgeResponse",
+    "schema": "proto/loom/v1/judge.proto:27",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/judge_server.go:88"
+    ]
+  },
+  {
+    "service": "JudgeService",
+    "rpc": "GetJudgeHistory",
+    "request": "GetJudgeHistoryRequest",
+    "response": "GetJudgeHistoryResponse",
+    "schema": "proto/loom/v1/judge.proto:30",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/judge_server.go:197"
+    ]
+  },
+  {
+    "service": "LearningAgentService",
+    "rpc": "AnalyzePatternEffectiveness",
+    "request": "AnalyzePatternEffectivenessRequest",
+    "response": "PatternAnalysisResponse",
+    "schema": "proto/loom/v1/learning.proto:27",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/learning_service.go:38"
+    ]
+  },
+  {
+    "service": "LearningAgentService",
+    "rpc": "GenerateImprovements",
+    "request": "GenerateImprovementsRequest",
+    "response": "ImprovementsResponse",
+    "schema": "proto/loom/v1/learning.proto:30",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/learning_service.go:46"
+    ]
+  },
+  {
+    "service": "LearningAgentService",
+    "rpc": "ApplyImprovement",
+    "request": "ApplyImprovementRequest",
+    "response": "ApplyImprovementResponse",
+    "schema": "proto/loom/v1/learning.proto:33",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/learning_service.go:54"
+    ]
+  },
+  {
+    "service": "LearningAgentService",
+    "rpc": "RollbackImprovement",
+    "request": "RollbackImprovementRequest",
+    "response": "RollbackImprovementResponse",
+    "schema": "proto/loom/v1/learning.proto:36",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/learning_service.go:62"
+    ]
+  },
+  {
+    "service": "LearningAgentService",
+    "rpc": "GetImprovementHistory",
+    "request": "GetImprovementHistoryRequest",
+    "response": "ImprovementHistoryResponse",
+    "schema": "proto/loom/v1/learning.proto:39",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/learning_service.go:70"
+    ]
+  },
+  {
+    "service": "LearningAgentService",
+    "rpc": "StreamPatternMetrics",
+    "request": "StreamPatternMetricsRequest",
+    "response": "stream PatternMetricEvent",
+    "schema": "proto/loom/v1/learning.proto:42",
+    "http_annotations": [],
+    "server_symbols": [
+      "pkg/server/learning_service.go:79"
+    ]
+  },
+  {
+    "service": "LearningAgentService",
+    "rpc": "TunePatterns",
+    "request": "TunePatternsRequest",
+    "response": "TunePatternsResponse",
+    "schema": "proto/loom/v1/learning.proto:45",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "LLMSchedulerService",
+    "rpc": "GetSlotState",
+    "request": "GetSlotStateRequest",
+    "response": "GetSlotStateResponse",
+    "schema": "proto/loom/v1/llm_scheduler.proto:202",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "LLMSchedulerService",
+    "rpc": "ListWaiters",
+    "request": "ListWaitersRequest",
+    "response": "ListWaitersResponse",
+    "schema": "proto/loom/v1/llm_scheduler.proto:205",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "LLMSchedulerService",
+    "rpc": "SetSchedulerConfig",
+    "request": "SetSchedulerConfigRequest",
+    "response": "SetSchedulerConfigResponse",
+    "schema": "proto/loom/v1/llm_scheduler.proto:208",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "LoomService",
+    "rpc": "Weave",
+    "request": "WeaveRequest",
+    "response": "WeaveResponse",
+    "schema": "proto/loom/v1/loom.proto:41",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/weave"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:133",
+      "pkg/server/multi_agent.go:998"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "StreamWeave",
+    "request": "WeaveRequest",
+    "response": "stream WeaveProgress",
+    "schema": "proto/loom/v1/loom.proto:49",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/weave:stream"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:217",
+      "pkg/server/multi_agent.go:1216"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "LoadPatterns",
+    "request": "LoadPatternsRequest",
+    "response": "LoadPatternsResponse",
+    "schema": "proto/loom/v1/loom.proto:57",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/patterns:load"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/pattern_rpc.go:26",
+      "pkg/server/server.go:667"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListPatterns",
+    "request": "ListPatternsRequest",
+    "response": "ListPatternsResponse",
+    "schema": "proto/loom/v1/loom.proto:65",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/patterns"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/pattern_rpc.go:202",
+      "pkg/server/server.go:672"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetPattern",
+    "request": "GetPatternRequest",
+    "response": "Pattern",
+    "schema": "proto/loom/v1/loom.proto:70",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/patterns/{name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/pattern_rpc.go:282",
+      "pkg/server/server.go:677"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "CreatePattern",
+    "request": "CreatePatternRequest",
+    "response": "CreatePatternResponse",
+    "schema": "proto/loom/v1/loom.proto:75",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/patterns"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:2904"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "StreamPatternUpdates",
+    "request": "StreamPatternUpdatesRequest",
+    "response": "stream PatternUpdateEvent",
+    "schema": "proto/loom/v1/loom.proto:84",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/patterns:stream"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:2990"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "AnswerClarificationQuestion",
+    "request": "AnswerClarificationRequest",
+    "response": "AnswerClarificationResponse",
+    "schema": "proto/loom/v1/loom.proto:92",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/clarifications/{session_id}/answer"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:3836"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "CreateSession",
+    "request": "CreateSessionRequest",
+    "response": "Session",
+    "schema": "proto/loom/v1/loom.proto:100",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/sessions"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:519",
+      "pkg/server/multi_agent.go:3285"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetSession",
+    "request": "GetSessionRequest",
+    "response": "Session",
+    "schema": "proto/loom/v1/loom.proto:108",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/sessions/{session_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:529",
+      "pkg/server/multi_agent.go:3307"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListSessions",
+    "request": "ListSessionsRequest",
+    "response": "ListSessionsResponse",
+    "schema": "proto/loom/v1/loom.proto:113",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/sessions"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:543",
+      "pkg/server/multi_agent.go:3334"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "DeleteSession",
+    "request": "DeleteSessionRequest",
+    "response": "DeleteSessionResponse",
+    "schema": "proto/loom/v1/loom.proto:118",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/sessions/{session_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:567",
+      "pkg/server/multi_agent.go:3373"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ResumeSession",
+    "request": "ResumeSessionRequest",
+    "response": "ResumeSessionResponse",
+    "schema": "proto/loom/v1/loom.proto:128",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/sessions/{session_id}:resume"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/session_resume.go:40"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ResolveExecutionGap",
+    "request": "ResolveExecutionGapRequest",
+    "response": "ResolveExecutionGapResponse",
+    "schema": "proto/loom/v1/loom.proto:144",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/sessions/{session_id}:resolveExecutionGap"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/session_resume.go:126"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "SubscribeToSession",
+    "request": "SubscribeToSessionRequest",
+    "response": "stream SessionUpdate",
+    "schema": "proto/loom/v1/loom.proto:155",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/sessions/{session_id}:subscribe"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4937"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetConversationHistory",
+    "request": "GetConversationHistoryRequest",
+    "response": "ConversationHistory",
+    "schema": "proto/loom/v1/loom.proto:160",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/sessions/{session_id}/history"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:612",
+      "pkg/server/multi_agent.go:3446"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "RegisterTool",
+    "request": "RegisterToolRequest",
+    "response": "RegisterToolResponse",
+    "schema": "proto/loom/v1/loom.proto:165",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tools:register"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/observability_rpc.go:132",
+      "pkg/server/server.go:662"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListTools",
+    "request": "ListToolsRequest",
+    "response": "ListToolsResponse",
+    "schema": "proto/loom/v1/loom.proto:173",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/tools"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:642",
+      "pkg/server/multi_agent.go:3490"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetTrace",
+    "request": "GetTraceRequest",
+    "response": "Trace",
+    "schema": "proto/loom/v1/loom.proto:178",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/traces/{trace_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/observability_rpc.go:99",
+      "pkg/server/observability_rpc.go:211",
+      "pkg/server/server.go:682"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetHealth",
+    "request": "GetHealthRequest",
+    "response": "HealthStatus",
+    "schema": "proto/loom/v1/loom.proto:183",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/health"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:692",
+      "pkg/server/multi_agent.go:3522"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetServerConfig",
+    "request": "GetServerConfigRequest",
+    "response": "ServerConfig",
+    "schema": "proto/loom/v1/loom.proto:190",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/server/config"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:3158"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetTLSStatus",
+    "request": "GetTLSStatusRequest",
+    "response": "TLSStatus",
+    "schema": "proto/loom/v1/loom.proto:195",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/server/tls"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:3174"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "RenewCertificate",
+    "request": "RenewCertificateRequest",
+    "response": "RenewCertificateResponse",
+    "schema": "proto/loom/v1/loom.proto:200",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/server/tls:renew"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:3195"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetStorageStatus",
+    "request": "GetStorageStatusRequest",
+    "response": "GetStorageStatusResponse",
+    "schema": "proto/loom/v1/loom.proto:210",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/server/storage"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/storage_rpc.go:41"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "RunMigration",
+    "request": "RunMigrationRequest",
+    "response": "RunMigrationResponse",
+    "schema": "proto/loom/v1/loom.proto:215",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/server/storage:migrate"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/storage_rpc.go:84"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "CreateAgentFromConfig",
+    "request": "CreateAgentRequest",
+    "response": "AgentInfo",
+    "schema": "proto/loom/v1/loom.proto:225",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/agents"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/agent_lifecycle.go:169"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListAgents",
+    "request": "ListAgentsRequest",
+    "response": "ListAgentsResponse",
+    "schema": "proto/loom/v1/loom.proto:233",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/agents"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:967"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetAgent",
+    "request": "GetAgentRequest",
+    "response": "AgentInfo",
+    "schema": "proto/loom/v1/loom.proto:238",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/agents/{agent_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/agent_lifecycle.go:268"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "StartAgent",
+    "request": "StartAgentRequest",
+    "response": "AgentInfo",
+    "schema": "proto/loom/v1/loom.proto:243",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/agents/{agent_id}:start"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/agent_lifecycle.go:286"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "StopAgent",
+    "request": "StopAgentRequest",
+    "response": "AgentInfo",
+    "schema": "proto/loom/v1/loom.proto:251",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/agents/{agent_id}:stop"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/agent_lifecycle.go:351"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "DeleteAgent",
+    "request": "DeleteAgentRequest",
+    "response": "DeleteAgentResponse",
+    "schema": "proto/loom/v1/loom.proto:259",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/agents/{agent_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/agent_lifecycle.go:410"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ReloadAgent",
+    "request": "ReloadAgentRequest",
+    "response": "AgentInfo",
+    "schema": "proto/loom/v1/loom.proto:264",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/agents/{agent_id}:reload"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/agent_lifecycle.go:482"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "SwitchModel",
+    "request": "SwitchModelRequest",
+    "response": "SwitchModelResponse",
+    "schema": "proto/loom/v1/loom.proto:272",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/sessions/{session_id}:switch-model"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:769",
+      "pkg/server/multi_agent.go:3614"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListAvailableModels",
+    "request": "ListAvailableModelsRequest",
+    "response": "ListAvailableModelsResponse",
+    "schema": "proto/loom/v1/loom.proto:280",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/models"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:1248",
+      "pkg/server/multi_agent.go:3253"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListProviders",
+    "request": "ListProvidersRequest",
+    "response": "ListProvidersResponse",
+    "schema": "proto/loom/v1/loom.proto:285",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/providers"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:858",
+      "pkg/server/multi_agent.go:3780"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ABTest",
+    "request": "ABTestRequest",
+    "response": "stream ABTestEvent",
+    "schema": "proto/loom/v1/loom.proto:290",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/providers:abtest"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/server.go:883",
+      "pkg/server/multi_agent.go:3794"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "RequestToolPermission",
+    "request": "ToolPermissionRequest",
+    "response": "ToolPermissionResponse",
+    "schema": "proto/loom/v1/loom.proto:298",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tools:request-permission"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/observability_rpc.go:346",
+      "pkg/server/server.go:1499"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListMCPServers",
+    "request": "ListMCPServersRequest",
+    "response": "ListMCPServersResponse",
+    "schema": "proto/loom/v1/loom.proto:308",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/mcp/servers"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:35"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetMCPServer",
+    "request": "GetMCPServerRequest",
+    "response": "MCPServerInfo",
+    "schema": "proto/loom/v1/loom.proto:313",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/mcp/servers/{server_name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:80"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "AddMCPServer",
+    "request": "AddMCPServerRequest",
+    "response": "AddMCPServerResponse",
+    "schema": "proto/loom/v1/loom.proto:318",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/mcp/servers"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:123"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "UpdateMCPServer",
+    "request": "UpdateMCPServerRequest",
+    "response": "MCPServerInfo",
+    "schema": "proto/loom/v1/loom.proto:326",
+    "http_annotations": [
+      [
+        "put",
+        "/v1/mcp/servers/{server_name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:304"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "DeleteMCPServer",
+    "request": "DeleteMCPServerRequest",
+    "response": "DeleteMCPServerResponse",
+    "schema": "proto/loom/v1/loom.proto:334",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/mcp/servers/{server_name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:462"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "RestartMCPServer",
+    "request": "RestartMCPServerRequest",
+    "response": "MCPServerInfo",
+    "schema": "proto/loom/v1/loom.proto:339",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/mcp/servers/{server_name}:restart"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:522"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "HealthCheckMCPServers",
+    "request": "HealthCheckMCPServersRequest",
+    "response": "HealthCheckMCPServersResponse",
+    "schema": "proto/loom/v1/loom.proto:347",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/mcp/servers:health"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:575"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "TestMCPServerConnection",
+    "request": "TestMCPServerConnectionRequest",
+    "response": "TestMCPServerConnectionResponse",
+    "schema": "proto/loom/v1/loom.proto:353",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/mcp/servers:test"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:600"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListMCPServerTools",
+    "request": "ListMCPServerToolsRequest",
+    "response": "ListMCPServerToolsResponse",
+    "schema": "proto/loom/v1/loom.proto:362",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/mcp/servers/{server_name}/tools"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/mcp_management.go:744"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ExecuteWorkflow",
+    "request": "ExecuteWorkflowRequest",
+    "response": "ExecuteWorkflowResponse",
+    "schema": "proto/loom/v1/loom.proto:369",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/workflows:execute"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4134"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "StreamWorkflow",
+    "request": "ExecuteWorkflowRequest",
+    "response": "stream WorkflowProgress",
+    "schema": "proto/loom/v1/loom.proto:377",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/workflows:stream"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4262"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetWorkflowExecution",
+    "request": "GetWorkflowExecutionRequest",
+    "response": "WorkflowExecution",
+    "schema": "proto/loom/v1/loom.proto:385",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/workflows/executions/{execution_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4468"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListWorkflowExecutions",
+    "request": "ListWorkflowExecutionsRequest",
+    "response": "ListWorkflowExecutionsResponse",
+    "schema": "proto/loom/v1/loom.proto:390",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/workflows/executions"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4485"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListWorkflows",
+    "request": "ListWorkflowsRequest",
+    "response": "ListWorkflowsResponse",
+    "schema": "proto/loom/v1/loom.proto:397",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/workflows"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4097"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ScheduleWorkflow",
+    "request": "ScheduleWorkflowRequest",
+    "response": "ScheduleWorkflowResponse",
+    "schema": "proto/loom/v1/loom.proto:404",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/workflows/schedules"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4556"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "UpdateScheduledWorkflow",
+    "request": "UpdateScheduledWorkflowRequest",
+    "response": "ScheduleWorkflowResponse",
+    "schema": "proto/loom/v1/loom.proto:412",
+    "http_annotations": [
+      [
+        "patch",
+        "/v1/workflows/schedules/{schedule_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4608"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetScheduledWorkflow",
+    "request": "GetScheduledWorkflowRequest",
+    "response": "ScheduledWorkflow",
+    "schema": "proto/loom/v1/loom.proto:420",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/workflows/schedules/{schedule_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4655"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListScheduledWorkflows",
+    "request": "ListScheduledWorkflowsRequest",
+    "response": "ListScheduledWorkflowsResponse",
+    "schema": "proto/loom/v1/loom.proto:425",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/workflows/schedules"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4679"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "DeleteScheduledWorkflow",
+    "request": "DeleteScheduledWorkflowRequest",
+    "response": "google.protobuf.Empty",
+    "schema": "proto/loom/v1/loom.proto:430",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/workflows/schedules/{schedule_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4714"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "TriggerScheduledWorkflow",
+    "request": "TriggerScheduledWorkflowRequest",
+    "response": "ExecuteWorkflowResponse",
+    "schema": "proto/loom/v1/loom.proto:435",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/workflows/schedules/{schedule_id}:trigger"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4748"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "PauseSchedule",
+    "request": "PauseScheduleRequest",
+    "response": "google.protobuf.Empty",
+    "schema": "proto/loom/v1/loom.proto:443",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/workflows/schedules/{schedule_id}:pause"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4775"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ResumeSchedule",
+    "request": "ResumeScheduleRequest",
+    "response": "google.protobuf.Empty",
+    "schema": "proto/loom/v1/loom.proto:451",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/workflows/schedules/{schedule_id}:resume"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4864"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetScheduleHistory",
+    "request": "GetScheduleHistoryRequest",
+    "response": "GetScheduleHistoryResponse",
+    "schema": "proto/loom/v1/loom.proto:459",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/workflows/schedules/{schedule_id}/history"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4887"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "CancelScheduledExecution",
+    "request": "CancelScheduledExecutionRequest",
+    "response": "CancelScheduledExecutionResponse",
+    "schema": "proto/loom/v1/loom.proto:495",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/workflows/schedules/executions/{execution_id}:cancel"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/multi_agent.go:4810"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "Publish",
+    "request": "PublishRequest",
+    "response": "PublishResponse",
+    "schema": "proto/loom/v1/loom.proto:507",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/bus/publish"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:93"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "Subscribe",
+    "request": "SubscribeRequest",
+    "response": "stream BusMessage",
+    "schema": "proto/loom/v1/loom.proto:515",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/bus/subscribe"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:141",
+      "pkg/server/pattern_events.go:32"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "Unsubscribe",
+    "request": "UnsubscribeRequest",
+    "response": "UnsubscribeResponse",
+    "schema": "proto/loom/v1/loom.proto:523",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/bus/unsubscribe"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/pattern_events.go:42"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListTopics",
+    "request": "ListTopicsRequest",
+    "response": "ListTopicsResponse",
+    "schema": "proto/loom/v1/loom.proto:531",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/bus/topics"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetTopicStats",
+    "request": "GetTopicStatsRequest",
+    "response": "TopicStats",
+    "schema": "proto/loom/v1/loom.proto:536",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/bus/topics/{topic}/stats"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "LoomService",
+    "rpc": "SendAsync",
+    "request": "SendAsyncRequest",
+    "response": "SendAsyncResponse",
+    "schema": "proto/loom/v1/loom.proto:543",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/messages:sendAsync"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:371"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "SendAndReceive",
+    "request": "SendAndReceiveRequest",
+    "response": "SendAndReceiveResponse",
+    "schema": "proto/loom/v1/loom.proto:551",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/messages:sendAndReceive"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:410"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "PutSharedMemory",
+    "request": "PutSharedMemoryRequest",
+    "response": "PutSharedMemoryResponse",
+    "schema": "proto/loom/v1/loom.proto:561",
+    "http_annotations": [
+      [
+        "put",
+        "/v1/shared-memory/{namespace}/{key}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:219"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetSharedMemory",
+    "request": "GetSharedMemoryRequest",
+    "response": "GetSharedMemoryResponse",
+    "schema": "proto/loom/v1/loom.proto:569",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/shared-memory/{namespace}/{key}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:238"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "DeleteSharedMemory",
+    "request": "DeleteSharedMemoryRequest",
+    "response": "DeleteSharedMemoryResponse",
+    "schema": "proto/loom/v1/loom.proto:574",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/shared-memory/{namespace}/{key}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:257"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "WatchSharedMemory",
+    "request": "WatchSharedMemoryRequest",
+    "response": "stream SharedMemoryValue",
+    "schema": "proto/loom/v1/loom.proto:579",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/shared-memory:watch"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:276"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListSharedMemoryKeys",
+    "request": "ListSharedMemoryKeysRequest",
+    "response": "ListSharedMemoryKeysResponse",
+    "schema": "proto/loom/v1/loom.proto:587",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/shared-memory/{namespace}/keys"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:334"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetSharedMemoryStats",
+    "request": "GetSharedMemoryStatsRequest",
+    "response": "SharedMemoryStats",
+    "schema": "proto/loom/v1/loom.proto:592",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/shared-memory/{namespace}/stats"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/communication_handlers.go:353"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListArtifacts",
+    "request": "ListArtifactsRequest",
+    "response": "ListArtifactsResponse",
+    "schema": "proto/loom/v1/loom.proto:599",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/artifacts"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/artifacts.go:27"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetArtifact",
+    "request": "GetArtifactRequest",
+    "response": "GetArtifactResponse",
+    "schema": "proto/loom/v1/loom.proto:604",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/artifacts/{id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/artifacts.go:90"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "UploadArtifact",
+    "request": "UploadArtifactRequest",
+    "response": "UploadArtifactResponse",
+    "schema": "proto/loom/v1/loom.proto:609",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/artifacts"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/artifacts.go:132"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "DeleteArtifact",
+    "request": "DeleteArtifactRequest",
+    "response": "DeleteArtifactResponse",
+    "schema": "proto/loom/v1/loom.proto:617",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/artifacts/{id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/artifacts.go:359"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "SearchArtifacts",
+    "request": "SearchArtifactsRequest",
+    "response": "SearchArtifactsResponse",
+    "schema": "proto/loom/v1/loom.proto:622",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/artifacts:search"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/artifacts.go:378"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetArtifactContent",
+    "request": "GetArtifactContentRequest",
+    "response": "GetArtifactContentResponse",
+    "schema": "proto/loom/v1/loom.proto:627",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/artifacts/{id}/content"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/artifacts.go:410"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetArtifactStats",
+    "request": "GetArtifactStatsRequest",
+    "response": "GetArtifactStatsResponse",
+    "schema": "proto/loom/v1/loom.proto:632",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/artifacts/stats"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/artifacts.go:479"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListUIApps",
+    "request": "ListUIAppsRequest",
+    "response": "ListUIAppsResponse",
+    "schema": "proto/loom/v1/loom.proto:639",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/apps"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/apps_rpc.go:63"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetUIApp",
+    "request": "GetUIAppRequest",
+    "response": "GetUIAppResponse",
+    "schema": "proto/loom/v1/loom.proto:644",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/apps/{name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/apps_rpc.go:89"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "CreateUIApp",
+    "request": "CreateUIAppRequest",
+    "response": "CreateUIAppResponse",
+    "schema": "proto/loom/v1/loom.proto:649",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/apps"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/apps_rpc.go:118"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "UpdateUIApp",
+    "request": "UpdateUIAppRequest",
+    "response": "UpdateUIAppResponse",
+    "schema": "proto/loom/v1/loom.proto:657",
+    "http_annotations": [
+      [
+        "put",
+        "/v1/apps/{name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/apps_rpc.go:190"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "DeleteUIApp",
+    "request": "DeleteUIAppRequest",
+    "response": "DeleteUIAppResponse",
+    "schema": "proto/loom/v1/loom.proto:665",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/apps/{name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/apps_rpc.go:236"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListLuaScripts",
+    "request": "ListLuaScriptsRequest",
+    "response": "ListLuaScriptsResponse",
+    "schema": "proto/loom/v1/loom.proto:673",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/lua-scripts"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/lua_scripts_rpc.go:69"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "GetLuaScript",
+    "request": "GetLuaScriptRequest",
+    "response": "GetLuaScriptResponse",
+    "schema": "proto/loom/v1/loom.proto:678",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/lua-scripts/{name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/lua_scripts_rpc.go:90"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "SaveLuaScript",
+    "request": "SaveLuaScriptRequest",
+    "response": "SaveLuaScriptResponse",
+    "schema": "proto/loom/v1/loom.proto:683",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/lua-scripts"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/lua_scripts_rpc.go:111"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "DeleteLuaScript",
+    "request": "DeleteLuaScriptRequest",
+    "response": "DeleteLuaScriptResponse",
+    "schema": "proto/loom/v1/loom.proto:691",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/lua-scripts/{name}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/lua_scripts_rpc.go:137"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListComponentTypes",
+    "request": "ListComponentTypesRequest",
+    "response": "ListComponentTypesResponse",
+    "schema": "proto/loom/v1/loom.proto:697",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/apps/component-types"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/apps_rpc.go:263"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListAgentPresets",
+    "request": "ListAgentPresetsRequest",
+    "response": "ListAgentPresetsResponse",
+    "schema": "proto/loom/v1/loom.proto:706",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/presets/agents"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/template_service.go:24"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "ListWorkflowTemplates",
+    "request": "ListWorkflowTemplatesRequest",
+    "response": "ListWorkflowTemplatesResponse",
+    "schema": "proto/loom/v1/loom.proto:711",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/templates/workflows"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/template_service.go:32"
+    ]
+  },
+  {
+    "service": "LoomService",
+    "rpc": "CreateWorkflowFromTemplate",
+    "request": "CreateWorkflowFromTemplateRequest",
+    "response": "CreateWorkflowFromTemplateResponse",
+    "schema": "proto/loom/v1/loom.proto:718",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/templates/workflows:apply"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/template_service.go:51"
+    ]
+  },
+  {
+    "service": "AdminService",
+    "rpc": "ListAllSessions",
+    "request": "ListAllSessionsRequest",
+    "response": "ListAllSessionsResponse",
+    "schema": "proto/loom/v1/loom.proto:731",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/admin/sessions"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/admin_server.go:73"
+    ]
+  },
+  {
+    "service": "AdminService",
+    "rpc": "CountSessionsByUser",
+    "request": "CountSessionsByUserRequest",
+    "response": "CountSessionsByUserResponse",
+    "schema": "proto/loom/v1/loom.proto:736",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/admin/sessions:count-by-user"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/admin_server.go:105"
+    ]
+  },
+  {
+    "service": "AdminService",
+    "rpc": "GetSystemStats",
+    "request": "GetSystemStatsRequest",
+    "response": "GetSystemStatsResponse",
+    "schema": "proto/loom/v1/loom.proto:741",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/admin/stats"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/admin_server.go:129"
+    ]
+  },
+  {
+    "service": "MemoryLayerService",
+    "rpc": "GetROMContent",
+    "request": "GetROMContentRequest",
+    "response": "GetROMContentResponse",
+    "schema": "proto/loom/v1/memory.proto:25",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "MemoryLayerService",
+    "rpc": "GetLearnedLayer",
+    "request": "GetLearnedLayerRequest",
+    "response": "GetLearnedLayerResponse",
+    "schema": "proto/loom/v1/memory.proto:28",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "MemoryLayerService",
+    "rpc": "UpdateLearnedLayer",
+    "request": "UpdateLearnedLayerRequest",
+    "response": "UpdateLearnedLayerResponse",
+    "schema": "proto/loom/v1/memory.proto:31",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "MemoryLayerService",
+    "rpc": "GetMemoryStats",
+    "request": "GetMemoryStatsRequest",
+    "response": "GetMemoryStatsResponse",
+    "schema": "proto/loom/v1/memory.proto:34",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "MemoryLayerService",
+    "rpc": "BootstrapDemonstrations",
+    "request": "BootstrapDemonstrationsRequest",
+    "response": "BootstrapDemonstrationsResponse",
+    "schema": "proto/loom/v1/memory.proto:37",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "SkillsImportService",
+    "rpc": "BulkImportSkills",
+    "request": "BulkImportSkillsRequest",
+    "response": "stream BulkImportProgress",
+    "schema": "proto/loom/v1/skills_import.proto:52",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/skills:bulkImport"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/skills_import.go:154"
+    ]
+  },
+  {
+    "service": "SkillsImportService",
+    "rpc": "AddSkill",
+    "request": "AddSkillRequest",
+    "response": "AddSkillResponse",
+    "schema": "proto/loom/v1/skills_import.proto:72",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/skills"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/skills_import.go:256"
+    ]
+  },
+  {
+    "service": "SkillsImportService",
+    "rpc": "ClassifySkill",
+    "request": "ClassifySkillRequest",
+    "response": "ClassifySkillResponse",
+    "schema": "proto/loom/v1/skills_import.proto:92",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/skills/{skill_name}:classify"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/skills_import.go:319"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "CreateTask",
+    "request": "CreateTaskRequest",
+    "response": "CreateTaskResponse",
+    "schema": "proto/loom/v1/task.proto:26",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tasks"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:111"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "GetTask",
+    "request": "GetTaskRequest",
+    "response": "GetTaskResponse",
+    "schema": "proto/loom/v1/task.proto:34",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/tasks/{task_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:131"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "UpdateTask",
+    "request": "UpdateTaskRequest",
+    "response": "UpdateTaskResponse",
+    "schema": "proto/loom/v1/task.proto:39",
+    "http_annotations": [
+      [
+        "patch",
+        "/v1/tasks/{task.id}"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "DeleteTask",
+    "request": "DeleteTaskRequest",
+    "response": "DeleteTaskResponse",
+    "schema": "proto/loom/v1/task.proto:47",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/tasks/{task_id}"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "ListTasks",
+    "request": "ListTasksRequest",
+    "response": "ListTasksResponse",
+    "schema": "proto/loom/v1/task.proto:52",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/tasks"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:145"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "ClaimTask",
+    "request": "ClaimTaskRequest",
+    "response": "ClaimTaskResponse",
+    "schema": "proto/loom/v1/task.proto:60",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tasks/{task_id}:claim"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:167"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "ReleaseTask",
+    "request": "ReleaseTaskRequest",
+    "response": "ReleaseTaskResponse",
+    "schema": "proto/loom/v1/task.proto:68",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tasks/{task_id}:release"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "CloseTask",
+    "request": "CloseTaskRequest",
+    "response": "CloseTaskResponse",
+    "schema": "proto/loom/v1/task.proto:77",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tasks/{task_id}:close"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:175"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "TransitionTask",
+    "request": "TransitionTaskRequest",
+    "response": "TransitionTaskResponse",
+    "schema": "proto/loom/v1/task.proto:85",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tasks/{task_id}:transition"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "AddDependency",
+    "request": "AddTaskDependencyRequest",
+    "response": "AddTaskDependencyResponse",
+    "schema": "proto/loom/v1/task.proto:96",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tasks/dependencies"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "RemoveDependency",
+    "request": "RemoveTaskDependencyRequest",
+    "response": "RemoveTaskDependencyResponse",
+    "schema": "proto/loom/v1/task.proto:104",
+    "http_annotations": [
+      [
+        "delete",
+        "/v1/tasks/dependencies/{from_task_id}/{to_task_id}"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "GetReadyFront",
+    "request": "GetReadyFrontRequest",
+    "response": "GetReadyFrontResponse",
+    "schema": "proto/loom/v1/task.proto:109",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/boards/{board_id}/ready"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:183"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "GetBlockedTasks",
+    "request": "GetBlockedTasksRequest",
+    "response": "GetBlockedTasksResponse",
+    "schema": "proto/loom/v1/task.proto:114",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/boards/{board_id}/blocked"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "CreateBoard",
+    "request": "CreateBoardRequest",
+    "response": "CreateBoardResponse",
+    "schema": "proto/loom/v1/task.proto:121",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/boards"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:199"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "GetBoard",
+    "request": "GetBoardRequest",
+    "response": "GetBoardResponse",
+    "schema": "proto/loom/v1/task.proto:129",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/boards/{board_id}"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:211"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "ListBoards",
+    "request": "ListBoardsRequest",
+    "response": "ListBoardsResponse",
+    "schema": "proto/loom/v1/task.proto:134",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/boards"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:237"
+    ]
+  },
+  {
+    "service": "TaskService",
+    "rpc": "DecomposeTask",
+    "request": "DecomposeTaskRequest",
+    "response": "DecomposeTaskResponse",
+    "schema": "proto/loom/v1/task.proto:141",
+    "http_annotations": [
+      [
+        "post",
+        "/v1/tasks:decompose"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "GetTaskContext",
+    "request": "GetTaskContextRequest",
+    "response": "TaskContext",
+    "schema": "proto/loom/v1/task.proto:152",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/agents/{agent_id}/task-context"
+      ]
+    ],
+    "server_symbols": []
+  },
+  {
+    "service": "TaskService",
+    "rpc": "StreamTaskUpdates",
+    "request": "StreamTaskUpdatesRequest",
+    "response": "stream TaskUpdate",
+    "schema": "proto/loom/v1/task.proto:159",
+    "http_annotations": [
+      [
+        "get",
+        "/v1/boards/{board_id}/updates:stream"
+      ]
+    ],
+    "server_symbols": [
+      "pkg/server/task_service.go:61"
+    ]
+  },
+  {
+    "service": "TeleprompterService",
+    "rpc": "Compile",
+    "request": "CompileRequest",
+    "response": "CompileResponse",
+    "schema": "proto/loom/v1/teleprompter.proto:36",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "TeleprompterService",
+    "rpc": "GetCompilationHistory",
+    "request": "GetCompilationHistoryRequest",
+    "response": "GetCompilationHistoryResponse",
+    "schema": "proto/loom/v1/teleprompter.proto:39",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "TeleprompterService",
+    "rpc": "RollbackCompilation",
+    "request": "RollbackCompilationRequest",
+    "response": "RollbackCompilationResponse",
+    "schema": "proto/loom/v1/teleprompter.proto:42",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "TeleprompterService",
+    "rpc": "CompareCompilations",
+    "request": "CompareCompilationsRequest",
+    "response": "CompareCompilationsResponse",
+    "schema": "proto/loom/v1/teleprompter.proto:45",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "ToolRegistryService",
+    "rpc": "SearchTools",
+    "request": "SearchToolsRequest",
+    "response": "SearchToolsResponse",
+    "schema": "proto/loom/v1/tools.proto:25",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "ToolRegistryService",
+    "rpc": "IndexTools",
+    "request": "IndexToolsRequest",
+    "response": "IndexToolsResponse",
+    "schema": "proto/loom/v1/tools.proto:29",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "ToolRegistryService",
+    "rpc": "ListToolSources",
+    "request": "ListToolSourcesRequest",
+    "response": "ListToolSourcesResponse",
+    "schema": "proto/loom/v1/tools.proto:32",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "ToolRegistryService",
+    "rpc": "GetIndexedTool",
+    "request": "GetIndexedToolRequest",
+    "response": "IndexedTool",
+    "schema": "proto/loom/v1/tools.proto:35",
+    "http_annotations": [],
+    "server_symbols": []
+  },
+  {
+    "service": "ToolRegistryService",
+    "rpc": "GetToolsByCapability",
+    "request": "GetToolsByCapabilityRequest",
+    "response": "GetToolsByCapabilityResponse",
+    "schema": "proto/loom/v1/tools.proto:38",
+    "http_annotations": [],
+    "server_symbols": []
+  }
+]
