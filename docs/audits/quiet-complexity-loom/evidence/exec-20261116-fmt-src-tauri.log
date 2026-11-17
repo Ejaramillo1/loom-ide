@@ -1,0 +1,4 @@
+CWD=/home/ed/loom-ide-tauri
+COMMIT=f75ad9f498106bf676182d5e563794e8e196bd54
+CMD=cargo fmt --check --manifest-path src-tauri/Cargo.toml
+EXIT=0

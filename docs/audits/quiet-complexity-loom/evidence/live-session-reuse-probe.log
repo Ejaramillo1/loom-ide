@@ -1,0 +1,22 @@
+{
+  "turn1": {
+    "status": "200",
+    "completed": true,
+    "answer": "alpha"
+  },
+  "createdSession": {
+    "id": "sess_b05e656f",
+    "agentId": "guide",
+    "conversationCountAfterT1": 2
+  },
+  "turn2": {
+    "status": "200",
+    "completed": true,
+    "answer": "beta"
+  },
+  "afterTurn2": {
+    "sameSessionConversationCount": 4,
+    "totalSessions": 2,
+    "reusedSameSession": false
+  }
+}

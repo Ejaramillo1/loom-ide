@@ -1,0 +1,20 @@
+CWD=/home/ed/loom-ide-tauri
+COMMIT=f75ad9f498106bf676182d5e563794e8e196bd54
+CMD=npm test -- --run
+
+> loom-ide-tauri@0.0.0 test
+> vitest run --run
+
+
+ RUN  v5.1.0 /home/ed/loom-ide-tauri
+
+
+ Test Files  12 passed (12)
+      Tests  95 passed (95)
+   Start at  20:14:46
+   Duration  4.59s (import 61%, tests 28%, transform 5%, worker 5%, environment 1%)
+
+    Isolate  12 workers spawned · ~545ms startup each (spawn + environment, per file)
+             at least ~1.64s faster with isolate: false — reuses workers across files instead of one per file
+
+EXIT=0

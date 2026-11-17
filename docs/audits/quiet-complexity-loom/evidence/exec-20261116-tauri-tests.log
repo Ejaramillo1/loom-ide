@@ -1,0 +1,151 @@
+CWD=/home/ed/loom-ide-tauri
+COMMIT=f75ad9f498106bf676182d5e563794e8e196bd54
+CMD=cargo test --offline --locked --manifest-path src-tauri/Cargo.toml --lib
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+warning: variable does not need to be mutable
+    --> src/loom_stream.rs:1397:13
+     |
+1397 |         let mut response =
+     |             ----^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `loom-ide` (lib test) generated 1 warning (run `cargo fix --lib -p loom-ide --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.77s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/app_lib-1b207b19ccf217f4)
+
+running 127 tests
+test experiment::tests::experiment_add_defaults_and_rejects_empty_title ... ok
+test experiment::tests::experiment_add_arm_validates_label_and_starts_defined ... ok
+test experiment::tests::experiment_choose_arm_requires_a_finished_arm ... ok
+test experiment::tests::experiment_add_arm_clears_a_previous_decision ... ok
+test experiment::tests::experiment_awaiting_decision_needs_two_finished_arms ... ok
+test experiment::tests::experiment_set_arm_result_requires_nonempty_and_marks_done ... ok
+test experiment::tests::experiment_load_resets_running_arms_to_defined ... ok
+test experiment::tests::experiment_save_load_round_trip_and_corrupt_handling ... ok
+test experiment::tests::experiment_clear_decision_keeps_results_and_restores_draft ... ok
+test experiment::tests::experiment_set_arm_status_rejects_done_and_unknown ... ok
+test gateway_tests::live_gateway_responses_parse ... ignored, requires a live Loom gateway on localhost:5006
+test gateway_tests::base64_matches_rfc4648_vectors_and_rejects_invalid_input ... ok
+test gateway_tests::artifact_content_decodes_both_layers_and_handles_empty_content ... ok
+test gateway_tests::model_and_tool_fields_match_protojson_names ... ok
+test gateway_tests::session_detail_preserves_camel_case_fields_and_fractional_cost ... ok
+test gateway_tests::storage_unwraps_status_and_reports_error_and_latency ... ok
+test gateway_tests::trace_and_artifact_stats_preserve_string_int64s ... ok
+test gateway_tests::config_parses_real_gateway_shape_and_minimal_tls_response ... ok
+test gateway_tests::providers_mark_only_the_active_provider ... ok
+test gateway_tests::provider_config_is_nested_and_active_comes_from_response ... ok
+test knowledge::tests::agent_overwrites_status_bypass_unsupported_types_and_large_notes_rejected ... ok
+test knowledge::tests::duplicate_ids_invalid_frontmatter_and_oversize_load_preserve_files ... ok
+test knowledge::tests::create_save_search_history_and_provenance ... ok
+test knowledge::tests::real_vault_read_only_smoke ... ignored, manual check of the local vault; ordinary unit tests must not depend on user data
+test knowledge::tests::archive_hides_and_restores_without_deleting_the_file ... ok
+test knowledge::tests::fixtures_remain_hidden_and_unchanged_in_notes_edges_activity_and_export ... ok
+test knowledge::tests::links_backlinks_duplicates_self_links_and_unlink ... ok
+test knowledge::tests::recovery_is_idempotent_and_conflicts_preflight_all_files ... ok
+test knowledge::tests::stale_ledger_and_external_edits_never_overwritten ... ok
+test knowledge::tests::symlink_root_parent_note_history_and_ledger_rejected ... ok
+test knowledge::tests::relation_only_edits_change_the_vault_signature ... ok
+test knowledge::tests::sync_does_not_duplicate_a_hidden_marker ... ok
+test knowledge::tests::sync_markers_are_exact_idempotent_and_artifact_content_excluded ... ok
+test loom_stream::tests::cancel_of_an_unknown_request_is_an_error ... ok
+test loom_stream::tests::chunk_size_line_is_bounded ... ok
+test loom_stream::tests::chunked_sse_over_a_real_tcp_socket_is_decoded ... ok
+test loom_stream::tests::chunked_sse_split_across_chunk_boundaries_parses ... ok
+test loom_stream::tests::chunked_with_trailers_and_zero_chunk_reaches_clean_eof ... ok
+test loom_stream::tests::clarification_requires_explicit_acceptance ... ok
+test loom_stream::tests::content_length_sse_parses_events ... ok
+test loom_stream::tests::crlf_split_across_transfer_chunks_keeps_sse_boundaries ... ok
+test loom_stream::tests::eof_framed_bodies_deliver_every_line ... ok
+test loom_stream::tests::error_after_completion_is_an_error_not_a_success ... ok
+test loom_stream::tests::failed_stage_without_error_text_is_an_error ... ok
+test loom_stream::tests::invalid_utf8_lines_are_counted_not_corrupting ... ok
+test loom_stream::tests::loom_stream_eof_without_completion_is_an_error ... ok
+test loom_stream::tests::ndjson_error_envelope_surfaces_the_message ... ok
+test loom_stream::tests::ndjson_result_envelopes_are_unwrapped ... ok
+test loom_stream::tests::stream_inputs_are_validated_before_any_network_work ... ok
+test knowledge::tests::review_requires_human_proposal_evidence_reason_and_current_draft ... ok
+test loom_stream::tests::truncated_mid_chunk_is_an_explicit_error ... ok
+test loom_stream::tests::weave_requires_completion_and_surfaces_application_errors ... ok
+test loom_stream::tests::weave_stream_body_carries_the_context_pack_when_present ... ok
+test loom_stream::tests::weave_stream_body_omits_blank_optional_fields ... ok
+test loom_stream::tests::weave_stream_body_uses_the_sse_snake_case_contract ... ok
+test loom_tasks::tests::list_field_reads_each_candidate_key ... ok
+test loom_tasks::tests::ready_and_blocked_lists_read_protojson_keys ... ok
+test loom_tasks::tests::tasks_of_unwraps_tasks_results_and_single_objects ... ok
+test navigation::tests::closed_surface_can_be_started_again ... ok
+test navigation::tests::repeated_launches_activate_one_existing_instance ... ok
+test spatial::tests::saves_native_notes_without_overwriting_and_rejects_invalid_input ... ok
+test store::tests::autonomy_rank_orders_the_four_levels ... ok
+test store::tests::autonomy_rank_rejects_unknown_levels ... ok
+test store::tests::intent_create_rejects_empty_statement_and_unknown_autonomy ... ok
+test store::tests::intent_create_second_does_not_become_active ... ok
+test store::tests::intent_create_sets_defaults_and_first_becomes_active ... ok
+test store::tests::intent_delete_clears_active_pointer ... ok
+test store::tests::intent_delete_refuses_when_work_references_it ... ok
+test store::tests::intent_load_corrupt_file_moves_it_aside_and_errors ... ok
+test store::tests::intent_load_dedups_and_drops_dangling_active_pointer ... ok
+test store::tests::intent_load_missing_file_starts_empty_and_creates_it ... ok
+test store::tests::intent_load_rejects_unknown_autonomy_and_status ... ok
+test store::tests::intent_raise_requires_justification_lower_is_instant ... ok
+test store::tests::intent_save_load_round_trip_preserves_versions_and_history ... ok
+test store::tests::intent_set_acceptance_does_not_bump_version ... ok
+test store::tests::intent_set_active_switches_and_rejects_unknown ... ok
+test store::tests::intent_update_noop_changes_nothing ... ok
+test store::tests::intent_update_statement_bumps_version_and_snapshots ... ok
+test store::tests::intent_update_status_only_does_not_bump_version ... ok
+test store::tests::intent_update_why_clear_and_rejects ... ok
+test store::tests::work_add_rejects_empty_title ... ok
+test store::tests::work_add_starts_paused_collaborative_with_unique_ids ... ok
+test store::tests::work_autonomy_history_push_records_from_and_to ... ok
+test store::tests::work_load_corrupt_file_moves_it_aside_and_errors ... ok
+test store::tests::work_load_dedups_duplicate_ids_keeping_the_first ... ok
+test store::tests::work_load_legacy_item_without_new_fields_uses_defaults ... ok
+test store::tests::work_load_missing_file_starts_empty_and_creates_it ... ok
+test store::tests::work_load_rejects_unknown_autonomy_and_status ... ok
+test store::tests::work_save_load_round_trip_preserves_everything ... ok
+test store::tests::work_set_artifacts_trims_and_drops_empties ... ok
+test store::tests::work_set_autonomy_validates_levels ... ok
+test store::tests::work_set_session_sets_and_clears ... ok
+test store::tests::work_set_status_validates ... ok
+test store::tests::work_set_success_criteria_trims_and_drops_empties ... ok
+test tests::agent_parses_gateway_json ... ok
+test tests::artifact_parses_gateway_json ... ok
+test tests::de_i64_accepts_number_and_string_forms ... ok
+test tests::de_i64_missing_key_defaults_to_zero ... ok
+test tests::de_i64_rejects_floats_bools_and_garbage ... ok
+test tests::parse_content_length_finds_the_header_and_ignores_the_rest ... ok
+test tests::percent_encode_keeps_unreserved_and_escapes_the_rest ... ok
+test tests::session_parses_gateway_json_camel_and_snake_case ... ok
+test tests::sessions_and_agents_wrappers_parse ... ok
+test tests::workflow_execution_parses_gateway_json ... ok
+test workspace_tests::autonomy_admission_lets_tightening_through_without_justification ... ok
+test workspace_tests::autonomy_admission_rejects_raising_above_the_intent_ceiling ... ok
+test workspace_tests::autonomy_admission_rejects_unknown_levels_and_ignores_missing_intents ... ok
+test workspace_tests::autonomy_admission_requires_justification_to_raise_within_the_ceiling ... ok
+test workspace_tests::collisions_never_overwrite_files_or_replace_directories ... ok
+test workspace_tests::creates_real_files_and_folders_at_root_and_in_subfolders ... ok
+test workspace_tests::default_workspace_is_empty_and_separate_from_server_and_settings ... ok
+test workspace_tests::edits_save_real_text_and_do_not_leave_temporary_files ... ok
+test workspace_tests::invalid_folder_selection_keeps_the_current_workspace ... ok
+test workspace_tests::invalid_settings_do_not_create_a_replacement_workspace ... ok
+test workspace_tests::migration_preview_detects_task_name_collisions ... ok
+test workspace_tests::migration_preview_rejects_untitled_items ... ok
+test workspace_tests::migration_task_names_are_url_safe_slugs ... ok
+test workspace_tests::missing_selected_folder_is_not_recreated_or_replaced ... ok
+test workspace_tests::rejects_invalid_names_without_creating_anything ... ok
+test workspace_tests::rejects_missing_non_directory_and_outside_parents ... ok
+test workspace_tests::saves_preserve_permissions_and_reject_readonly_files_and_external_symlinks ... ok
+test workspace_tests::saving_refuses_external_changes_deleted_files_and_outside_paths ... ok
+test workspace_tests::selected_folder_is_remembered_without_seeding_or_changing_its_files ... ok
+test workspace_tests::symlinks_cannot_redirect_creations_outside_or_overwrite_targets ... ok
+test loom_stream::tests::timeout_inside_a_line_does_not_corrupt_accumulated_bytes ... ok
+test loom_stream::tests::cancel_after_completion_data_still_reports_cancelled ... ok
+test loom_stream::tests::cancel_during_silence_stops_the_reader ... ok
+
+test result: ok. 125 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 2.02s
+
+EXIT=0

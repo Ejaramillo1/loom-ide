@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "command": "recompile",
+  "data": {
+    "status": "up_to_date",
+    "compiling": false,
+    "failed": false,
+    "compilationFailed": null,
+    "errors": [],
+    "warnings": [],
+    "summary": {
+      "errors": 0,
+      "warnings": 0
+    }
+  },
+  "errors": [],
+  "warnings": [],
+  "notifications": [
+    {
+      "code": "AGENT_PLUGIN_AVAILABLE",
+      "message": "Tip for AI agents: the Unity CLI skill shows you how to use this CLI. Ask the user before running unity skill install opencode.",
+      "data": {
+        "integration": "opencode"
+      },
+      "remediation": {
+        "command": "unity skill install opencode",
+        "requiresUserApproval": true
+      }
+    }
+  ]
+}
+EXIT=0

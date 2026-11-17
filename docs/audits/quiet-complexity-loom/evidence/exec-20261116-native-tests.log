@@ -1,0 +1,59 @@
+CWD=/home/ed/loom-ide-tauri
+COMMIT=f75ad9f498106bf676182d5e563794e8e196bd54
+CMD=cargo test --offline --locked --manifest-path native-app/Cargo.toml
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+warning: variant `Exploring` is never constructed
+   --> src/knowledge.rs:161:5
+    |
+157 | pub enum State {
+    |          ----- variant in this enum
+...
+161 |     Exploring,
+    |     ^^^^^^^^^
+    |
+    = note: `State` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variant `Comparison` is never constructed
+   --> src/mechanics.rs:117:5
+    |
+114 | pub enum ExperimentStage {
+    |          --------------- variant in this enum
+...
+117 |     Comparison, // 1
+    |     ^^^^^^^^^^
+    |
+    = note: `ExperimentStage` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `living-workbench` (bin "living-workbench" test) generated 2 warnings
+    Finished `test` profile [unoptimized] target(s) in 1.27s
+     Running unittests src/main.rs (native-app/target/debug/deps/living_workbench-bc178028bb1fa907)
+
+running 22 tests
+test files::tests::refuses_external_edits_and_preserves_both_versions ... ok
+test knowledge::tests::links_backlinks_and_search ... ok
+test knowledge::tests::human_review_and_state ... ok
+test knowledge::tests::recovery_rename_and_permissions ... ok
+test loom_adapter::tests::body_without_length_reads_until_close ... ok
+test loom_adapter::tests::chunked_body_is_decoded ... ok
+test loom_adapter::tests::content_length_bounds_the_body ... ok
+test loom_adapter::tests::extract_text_tries_five_keys_in_order ... ok
+test loom_adapter::tests::parse_json_rejects_bad_json ... ok
+test loom_adapter::tests::request_to_dead_port_returns_error ... ok
+test mechanics::tests::attention_execution_and_input_override_completion ... ok
+test mechanics::tests::manual_chat_preserves_guard_order_and_existing_settings ... ok
+test mechanics::tests::reduced_motion_freezes_geometry_and_illumination ... ok
+test knowledge::tests::persistence_and_external_conflict ... ok
+test navigation::tests::closed_surface_can_be_started_again ... ok
+test navigation::tests::repeated_launches_activate_one_existing_instance ... ok
+test scene::tests::preset_round_trip_and_invalid_values_preserve_saved_scene ... ok
+test knowledge::tests::frontend_starts_empty_and_keeps_real_notes_after_reload ... ok
+test scene::tests::preview_clock_obeys_pause_stop_and_reduced_motion ... ok
+test visual::theme_tests::appearances_read_the_shared_palette_and_geometry ... ok
+test mechanics::tests::strategy_choices_require_review_and_survive_reopening ... ok
+test knowledge::tests::frontend_hides_historical_records_without_deleting_or_overwriting_them ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+EXIT=0
