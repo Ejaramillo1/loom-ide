@@ -3900,20 +3900,8 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 
 
 /* Approved bench composition: the existing conversation pane changes position,
-   while its DOM, session handlers and draft remain intact. */
-.spatial-only { display: none; }
-.spatial-knowledge { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-.spatial-knowledge-heading { display: flex; justify-content: space-between; align-items: center; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
-.spatial-knowledge-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--reading); border: 1px solid var(--line); border-radius: var(--radius-panel); box-shadow: var(--shadow-panel); }
-.spatial-knowledge-panel > header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line-subtle); }
-.spatial-knowledge-panel h2 { font-size: 13px; font-weight: 500; }
-.spatial-knowledge-panel .btn { font-size: 11px; padding: 5px 8px; }
-.spatial-knowledge-content { flex: 1; min-height: 0; overflow: auto; padding: 10px; }
-.spatial-knowledge-content .knowledge-empty { font-size: 13px; line-height: 1.6; padding: 12px 4px; }
-.spatial-knowledge-content .knowledge-tools { font-size: 11px; gap: 4px; }
-.spatial-knowledge-content .knowledge-graph { min-width: 0; min-height: 0; }
-.spatial-knowledge-content .knowledge-graph text { font-size: 27px; }
-.spatial-knowledge-content .knowledge-canvas { min-height: 0; height: 100%; margin-top: 0; }
+   while its DOM, session handlers and draft remain intact. The bench fills the
+   rest of the row; Knowledge lives only in its own full view. */
 .knowledge-canvas-bounds { position: relative; }
 .knowledge-plane { position: absolute; top: 0; left: 0; transform-origin: top left; }
 .knowledge-canvas-card[data-kind="purple"] { border-top: 3px solid var(--theme-purple); }
@@ -3921,23 +3909,19 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 .knowledge-canvas-card[data-kind="blue"] { border-top: 3px solid var(--theme-blue); }
 .knowledge-canvas-card[data-kind="amber"] { border-top: 3px solid var(--theme-amber); }
 @media (min-width: 1100px) {
-  .scene[data-mode="spatial"] .main { grid-template-columns: clamp(250px, 22vw, 320px) minmax(0, 1fr) clamp(280px, 24vw, 360px); }
-  body.right-hidden .scene[data-mode="spatial"] .main { grid-template-columns: minmax(0, 1fr) clamp(280px, 24vw, 360px); }
+  .scene[data-mode="spatial"] .main { grid-template-columns: clamp(250px, 22vw, 320px) minmax(0, 1fr); }
+  body.right-hidden .scene[data-mode="spatial"] .main { grid-template-columns: minmax(0, 1fr); }
   .scene[data-mode="spatial"] .right-col { order: -1; position: static; width: auto; transform: none; visibility: visible; border: 1px solid var(--line); border-radius: var(--radius-panel); box-shadow: var(--shadow-panel); transition: none; }
   body.right-hidden .scene[data-mode="spatial"] .right-col { display: none; }
   .scene[data-mode="spatial"] .right-col .drawer-close { display: none; }
 }
 @media (max-width: 1099px) {
   .scene[data-mode="spatial"] .main { grid-template-columns: minmax(0, 1fr); }
-  .scene[data-mode="spatial"] .spatial-only { display: inline-flex; }
   .scene[data-mode="spatial"] .right-col { left: 0; right: auto; border-radius: 0 var(--radius-panel) var(--radius-panel) 0; transform: translateX(-105%); }
   body.right-open .scene[data-mode="spatial"] .right-col { transform: translateX(0); }
-  .spatial-knowledge { position: fixed; top: var(--header-offset, var(--header-h)); right: 0; bottom: var(--footer-h); width: min(380px, 94vw); z-index: 40; padding: 12px; background: var(--reading); box-shadow: var(--shadow-overlay); transform: translateX(105%); visibility: hidden; transition: transform .3s ease-in-out, visibility 0s linear .3s; }
-  body.knowledge-open .spatial-knowledge { transform: translateX(0); visibility: visible; transition: transform .3s ease-in-out; }
-  .spatial-knowledge .drawer-close { display: inline-flex; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .spatial-knowledge, .scene[data-mode="spatial"] .right-col { transition: none; }
+  .scene[data-mode="spatial"] .right-col { transition: none; }
 }
 
 /* ---------------------------------------------------------------------------

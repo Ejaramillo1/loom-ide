@@ -41,16 +41,10 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
   const tabs = host.querySelector<HTMLElement>("#knowledge-tabs")!;
   const bell = document.querySelector<HTMLButtonElement>("#knowledge-bell")!;
   const dialog = document.querySelector<HTMLDialogElement>("#knowledge-dialog")!;
-  const benchGraph = document.querySelector<HTMLElement>("#spatial-graph")!;
-  const benchCanvas = document.querySelector<HTMLElement>("#spatial-canvas")!;
-  const benchGraphTab = document.querySelector<HTMLButtonElement>("#spatial-tab-graph")!;
-  const benchCanvasTab = document.querySelector<HTMLButtonElement>("#spatial-tab-canvas")!;
-  let loadFailed = false;
   let data: KnowledgeListing | null = null;
   let tab: Tab = "graph", query = "", kind = "", folder = "";
   let focus: string | null = null;
   let showArchived = false;
-  let benchTab: "graph" | "canvas" = "graph";
   let dirty = false, busy = false, loading = false;
   let request = 0;
   // Canvas positions persist behind the store adapter (app data dir), so
@@ -84,13 +78,12 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     if (loading) return;
     loading = true;
     try {
-      data = await listKnowledge(); loadFailed = false; showNotice(); changed(); render();
+      data = await listKnowledge(); showNotice(); changed(); render();
       if (!layoutLoaded) {
         layoutLoaded = true;
         try {
           const saved = await loadCanvasLayout();
           for (const row of saved) positions.set(row.id, { x: row.x, y: row.y });
-          renderBench();
         } catch {
           // A corrupt layout is never overwritten with a fallback: the
           // default arrangement renders, the file stays untouched, the
@@ -102,7 +95,7 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       }
       try { lastSignature = await knowledgeSignature(); } catch { lastSignature = null; }
     }
-    catch (error) { loadFailed = true; renderBench(); pendingChanged(data?.pending ?? 0, true); fail(error); if (!data) content.replaceChildren(el("p", "Knowledge is unavailable. Open the desktop app or retry loading the vault.", "knowledge-empty")); }
+    catch (error) { pendingChanged(data?.pending ?? 0, true); fail(error); if (!data) content.replaceChildren(el("p", "Knowledge is unavailable. Open the desktop app or retry loading the vault.", "knowledge-empty")); }
     finally { loading = false; }
   }
   /** The disk watcher: external edits to vault files appear without a
@@ -142,25 +135,7 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
       row.append(el("strong", `${a.action} · ${data?.notes.find(n => n.meta.id === a.object)?.meta.title ?? a.object}`), el("p", `${a.actor} · ${time(a.at)} · ${a.detail}`)); parent.append(row);
     }
   }
-  function renderBench() {
-    const graphActive = benchTab === "graph";
-    for (const [parent, active] of [[benchGraph, graphActive], [benchCanvas, !graphActive]] as const) {
-      parent.replaceChildren();
-      parent.hidden = !active;
-      if (loadFailed || !data) parent.append(el("p", loadFailed
-        ? "Vault unavailable. Open Knowledge to retry loading your notes."
-        : "Loading your vault…", "knowledge-empty"));
-    }
-    for (const [btn, active] of [[benchGraphTab, graphActive], [benchCanvasTab, !graphActive]] as const) {
-      btn.classList.toggle("active", active);
-      btn.setAttribute("aria-selected", String(active));
-    }
-    if (loadFailed || !data) return;
-    if (graphActive) renderGraph(benchGraph, true);
-    else renderCanvas(benchCanvas, true);
-  }
   function render() {
-    renderBench();
     for (const b of tabs.querySelectorAll<HTMLButtonElement>("button")) { b.classList.toggle("active", b.dataset.tab === tab); b.setAttribute("aria-pressed", String(b.dataset.tab === tab)); }
     document.querySelector<HTMLElement>("#knowledge-search-slot")!.hidden = tab !== "notes";
     content.replaceChildren();
@@ -521,10 +496,6 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     try { const count = await syncKnowledge(); await refresh(); showNotice(`Synced ${count} new notes from Loom.`); }
     catch (error) { await refresh(); fail(error); } finally { b.disabled = false; }
   });
-  document.querySelector("#spatial-open-full")!.addEventListener("click", () => openTab(benchTab));
-  benchGraphTab.addEventListener("click", () => { benchTab = "graph"; renderBench(); });
-  benchCanvasTab.addEventListener("click", () => { benchTab = "canvas"; renderBench(); });
-  renderBench();
   bell.addEventListener("click", () => openTab("review"));
   // Live pattern updates (§6.3.1): the shelf refreshes when Loom reports
   // pattern changes; the backend stream is best-effort (the browser
