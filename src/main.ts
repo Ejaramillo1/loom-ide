@@ -1,7 +1,7 @@
 import { loomState } from "./loom-state";
 import { installKnowledge } from "./knowledge";
 import { getAppearance, setAppearance } from "./theme";
-import { installSpatialWorkbench, notifySpatialVaultChanged, notifySpatialState } from "./spatial";
+import { installSpatialWorkbench, notifySpatialVaultChanged, notifySpatialState, notifySpatialBackground } from "./spatial";
 import "./style.css";
 import {
   addExperiment,
@@ -5121,6 +5121,26 @@ function setQualityTier(tier: "High" | "Balanced" | "Low") {
   frame?.contentWindow?.postMessage({ type: "loom-quality", tier }, location.origin);
 }
 
+/** The bench scene background (charcoal/dusk/moss/night), persisted and pushed
+    to the player over the spatial bridge so the skybox follows the Settings
+    choice. The IDs are validated again in Unity's ApplyBackground. */
+const BACKGROUND_KEY = "loom-ide-tauri:background";
+const BACKGROUNDS: { id: string; label: string }[] = [
+  { id: "charcoal", label: "Charcoal" },
+  { id: "dusk", label: "Dusk" },
+  { id: "moss", label: "Moss" },
+  { id: "night", label: "Night sky" },
+];
+let backgroundId: string = localStorage.getItem(BACKGROUND_KEY) ?? "charcoal";
+if (!BACKGROUNDS.some((b) => b.id === backgroundId)) backgroundId = "charcoal";
+
+function setBackground(id: string) {
+  if (!BACKGROUNDS.some((b) => b.id === id)) return;
+  backgroundId = id;
+  localStorage.setItem(BACKGROUND_KEY, id);
+  notifySpatialBackground(id);
+}
+
 function handlePatternEvent(p: StreamEnvelope<unknown>) {
   // The Patterns shelf re-fetches on the next open; nothing else needs to
   // react to individual pattern events beyond refreshing the listing.
@@ -7405,6 +7425,16 @@ function initAppMenu() {
         { label: "Quality: Low", radio: true, checked: () => qualityTier === "Low",
           run: () => setQualityTier("Low") },
         "separator",
+        // Scene background (selectable skybox): three procedural gradients and
+        // one imported CC0 HDRI. The choice persists and reaches the player
+        // over the spatial bridge; Unity swaps RenderSettings.skybox.
+        ...BACKGROUNDS.map((background) => ({
+          label: `Background: ${background.label}`,
+          radio: true,
+          checked: () => backgroundId === background.id,
+          run: () => setBackground(background.id),
+        })),
+        "separator",
         ...LAYERS.map((layer) => ({
           label: layer.label,
           description: layer.desc,
@@ -7711,7 +7741,7 @@ async function init() {
       case "Notes": setMode("knowledge"); break;
       default: break;
     }
-  }, () => ({ work: workItems.length, experiments: experiments.length }), currentLoomState);
+  }, () => ({ work: workItems.length, experiments: experiments.length }), currentLoomState, () => backgroundId);
   // The footer provides the primary mode navigation.
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
     btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));

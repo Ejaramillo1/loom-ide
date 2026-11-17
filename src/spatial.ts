@@ -4,6 +4,7 @@ export function installSpatialWorkbench(
   onSpatialSelect?: (object: string) => void,
   getVaultCounts?: () => { work: number; experiments: number },
   getState?: () => SphereState,
+  getBackground?: () => string,
 ) {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame")!;
   const status = document.querySelector<HTMLElement>("#spatial-status")!;
@@ -12,7 +13,8 @@ export function installSpatialWorkbench(
   function load() {
     loadError.hidden = true;
     const theme = document.documentElement?.dataset?.theme === "white" ? "white" : "dark";
-    frame.src = `/spatial-player.html?theme=${theme}`;
+    const background = getBackground?.() || "charcoal";
+    frame.src = `/spatial-player.html?theme=${theme}&background=${encodeURIComponent(background)}`;
   }
   loadButton.addEventListener("click", load);
   window.addEventListener("message", async (event) => {
@@ -24,6 +26,7 @@ export function installSpatialWorkbench(
       const counts = getVaultCounts?.();
       if (counts) notifySpatialVaultChanged(counts.work, counts.experiments);
       if (getState) notifySpatialState(getState());
+      if (getBackground) notifySpatialBackground(getBackground());
       return;
     }
     if (event.data?.type === "loom-spatial-error" && typeof event.data.message === "string") {
@@ -55,4 +58,12 @@ export function notifySpatialVaultChanged(work: number, experiments: number): vo
 export function notifySpatialState(state: SphereState): void {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame");
   frame?.contentWindow?.postMessage({ type: "loom-state", state }, location.origin);
+}
+
+/** Push the chosen scene background (charcoal/dusk/moss/night) to the bench,
+    so the skybox follows the Settings choice without a manual refresh. A push
+    sent before the player is ready is held and flushed on load. */
+export function notifySpatialBackground(background: string): void {
+  const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame");
+  frame?.contentWindow?.postMessage({ type: "loom-background", background }, location.origin);
 }

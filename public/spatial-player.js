@@ -3,6 +3,7 @@ export function startSpatialPlayer() {
   const status = document.querySelector("#bench-loading-text");
   const canvas = document.querySelector("#unity-canvas");
   const theme = new URLSearchParams(location.search).get("theme") === "white" ? "white" : "dark";
+  const background = new URLSearchParams(location.search).get("background") || "charcoal";
   if (document.body) document.body.dataset.theme = theme;
   let unityInstance = null;
   let failed = false;
@@ -12,6 +13,7 @@ export function startSpatialPlayer() {
   // is applied once Unity loads, so a toggle during load is not lost.
   let pendingTheme = null;
   let pendingState = null;
+  let pendingBackground = null;
   const motion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   const applyMotion = () => unityInstance?.SendMessage?.("Resolute Workbench", "ApplyReducedMotion", motion?.matches ? "true" : "false");
   motion?.addEventListener?.("change", applyMotion);
@@ -46,6 +48,10 @@ export function startSpatialPlayer() {
     }
     if (event.data?.type === "loom-quality" && typeof event.data.tier === "string") {
       if (unityInstance) unityInstance.SendMessage("Resolute Workbench", "ApplyQuality", event.data.tier);
+    }
+    if (event.data?.type === "loom-background" && typeof event.data.background === "string") {
+      if (unityInstance) unityInstance.SendMessage("Resolute Workbench", "ApplyBackground", event.data.background);
+      else pendingBackground = event.data.background;
     }
   });
   function fail(error) {
@@ -91,6 +97,8 @@ export function startSpatialPlayer() {
       loading.hidden = true;
       unityInstance?.SendMessage?.("Resolute Workbench", "ApplyTheme", pendingTheme ?? theme);
       pendingTheme = null;
+      unityInstance?.SendMessage?.("Resolute Workbench", "ApplyBackground", pendingBackground ?? background);
+      pendingBackground = null;
       applyMotion();
       if (pendingState) unityInstance?.SendMessage?.("Resolute Workbench", "ApplyLoomState", pendingState);
       pendingState = null;

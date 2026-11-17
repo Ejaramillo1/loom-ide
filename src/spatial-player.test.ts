@@ -113,3 +113,19 @@ it("queues the latest valid sphere state and accepts state only from its host", 
   sendMessage.mockClear(); listeners.message(state("completed"));
   expect(sendMessage).toHaveBeenCalledWith("Resolute Workbench", "ApplyLoomState", "completed");
 });
+
+it("applies the default background on load and a chosen one pushed before or after", async () => {
+  const { loader, parent, listeners, createUnityInstance } = setup();
+  const sendMessage = vi.fn(); createUnityInstance.mockResolvedValue({ SendMessage: sendMessage });
+  startSpatialPlayer();
+  const background = (id: string) => ({ source: parent, origin: "http://localhost", data: { type: "loom-background", background: id } });
+  listeners.message(background("night"));
+  expect(sendMessage).not.toHaveBeenCalled();
+  await loader.onload();
+  expect(sendMessage).toHaveBeenCalledWith("Resolute Workbench", "ApplyBackground", "night");
+  sendMessage.mockClear();
+  listeners.message(background("moss"));
+  expect(sendMessage).toHaveBeenCalledWith("Resolute Workbench", "ApplyBackground", "moss");
+  listeners.message({ ...background("dusk"), origin: "http://foreign" });
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+});
