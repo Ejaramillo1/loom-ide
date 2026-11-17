@@ -222,3 +222,21 @@ goes with it.
   CheckWorkbench still passes (6 portals, 154 parts, no cropping at aspects
   0.65/1/1.6). Real-window pixel confirmation remains D14-blocked.
 
+## Footer removed; chat widens on agent reply (assistant, 17 Nov)
+
+- The bottom footer (`app-footer` / `mode-nav` / `mode-btn`) is gone: its six
+  destinations duplicated the six scene portals, so navigation now lives in
+  Unity and the View menu. The shell is two rows (header + main); the main
+  grid extends to the bottom edge. Drawer and scrim offsets that reserved the
+  footer height now end at `0`, and the `--footer-h` variable is removed.
+- "Spatial" joins the View menu as the first destination, so the home view is
+  reachable now that the footer is gone (there was no other `setMode("spatial")`
+  call).
+- The right conversation/context column gains a drag handle on its inner edge
+  (left edge for the right-hand panel, right edge when Spatial puts the
+  conversation on the left) and widens into the center/bench on the first
+  stream event of an agent reply while the Conversation tab is open. The
+  widened width persists until the user drags it back or closes the panel;
+  reopening returns to the default width. Drawer behaviour is unchanged at
+  narrow widths.
+
