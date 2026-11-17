@@ -10,8 +10,9 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tauri::State;
 
-use super::{execution_admission, loom_request, percent_encode};
+use super::{AppState, loom_request, percent_encode, resolve_execution_policy};
 
 async fn loom_get(path: String) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
@@ -555,9 +556,25 @@ pub async fn workflow_schedule_create(
     cron: String,
     timezone: Option<String>,
     enabled: Option<bool>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    state: State<'_, AppState>,
 ) -> Result<Value, String> {
     if workflow_name.trim().is_empty() || cron.trim().is_empty() {
         return Err("A workflow name and a cron expression are required.".into());
+    }
+    // Creating a schedule that can fire is an execution-class action; a
+    // deliberately disabled schedule is still allowed (inspect later).
+    if enabled != Some(false) {
+        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+        resolve_execution_policy(
+            &work,
+            &intents,
+            work_id.as_deref(),
+            intent_id.as_deref(),
+            "creating a scheduled workflow",
+        )?;
     }
     let mut schedule = serde_json::Map::new();
     schedule.insert("cron".into(), Value::String(cron.trim().to_string()));
@@ -582,9 +599,25 @@ pub async fn workflow_schedule_update(
     cron: Option<String>,
     timezone: Option<String>,
     enabled: Option<bool>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    state: State<'_, AppState>,
 ) -> Result<Value, String> {
     if schedule_id.trim().is_empty() {
         return Err("No schedule selected.".into());
+    }
+    // Enabling a schedule initiates future execution: gate it. Disabling
+    // or editing other fields stays allowed at any autonomy.
+    if enabled == Some(true) {
+        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+        resolve_execution_policy(
+            &work,
+            &intents,
+            work_id.as_deref(),
+            intent_id.as_deref(),
+            "enabling a scheduled workflow",
+        )?;
     }
     let mut schedule = serde_json::Map::new();
     if let Some(c) = cron {
@@ -630,12 +663,24 @@ pub async fn workflow_schedule_delete(schedule_id: String) -> Result<String, Str
 #[tauri::command]
 pub async fn workflow_schedule_trigger(
     schedule_id: String,
-    autonomy: Option<String>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    state: State<'_, AppState>,
 ) -> Result<Value, String> {
     if schedule_id.trim().is_empty() {
         return Err("No schedule selected.".into());
     }
-    execution_admission(autonomy.as_deref(), "triggering a scheduled workflow")?;
+    {
+        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+        resolve_execution_policy(
+            &work,
+            &intents,
+            work_id.as_deref(),
+            intent_id.as_deref(),
+            "triggering a scheduled workflow",
+        )?;
+    }
     loom_send(
         "POST",
         format!(
@@ -928,11 +973,26 @@ pub async fn session_delete(session_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn session_resume(session_id: String, autonomy: Option<String>) -> Result<Value, String> {
+pub async fn session_resume(
+    session_id: String,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
     if session_id.trim().is_empty() {
         return Err("No session selected.".into());
     }
-    execution_admission(autonomy.as_deref(), "resuming an agent session")?;
+    {
+        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+        resolve_execution_policy(
+            &work,
+            &intents,
+            work_id.as_deref(),
+            intent_id.as_deref(),
+            "resuming an agent session",
+        )?;
+    }
     loom_send(
         "POST",
         format!("/v1/sessions/{}:resume", percent_encode(&session_id)),

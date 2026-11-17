@@ -355,23 +355,94 @@ fn autonomy_admission(
     Ok(())
 }
 
-/// Autonomy admission for agent-execution requests (Rule 4, QC-01/W-2):
-/// enforced at the Rust boundary before anything is sent. Manual (rank 0)
-/// forbids agent execution entirely — chat turns, experiment arms,
-/// workflow runs, schedule triggers and session resume are all rejected
-/// here, because with tools attached any of them can act. Higher levels
-/// pass through; per-tool-call approval for Assisted/Collaborative is the
-/// Loom runtime contract in `17-autonomy-enforcement.md` (prepared patch,
-/// not yet applied — the wire carries `backend_config.autonomy` so a
-/// patched Loom can enforce it).
-pub(crate) fn execution_admission(autonomy: Option<&str>, action: &str) -> Result<(), String> {
-    let level = autonomy.unwrap_or("collaborative");
-    if autonomy_rank(level) == Some(0) {
+/// The governing policy for one execution request, resolved from STORED
+/// records — never from a caller-supplied level string (QC-01/W-2
+/// hardening: changing or omitting a frontend autonomy string cannot
+/// override stored policy).
+#[derive(Debug)]
+pub(crate) struct ExecutionPolicy {
+    /// Resolved autonomy level (for the wire's backend_config and the UI).
+    pub level: String,
+    /// Human label naming the governing record (for error messages).
+    pub owner: String,
+}
+
+fn validate_stored_level(level: &str) -> Result<(), String> {
+    if autonomy_rank(level).is_some() {
+        Ok(())
+    } else {
+        Err(format!("The stored autonomy level \"{level}\" is invalid."))
+    }
+}
+
+/// Resolve the stored policy governing a request and reject Manual before
+/// any network work. Precedence: referenced work item wins; else the
+/// referenced intent; else the stored active intent; else the project
+/// default (collaborative). A missing or invalid referenced record is
+/// rejected — an absent identifier must never silently bypass a
+/// restriction that belongs to a work item.
+pub(crate) fn resolve_execution_policy(
+    work: &WorkStore,
+    intents: &IntentStore,
+    work_id: Option<&str>,
+    intent_id: Option<&str>,
+    action: &str,
+) -> Result<ExecutionPolicy, String> {
+    let work_id = work_id.map(str::trim).filter(|s| !s.is_empty());
+    let intent_id = intent_id.map(str::trim).filter(|s| !s.is_empty());
+    let (level, owner) = if let Some(id) = work_id {
+        let item = work
+            .items()
+            .into_iter()
+            .find(|w| w.id == id)
+            .ok_or_else(|| {
+                "The work item referenced by this request no longer exists. Reopen the work item and try again."
+                    .to_string()
+            })?;
+        validate_stored_level(&item.autonomy)?;
+        (
+            item.autonomy.clone(),
+            format!("work item \"{}\"", item.title),
+        )
+    } else if let Some(id) = intent_id {
+        let intent = intents.get(&id).ok_or_else(|| {
+            "The intent referenced by this request no longer exists. Reopen the intent and try again."
+                .to_string()
+        })?;
+        validate_stored_level(&intent.autonomy)?;
+        (
+            intent.autonomy.clone(),
+            format!("intent \"{}\"", intent.statement),
+        )
+    } else {
+        // Requests outside any work or intent follow the stored active
+        // intent; with none, the project default applies.
+        match intents.active_id() {
+            Some(id) => match intents.get(&id) {
+                Some(i) => {
+                    validate_stored_level(&i.autonomy)?;
+                    (
+                        i.autonomy.clone(),
+                        format!("the active intent \"{}\"", i.statement),
+                    )
+                }
+                None => (
+                    "collaborative".to_string(),
+                    "the project default (collaborative)".to_string(),
+                ),
+            },
+            None => (
+                "collaborative".to_string(),
+                "the project default (collaborative)".to_string(),
+            ),
+        }
+    };
+    if autonomy_rank(&level) == Some(0) {
         return Err(format!(
-            "Manual autonomy forbids {action}. Raise the work item's autonomy to Assisted or higher to let the agent act — or do it by hand."
+            "Manual autonomy forbids {action} under {owner}. Raise that autonomy to Assisted or higher to let the agent act — or do it by hand."
         ));
     }
-    Ok(())
+    Ok(ExecutionPolicy { level, owner })
 }
 
 #[tauri::command]
@@ -1631,12 +1702,24 @@ async fn list_workflows() -> Result<Vec<Workflow>, String> {
 #[tauri::command]
 async fn execute_workflow(
     workflow_ref: String,
-    autonomy: Option<String>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    state: State<'_, AppState>,
 ) -> Result<ExecuteWorkflowResponse, String> {
     if workflow_ref.trim().is_empty() {
         return Err("No workflow selected.".to_string());
     }
-    execution_admission(autonomy.as_deref(), "workflow runs")?;
+    {
+        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+        resolve_execution_policy(
+            &work,
+            &intents,
+            work_id.as_deref(),
+            intent_id.as_deref(),
+            "workflow runs",
+        )?;
+    }
     let body = serde_json::json!({ "workflowRef": workflow_ref }).to_string();
     let value = tauri::async_runtime::spawn_blocking(move || {
         loom_request("POST", "/v1/workflows:execute", Some(body))
@@ -1989,12 +2072,27 @@ async fn ask_loom(
     context: Option<HashMap<String, String>>,
     max_rounds: Option<i32>,
     timeout_seconds: Option<i32>,
-    autonomy: Option<String>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    state: State<'_, AppState>,
 ) -> Result<ChatReply, String> {
     if message.trim().is_empty() {
         return Err("Enter a message first.".into());
     }
-    execution_admission(autonomy.as_deref(), "agent chat")?;
+    // Authoritative admission: the stored records decide, not the caller
+    // (QC-01/W-2 hardening). Manual is rejected before any network work.
+    // Guards are scoped so no store lock crosses the await below.
+    let policy = {
+        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+        resolve_execution_policy(
+            &work,
+            &intents,
+            work_id.as_deref(),
+            intent_id.as_deref(),
+            "agent chat",
+        )?
+    };
     let body = serde_json::Value::Object(weave_unary_body(
         &message,
         session_id.as_deref(),
@@ -2002,7 +2100,7 @@ async fn ask_loom(
         context.as_ref(),
         max_rounds,
         timeout_seconds,
-        autonomy.as_deref(),
+        Some(&policy.level),
     ))
     .to_string();
     tauri::async_runtime::spawn_blocking(move || {
@@ -2489,37 +2587,165 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
-    // execution_admission (QC-01/W-2 Rule 4): Manual forbids agent
-    // execution at the boundary; higher levels and the default pass.
+    // resolve_execution_policy (QC-01/W-2 hardening): stored records are
+    // authoritative; caller-supplied level strings no longer exist, so a
+    // changed or omitted frontend value cannot override policy.
     // ------------------------------------------------------------------
 
+    fn admission_stores() -> (std::path::PathBuf, WorkStore, IntentStore) {
+        let dir = std::env::temp_dir().join(format!(
+            "loom-ide-admission-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let work = WorkStore::load(dir.join("work.json")).unwrap();
+        let intents = IntentStore::load(dir.join("intents.json")).unwrap();
+        (dir, work, intents)
+    }
+
     #[test]
-    fn execution_admission_rejects_manual_for_every_execution_class() {
-        for action in [
-            "agent chat",
-            "workflow runs",
-            "triggering a scheduled workflow",
-            "resuming an agent session",
-        ] {
+    fn stored_manual_work_rejects_execution_no_matter_what_the_caller_wants() {
+        let (_dir, mut work, mut intents) = admission_stores();
+        let intent = intents
+            .create(
+                "t".into(),
+                None,
+                vec![],
+                Some("delegated".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        let item = work.add("manual work".into(), Some(intent.id)).unwrap();
+        // The stored record is Manual even though its intent is Delegated:
+        // the work item governs its own execution.
+        work.set_autonomy(&item.id, "manual").unwrap();
+        for action in ["agent chat", "workflow runs"] {
+            let err = resolve_execution_policy(&work, &intents, Some(&item.id), None, action)
+                .unwrap_err();
             assert!(
-                execution_admission(Some("manual"), action).is_err(),
-                "manual must be rejected for {action}"
+                err.contains("Manual autonomy forbids"),
+                "unexpected message: {err}"
             );
+            assert!(err.contains("manual work"), "owner not named: {err}");
         }
     }
 
     #[test]
-    fn execution_admission_passes_assisted_and_higher() {
-        for level in ["assisted", "collaborative", "delegated"] {
-            for action in ["agent chat", "workflow runs"] {
-                assert!(
-                    execution_admission(Some(level), action).is_ok(),
-                    "{level} must pass for {action}"
-                );
-            }
-        }
-        // No governing object: default collaborative passes.
-        assert!(execution_admission(None, "agent chat").is_ok());
+    fn stored_manual_intent_rejects_when_no_work_is_referenced() {
+        let (_dir, work, mut intents) = admission_stores();
+        let intent = intents
+            .create(
+                "strict intent".into(),
+                None,
+                vec![],
+                Some("manual".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        let err = resolve_execution_policy(&work, &intents, None, Some(&intent.id), "agent chat")
+            .unwrap_err();
+        assert!(err.contains("Manual autonomy forbids"), "{err}");
+        assert!(err.contains("strict intent"), "{err}");
+    }
+
+    #[test]
+    fn missing_referenced_records_are_rejected() {
+        let (_dir, work, intents) = admission_stores();
+        assert!(
+            resolve_execution_policy(&work, &intents, Some("ghost"), None, "agent chat")
+                .unwrap_err()
+                .contains("no longer exists")
+        );
+        assert!(
+            resolve_execution_policy(&work, &intents, None, Some("ghost"), "agent chat")
+                .unwrap_err()
+                .contains("no longer exists")
+        );
+    }
+
+    #[test]
+    fn valid_non_manual_policy_passes_and_names_its_owner() {
+        let (_dir, mut work, mut intents) = admission_stores();
+        let intent = intents
+            .create(
+                "t".into(),
+                None,
+                vec![],
+                Some("collaborative".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        let item = work.add("open work".into(), Some(intent.id)).unwrap();
+        let policy =
+            resolve_execution_policy(&work, &intents, Some(&item.id), None, "agent chat").unwrap();
+        assert_eq!(policy.level, "collaborative");
+        assert!(policy.owner.contains("open work"));
+    }
+
+    #[test]
+    fn invalid_stored_level_is_rejected() {
+        // Store loading itself rejects unknown levels loudly; the
+        // resolver's validation is the second layer and is tested here
+        // directly.
+        assert!(validate_stored_level("supervised").is_err());
+        assert!(validate_stored_level("manual").is_ok());
+    }
+
+    #[test]
+    fn no_identifiers_follows_the_active_intent_then_the_default() {
+        let (_dir, work, mut intents) = admission_stores();
+        // No active intent: the project default applies.
+        let policy = resolve_execution_policy(&work, &intents, None, None, "agent chat").unwrap();
+        assert_eq!(policy.level, "collaborative");
+        // A Manual active intent governs identifier-less requests too —
+        // absence of an identifier must not silently bypass policy.
+        let manual = intents
+            .create(
+                "strict".into(),
+                None,
+                vec![],
+                Some("manual".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        intents.set_active(&manual.id).unwrap();
+        assert!(
+            resolve_execution_policy(&work, &intents, None, None, "agent chat").is_err(),
+            "an identifier-less request under a Manual active intent must be rejected"
+        );
+    }
+
+    #[test]
+    fn policy_lowered_before_fallback_is_seen_by_the_recheck() {
+        let (_dir, mut work, mut intents) = admission_stores();
+        let intent = intents
+            .create(
+                "t".into(),
+                None,
+                vec![],
+                Some("delegated".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        let item = work.add("fallback work".into(), Some(intent.id)).unwrap();
+        // First pass: Delegated — the request may start.
+        assert!(
+            resolve_execution_policy(&work, &intents, Some(&item.id), None, "agent chat").is_ok()
+        );
+        // The owner becomes Manual before the fallback dispatches: the
+        // re-resolution (a fresh call per request) must reject.
+        work.set_autonomy(&item.id, "manual").unwrap();
+        assert!(
+            resolve_execution_policy(&work, &intents, Some(&item.id), None, "agent chat").is_err()
+        );
     }
 
     // ------------------------------------------------------------------

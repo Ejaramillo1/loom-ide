@@ -15,9 +15,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, State};
 
-use super::{execution_admission, loom_request, percent_encode};
+use super::{AppState, loom_request, percent_encode, resolve_execution_policy};
 
 /// Per-request cancel flags, keyed by the frontend's request id. Dropping a
 /// stream (server close, error, completion) also drops its entry.
@@ -85,6 +85,7 @@ fn validate_stream_inputs(request_id: &str, message: &str) -> Result<(), String>
 #[tauri::command]
 pub fn ask_loom_stream(
     app: AppHandle,
+    state: State<'_, AppState>,
     request_id: String,
     message: String,
     session_id: Option<String>,
@@ -92,10 +93,20 @@ pub fn ask_loom_stream(
     context: Option<std::collections::HashMap<String, String>>,
     max_rounds: Option<i32>,
     timeout_seconds: Option<i32>,
-    autonomy: Option<String>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
 ) -> Result<(), String> {
     validate_stream_inputs(&request_id, &message)?;
-    execution_admission(autonomy.as_deref(), "agent chat")?;
+    // Authoritative admission from stored records (QC-01/W-2 hardening).
+    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+    let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+    let policy = resolve_execution_policy(
+        &work,
+        &intents,
+        work_id.as_deref(),
+        intent_id.as_deref(),
+        "agent chat",
+    )?;
     let body = weave_stream_body(
         message.trim(),
         session_id.as_deref(),
@@ -103,7 +114,7 @@ pub fn ask_loom_stream(
         context.as_ref(),
         max_rounds,
         timeout_seconds,
-        autonomy.as_deref(),
+        Some(&policy.level),
     );
     start_loom_stream(
         app,
@@ -194,14 +205,24 @@ pub fn cancel_loom_stream(request_id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn execute_workflow_stream(
     app: AppHandle,
+    state: State<'_, AppState>,
     request_id: String,
     workflow_ref: String,
-    autonomy: Option<String>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
 ) -> Result<(), String> {
     if workflow_ref.trim().is_empty() {
         return Err("No workflow selected.".into());
     }
-    execution_admission(autonomy.as_deref(), "workflow runs")?;
+    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+    let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+    resolve_execution_policy(
+        &work,
+        &intents,
+        work_id.as_deref(),
+        intent_id.as_deref(),
+        "workflow runs",
+    )?;
     start_loom_stream(
         app,
         request_id,
@@ -243,14 +264,26 @@ pub fn session_subscribe(
 #[tauri::command]
 pub fn provider_abtest(
     app: AppHandle,
+    state: State<'_, AppState>,
     request_id: String,
     prompt: String,
     provider_names: Option<Vec<String>>,
     mode: Option<String>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
 ) -> Result<(), String> {
     if prompt.trim().is_empty() {
         return Err("Enter a prompt to compare.".into());
     }
+    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+    let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+    resolve_execution_policy(
+        &work,
+        &intents,
+        work_id.as_deref(),
+        intent_id.as_deref(),
+        "provider A/B runs",
+    )?;
     let mut obj = serde_json::Map::new();
     obj.insert("prompt".into(), Value::String(prompt.trim().to_string()));
     if let Some(names) = provider_names {
