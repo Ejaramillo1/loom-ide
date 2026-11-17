@@ -144,7 +144,7 @@ source):**
 | # | Problem | Change | Proof | Status | Evidence |
 |---|---|---|---|---|---|
 | W-1 | Execution limits never sent (NG-2); Intent-budget direction | Wire Intent budget fields → editor → TS API → Rust validation → **both** weave requests (`max_rounds`, `timeout_seconds`); preserve existing saved Intents with documented defaults | Rust wire tests assert both fields; **caveat verified: Loom enforces `timeout_seconds`; `max_rounds` has no server consumer** — record honestly and gate the max_rounds claim on Loom-side work or agent `max_turns` | **done (IDE)** | `Intent.max_rounds`/`timeout_seconds` (store.rs, serde default None); editor number inputs; `ask_loom`/`ask_loom_stream` send camelCase `maxRounds`/`timeoutSeconds` and snake_case `max_rounds`/`timeout_seconds`; Rust wire tests (`weave_unary_body_*`, `weave_stream_body_carries_budget_*`) + store round-trip + 2 lifecycle tests (97 frontend, 130 lib). Server enforcement of `max_rounds` remains gated (no consumer in Loom `8082078`) |
-| W-2 | Autonomy unenforced (QC-01) | Define what the 4 existing levels permit; inventory every entry point (chat, experiment arms, workflows, resume, schedules, tools); enforce applicable restrictions at the Rust boundary; specify the runtime contract for lowering during an active run; no invented levels, no prompt-wording-as-permission | Forbidden actions cannot execute via any entry point; UI reports enforcement accurately; full runtime enforcement stays open until Loom-side work exists | **Manual enforced at the boundary; runtime holds prepared (Loom-side)** | `17-autonomy-enforcement.md`: 4-level table; `execution_admission` gates all six entry commands; wire carries the level; mid-run lowering cancels affected runs; prepared `evidence/qc1-autonomy-runtime-tests.go.txt` |
+| W-2 | Autonomy unenforced (QC-01) | Define what the 4 existing levels permit; inventory every entry point (chat, experiment arms, workflows, resume, schedules, tools); enforce applicable restrictions at the Rust boundary; specify the runtime contract for lowering during an active run; no invented levels, no prompt-wording-as-permission | Forbidden actions cannot execute via any entry point; UI reports enforcement accurately; full runtime enforcement stays open until Loom-side work exists | **IDE admission + cancellation done (2026-11-18); runtime policy separate** | `17-autonomy-enforcement.md`: stored-policy resolution (`resolve_execution_policy`) on every inventoried path; Manual rejected before sending; requested/confirmed/unavailable cancellation states; tests fail if the guard is bypassed (Rust 141, frontend 100) |
 | W-3 | Gateway posture (QC-02) | Local test deployment: loopback-only binds, Tauri origin works, foreign origin gets no read, unary + stream same policy; remote deployment = separate authenticated transport (out of scope) | Observed `ss` addresses + origin probes match the documented local deployment | **contained (config); prepared patch pending Loom-side scope** | `16-gateway-containment.md`: loopback sockets observed + restart-proof; exact-origin allowlist; isolated matrix proved the unlisted-origin **action** path → prepared `qc2-cors-reject.patch` + `qc2-host-check.patch` + tests in `evidence/` (not applied) |
 | W-4 | Disposable playground | Disposable `XDG_DATA_HOME` app profile + `LOOM_VAULT_DIR` vault + synthetic sessions + temp work; fixtures never demo data; empirically confirm the app-data dir at launch | Launching checks cannot touch personal notes/sessions/approvals | **open** | §1 data-dir facts |
 | W-5 | Approval buttons prove control (QC-07 round-trip) | Harmless counted tool in the isolated env; cases: no-approve→0, approve→1, repeat-approve→1, deny→0, expired answer→server's expired state, reload/restart→stored decision; plus the parked-request refusal; pending requests only via the runtime's supported path | UI, stored request, and actual tool execution agree | **unblocked (server runs loopback) — needs a live held tool** | doc 13 Phase 3 (route only); §10 above (route re-verified after containment) |
@@ -189,6 +189,19 @@ source):**
   runs; scope note states the exact boundary. Suites: frontend 99/99,
   tauri lib 136 passed. Runtime holds + mid-run acknowledgment =
   prepared Loom contract + tests, not applied.
+- 2026-11-18 — **Autonomy admission hardened (owner's work order).**
+  Caller-supplied level strings removed: execution commands take stable
+  work/Intent identifiers and resolve stored policy in Rust
+  (`resolve_execution_policy`; Manual rejected before any network
+  request; missing/invalid records rejected; fallback re-reads policy
+  at dispatch). Ownership carried through awaits/stream/fallback.
+  Cancellation keeps three states distinct (requested / confirmed
+  terminal / unavailable-or-failed); one-shot paths state the
+  limitation. Schedule create/enable gated; inspecting/disabling/
+  deleting never gated. Browser fallback keeps a convenience refusal
+  only. Commits `db6471c` + `41124ae`; suites: frontend 100/100, tauri
+  lib 141, native 22, build 0, fmt src-tauri 0, Unity recompile
+  0 errors/0 warnings. **Not pushed** (task instruction: local only).
 - Remaining: W-4..W-10 (W-5/W-6 unblocked), Loom-side application of
   the three prepared artifacts (gateway reject, Host check, autonomy
   holds) pending separately authorized scope.

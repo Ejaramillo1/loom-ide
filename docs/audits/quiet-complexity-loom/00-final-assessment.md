@@ -32,14 +32,17 @@ still NO:
    no live model turn has been executed through the rebuilt UI at head
    (NG-4).
 2. **Human control is partially real (QC-01/issue 005).** **Manual is
-   now enforced at the IDE boundary** — every agent-execution entry
-   point (chat, experiment arms, workflows, schedule triggers, session
-   resume) rejects Manual before sending, and lowering the dial
-   mid-run stops the affected run. **Per-tool approval for Assisted and
-   Collaborative is pending the Loom runtime contract** — prepared in
-   `17-autonomy-enforcement.md` with expected-behavior tests, not yet
-   applied; until it lands, levels above Manual run with server-default
-   tool permissions, and the dial says so.
+   enforced at the IDE boundary from stored records** — every
+   execution path (chat, experiment arms, workflows, schedule
+   run/enable, session resume, provider A/B) is rejected before
+   sending when the governing work/Intent is Manual, and lowering the
+   dial requests cancellation for affected streams (requested and
+   confirmed states are kept distinct; one-shot paths state the
+   limitation). **Per-tool approval for Assisted and Collaborative is a
+   separate Loom runtime project** — contract in
+   `17-autonomy-enforcement.md` §1; until it exists, levels above
+   Manual run with server-default tool permissions, and the dial says
+   so.
 3. **The trust boundary is now enforced at the network, with one
    prepared residual (QC-02/issue 011).** As of 2026-11-17 the live
    gateway binds **`127.0.0.1:5006/60051` only** (loopback, observed
@@ -127,11 +130,13 @@ the absence of an autonomy enforcement contract (QC-01).
 
 **8. Which gaps compromise human control or understanding?**
 Autonomy is labeled honestly and **Manual is enforced at the IDE
-boundary** (005 — per-tool approval for Assisted/Collaborative is the
-prepared Loom contract); the gateway is loopback-bound with restricted
-origins (011, contained 2026-11-17 — the unlisted-origin action path
-is the prepared-patch residual); the stale citations erode
-auditability of the philosophy's Loom hooks (015).
+boundary from stored records** (005 — cancellation is
+requested/confirmed/unavailable as applicable; per-tool approval for
+Assisted/Collaborative is a separate Loom project); the gateway is
+loopback-bound with restricted origins (011, contained 2026-11-17 —
+the unlisted-origin action path is the prepared-patch residual); the
+stale citations erode auditability of the philosophy's Loom hooks
+(015).
 
 **9. Smallest set of changes for full integration with Loom's supported
 capabilities?**
@@ -184,9 +189,10 @@ the pattern — honesty instead of pretense, truth instead of removal.
    renders when present; live replies default to the Observed label.
 7. Autonomy is observable in Loom's approval behavior, or its copy states
    exactly what it governs; the deployment respects the trust boundary.
-   — *Half: Manual is enforced at the IDE boundary and the copy is
-   honest; per-tool approval enforcement (Assisted/Collaborative) is
-   the prepared Loom contract (QC-01); the deployment is
+   — *Half: Manual is enforced at the IDE boundary from stored records,
+   cancellation is requested-and-confirmed honestly, and the copy is
+   accurate; per-tool approval enforcement (Assisted/Collaborative) is
+   a separate Loom project (QC-01); the deployment is
    loopback-contained with restricted origins (QC-02 contained
    2026-11-17; the unlisted-origin reject patch is prepared,
    Loom-side).*

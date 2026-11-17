@@ -2,19 +2,19 @@
 
 - **Title:** The autonomy dial does not govern Loom execution permissions
 - **Severity:** P1 — the flagship control concept is UI-only
-- **Status (2026-11-17):** **PARTIALLY FIXED — Manual is now enforced at
-  the IDE boundary.** Every agent-execution entry point (chat unary +
-  stream, workflow unary + stream, experiment arms via chat, schedule
-  trigger, session resume) rejects **Manual** before any request leaves
-  the app (`execution_admission`, `lib.rs`), and lowering the dial
-  mid-run cancels the affected work's in-flight runs. The governing
-  level rides the wire (`backendConfig.autonomy` / `backend_config.
-  autonomy`). **Remaining:** per-tool-call approval for Assisted/
-  Collaborative and runtime mid-run acknowledgment need the Loom patch —
-  prepared contract + tests in `17-autonomy-enforcement.md` and
-  `evidence/qc1-autonomy-runtime-tests.go.txt` (not applied). Until it
-  lands, levels above Manual run with server-default tool permissions,
-  and the dial's scope note says so.
+- **Status (2026-11-18):** **IDE admission enforced from stored records;
+  cancellation honest; runtime policy separate.** Every execution
+  command resolves policy from the stored work/Intent records
+  (`resolve_execution_policy`, identifiers only — a caller-supplied
+  level string no longer exists): Manual is rejected before any network
+  work on chat, workflow runs, experiment arms, schedule run/enable,
+  session resume and provider A/B; missing/invalid records are rejected;
+  fallbacks re-read current policy at dispatch. Lowering the dial
+  requests cancellation for affected streams (requested → confirmed
+  terminal → unavailable/failed, each stated) and reports one-shot
+  paths as not cancellable. **Outside this repair:** per-tool-call
+  approval (Assisted/Collaborative) and runtime acknowledgment — a
+  Loom project, contract in `17-autonomy-enforcement.md` §1.
 
 ## Problem statement
 
