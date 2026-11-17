@@ -13,3 +13,9 @@ Use the image as a composition and object-language reference for the authorized 
 - Preserve the fold's safety rules and phase order. Finish and verify the data layer and Knowledge functionality before optional composition polish; record structural layout work as deferred if necessary.
 
 This reference does not mean the pictured interface is already implemented or verified. It does not authorize new dependencies, data migration, file deletion, push, or a decision on Q2.
+
+> **2026-11-17 amendment**: Eduardo removed the Knowledge Graph/Canvas side
+> panel from the Spatial view. Spatial is now the conversation on the left
+> and the Unity bench filling the remaining width; Knowledge is reachable
+> only through its own full view (`#view-knowledge`). The pictured
+> "Knowledge Graph/Canvas on the right" composition no longer applies.

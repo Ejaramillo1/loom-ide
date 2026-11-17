@@ -197,3 +197,28 @@ texture excludes OnGUI. Verified in Play Mode: 6 portals, 154 parts,
 CheckWorkbench green. The object ring still rotates (labels are on top), so
 an object can still pass behind another during orbit; its label no longer
 goes with it.
+
+## Spatial Knowledge rail removed (assistant, 17 Nov, Eduardo: no Knowledge panel on the bench)
+
+- The "Your knowledge" side panel (Graph/Canvas tabs, "Open full") is gone
+  from the Spatial view. The full Knowledge view (`#view-knowledge`:
+  Notes, Patterns, Skills, Evidence, Memory garden, Activity) is untouched
+  and still works the same.
+- Spatial is now just the conversation on the left and the Unity bench
+  filling the rest: the desktop grid dropped the third `clamp(280px, 24vw,
+  360px)` column, so the bench centre column now stretches to the freed
+  width (and to full width when the conversation is hidden). The mobile
+  drawer and its `body.knowledge-open` scrim/trap/focus logic were removed
+  with the panel.
+- The bench renderer state that lived in `installKnowledge` (`renderBench`,
+  `benchTab`, the `#spatial-graph`/`#spatial-canvas`/`#spatial-tab-*`
+  queries and the `#spatial-open-full` listener) was removed; only the full
+  view renders the graph and canvas now. No `#spatial-*` element or selector
+  remains in the DOM or code.
+- The canvas resize bridge is unchanged: `#spatial-frame` is `width:100%`,
+  the player canvas is `width/height:100%`, and `spatial-player.js` sends
+  `ApplyCanvasSize` on load and resize, so the wider bench re-frames the
+  camera through `MoveCamera`'s aspect-dependent framing (`max(1, 1/aspect)`).
+  CheckWorkbench still passes (6 portals, 154 parts, no cropping at aspects
+  0.65/1/1.6). Real-window pixel confirmation remains D14-blocked.
+
