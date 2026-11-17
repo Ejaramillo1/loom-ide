@@ -1,0 +1,122 @@
+
+ RUN  v5.1.0 /home/ed/loom-ide-tauri
+
+ ❯ src/chat-lifecycle.test.ts (20 tests | 3 failed) 126ms
+   × records cancelled and failed outcomes with partial flags 16ms
+   × passes the active intent's budget to the stream path (W-1) 3ms
+   × passes the active intent's budget to the unary fallback path (W-1) 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/chat-lifecycle.test.ts > records cancelled and failed outcomes with partial flags
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'run-1', ObjectContaining{…} ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "run-1",
+-   ObjectContaining {
++   {
++     "costSource": undefined,
++     "costUsd": null,
++     "error": "Local stream stopped; server cancellation is not confirmed.",
+      "partial": true,
+-     "status": "cancelled",
++     "sessionId": null,
++     "status": "unknown",
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/chat-lifecycle.test.ts:442:33
+    440|   api.handleStreamEvent({ requestId: sends[0], kind: "progress", event…
+    441|   api.handleStreamEvent({ requestId: sends[0], kind: "cancelled" });
+    442|   expect(stubs.recordRunSettle).toHaveBeenCalledWith(
+       |                                 ^
+    443|     "run-1",
+    444|     expect.objectContaining({ status: "cancelled", partial: true }),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/chat-lifecycle.test.ts > passes the active intent's budget to the stream path (W-1)
+TypeError: Cannot read properties of undefined (reading '5')
+ ❯ src/chat-lifecycle.test.ts:488:23
+    486|   void api.sendChat("hello");
+    487|   // sendChat(...) => askLoomStream(requestId, message, sessionId, age…
+    488|   expect(streamArgs[0][5]).toBe(4);
+       |                       ^
+    489|   expect(streamArgs[0][6]).toBe(120);
+    490| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/chat-lifecycle.test.ts > passes the active intent's budget to the unary fallback path (W-1)
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'hello', undefined, undefined, …(5) ]
+
+Number of calls: 0
+
+ ❯ src/chat-lifecycle.test.ts:501:25
+    499|   void api.sendChat("hello");
+    500|   await tick();
+    501|   expect(stubs.askLoom).toHaveBeenCalledWith(
+       |                         ^
+    502|     "hello", undefined, undefined, expect.anything(), 3, 90, "w1", "i1…
+    503|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 2 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+ReferenceError: AUTONOMY_LEVELS is not defined
+ ❯ eval src/chat-lifecycle.test.ts:156:15
+    154|   );
+    155|
+    156|   const api = new Function(
+       |               ^
+    157|     "document", "window", "$", "localStorage",
+    158|     "loomVerified", "loomReconnecting", "sphereState",
+ ❯ governingAutonomy src/chat-lifecycle.test.ts:156:15
+ ❯ Object.sendChat src/chat-lifecycle.test.ts:156:15
+ ❯ src/chat-lifecycle.test.ts:486:12
+ ❯ node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:20
+
+This error originated in "src/chat-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "passes the active intent's budget to the unary fallback path (W-1)". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+ReferenceError: AUTONOMY_LEVELS is not defined
+ ❯ eval src/chat-lifecycle.test.ts:156:15
+    154|   );
+    155|
+    156|   const api = new Function(
+       |               ^
+    157|     "document", "window", "$", "localStorage",
+    158|     "loomVerified", "loomReconnecting", "sphereState",
+ ❯ governingAutonomy src/chat-lifecycle.test.ts:156:15
+ ❯ Object.sendChat src/chat-lifecycle.test.ts:156:15
+ ❯ src/chat-lifecycle.test.ts:499:12
+ ❯ node_modules/vitest/dist/chunks/run.CjdgFZiW.js:2801:20
+
+This error originated in "src/chat-lifecycle.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "passes the active intent's budget to the unary fallback path (W-1)". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  3 failed | 22 passed (25)
+     Errors  2 errors
+   Start at  11:39:20
+   Duration  735ms (import 59%, transform 23%, tests 17%, worker 2%)
+

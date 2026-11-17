@@ -1,0 +1,16 @@
+
+> loom-ide-tauri@0.0.0 test
+> vitest run --run
+
+
+ RUN  v5.1.0 /home/ed/loom-ide-tauri
+
+
+ Test Files  12 passed (12)
+      Tests  100 passed (100)
+   Start at  11:31:28
+   Duration  1.90s (import 60%, tests 32%, worker 4%, transform 4%)
+
+    Isolate  12 workers spawned · ~219ms startup each (spawn + environment, per file)
+             at least ~657ms faster with isolate: false — reuses workers across files instead of one per file
+

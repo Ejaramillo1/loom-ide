@@ -1,0 +1,6 @@
+$ GOTOOLCHAIN=local GOPROXY=off go -C /home/ed/work/loom run /home/ed/loom-ide-tauri/docs/audits/quiet-complexity-loom/contract-audit/evidence/contract_probe.go
+PASS: exact custom SSE decoder drops IDE camelCase sessionId, agentId, enableTrace; snake_case preserves all three
+PASS: CreateAgentRequest rejects bare config and accepts nested config
+PASS: accepted clarification has success/accepted and no status field
+
+EXIT_CODE=0

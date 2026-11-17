@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "timezone": "America/Tijuana",
+  "ide": {
+    "path": "/home/ed/loom-ide-tauri",
+    "branch": "tauri-prototype",
+    "commit": "c46aa644e4801dfd1156e61cbbea79111fd8ac3e",
+    "origin": "https://github.com/Ejaramillo1/loom-ide.git",
+    "initial_worktree": "clean"
+  },
+  "loom": {
+    "path": "/home/ed/work/loom",
+    "branch": "main",
+    "commit": "ab46f76f1bd962a82c31ede81233d538cb2ed773",
+    "origin": "https://github.com/teradata-labs/loom.git",
+    "initial_worktree": "clean"
+  },
+  "rpc_count": 162,
+  "registered_tauri_commands": 139,
+  "live_gateway_version": "looms 1.4.0; binary commit not established"
+}

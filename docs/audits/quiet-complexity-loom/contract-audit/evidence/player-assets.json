@@ -1,0 +1,50 @@
+[
+  {
+    "asset": "spatial.loader.js",
+    "public": {
+      "bytes": 27914,
+      "sha256": "e41a2f32423286e80042da00729576cd95f2137e1cc0326ec9927c7cd236d9ff"
+    },
+    "dist": {
+      "bytes": 27914,
+      "sha256": "e41a2f32423286e80042da00729576cd95f2137e1cc0326ec9927c7cd236d9ff"
+    },
+    "same_bytes": true
+  },
+  {
+    "asset": "spatial.framework.js",
+    "public": {
+      "bytes": 331271,
+      "sha256": "433e6dd18e96d812e745ccb43cd4198affd410850807607315c33bc6d1f9c7d0"
+    },
+    "dist": {
+      "bytes": 331271,
+      "sha256": "433e6dd18e96d812e745ccb43cd4198affd410850807607315c33bc6d1f9c7d0"
+    },
+    "same_bytes": true
+  },
+  {
+    "asset": "spatial.wasm",
+    "public": {
+      "bytes": 25530904,
+      "sha256": "2e1fc327dcae577f38a2c5bcbeb39487fb8d564b7baaa7ac46f6b3b365c82030"
+    },
+    "dist": {
+      "bytes": 25530904,
+      "sha256": "2e1fc327dcae577f38a2c5bcbeb39487fb8d564b7baaa7ac46f6b3b365c82030"
+    },
+    "same_bytes": true
+  },
+  {
+    "asset": "spatial.data",
+    "public": {
+      "bytes": 7620193,
+      "sha256": "c266db7ff8828aa4fdcca743a7f95c492b165ef95be11446350e82aec6b8e820"
+    },
+    "dist": {
+      "bytes": 7620193,
+      "sha256": "c266db7ff8828aa4fdcca743a7f95c492b165ef95be11446350e82aec6b8e820"
+    },
+    "same_bytes": true
+  }
+]

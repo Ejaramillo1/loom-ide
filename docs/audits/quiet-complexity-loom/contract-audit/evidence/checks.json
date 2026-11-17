@@ -1,0 +1,56 @@
+[
+  {
+    "check": "frontend-tests",
+    "command": "npm test -- --run",
+    "exit_code": 0,
+    "seconds": 3.41
+  },
+  {
+    "check": "frontend-build",
+    "command": "npm run build",
+    "exit_code": 0,
+    "seconds": 10.41
+  },
+  {
+    "check": "tauri-tests",
+    "command": "cargo test --offline --locked --manifest-path src-tauri/Cargo.toml --lib",
+    "exit_code": 0,
+    "seconds": 4.9
+  },
+  {
+    "check": "native-tests",
+    "command": "cargo test --offline --locked --manifest-path native-app/Cargo.toml",
+    "exit_code": 0,
+    "seconds": 4.53
+  },
+  {
+    "check": "rustfmt",
+    "command": "cargo fmt --check --manifest-path src-tauri/Cargo.toml",
+    "exit_code": 0,
+    "seconds": 0.54
+  },
+  {
+    "check": "unity-recompile",
+    "command": "unity recompile --project-path \"$PWD/unity-memory-palace\" --format json",
+    "exit_code": 0,
+    "seconds": 1.18
+  },
+  {
+    "check": "live-gateway-test",
+    "command": "cargo test --offline --locked --manifest-path src-tauri/Cargo.toml --lib gateway_tests::live_gateway_responses_parse -- --ignored --exact",
+    "exit_code": 0,
+    "seconds": 0.8
+  },
+  {
+    "check": "go-contract-probe",
+    "command": "GOTOOLCHAIN=local GOPROXY=off go -C /home/ed/work/loom run /home/ed/loom-ide-tauri/docs/audits/quiet-complexity-loom/contract-audit/evidence/contract_probe.go",
+    "exit_code": 0,
+    "seconds": 3.46
+  },
+  {
+    "check": "frontend-contract-probe",
+    "command": "node docs/audits/quiet-complexity-loom/contract-audit/evidence/frontend_contract_probe.mjs",
+    "exit_code": 0,
+    "seconds": 0.31
+  }
+]

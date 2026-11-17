@@ -12,7 +12,7 @@
            (Experiment overview only), translucent panels above it.
            The window is opaque; depth comes from layering, not from
            seeing the desktop through the app. -->
-      <div class="scene" data-mode="code">
+      <div class="scene" data-mode="spatial">
         <div class="scene-light" aria-hidden="true"></div>
 
         <!-- ======================= Header (row 1) ======================= -->
@@ -23,37 +23,18 @@
           </div>
           <nav id="app-menu" class="app-menu" aria-label="Application"></nav>
           <div class="vdiv" aria-hidden="true"></div>
-          <button class="objective" id="objective-btn" type="button" title="Open this work in Work view">
+          <button class="objective" id="objective-btn" type="button" title="Open this work in Work view" hidden>
             <span class="obj-label">You are working on:</span>
             <strong id="objective-title">No work selected</strong>
           </button>
           <div class="top-right">
-            <div class="appearance-switch" role="group" aria-label="Appearance">
-              <button type="button" data-appearance="dark" aria-pressed="true">Dark</button>
-              <button type="button" data-appearance="white" aria-pressed="false">White</button>
-            </div>
-            <button class="header-btn" id="work-toggle" type="button" aria-controls="left-col" aria-expanded="false" aria-label="Work panel">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7" /></svg>
-              <span class="header-btn-label">Work</span>
-            </button>
-            <button class="header-btn" id="context-toggle" type="button" aria-controls="right-col" aria-expanded="false" aria-label="Context panel">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v14H4z" /><path d="M9 5v14" /></svg>
-              <span class="header-btn-label">Context</span>
-            </button>
+            <button class="header-btn" id="knowledge-bell" type="button" aria-label="Memory garden">🔔 0</button>
             <button class="header-btn" id="chat-toggle" type="button" aria-controls="right-col" aria-expanded="false" aria-label="Conversation">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a3 3 0 0 1-3 3H8l-5 4V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z" /></svg>
               <span class="header-btn-label">Conversation</span>
             </button>
             <span class="status-pill" id="loom-status" title="Loom server status">
               <span class="status-dot"></span><span id="loom-status-text">Checking Loom…</span>
-            </span>
-            <span class="search-wrap">
-              <button class="icon-btn" id="search-btn" type="button" title="Search work" aria-label="Search work" aria-expanded="false">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
-                </svg>
-              </button>
-              <input id="search-input" type="search" placeholder="Search work…" aria-label="Search work" autocomplete="off" hidden />
             </span>
             <span class="avatar" title="You" aria-label="You"></span>
           </div>
@@ -73,23 +54,31 @@
                   <h2>Work</h2>
                   <p class="pane-sub" id="work-counts"></p>
                 </div>
+                <span id="work-search-slot"><span class="search-wrap">
+                  <button class="icon-btn" id="search-btn" type="button" title="Search work and notes" aria-label="Search work and notes" aria-expanded="false">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                      <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
+                    </svg>
+                  </button>
+                  <input id="search-input" type="search" placeholder="Search work and notes…" aria-label="Search work and notes" autocomplete="off" hidden />
+                </span></span>
                 <button class="icon-btn small drawer-close" id="left-close" type="button" aria-label="Close work panel">✕</button>
               </div>
               <ul id="work-list" class="work-list"></ul>
               <p class="list-empty" id="work-empty" hidden>No work matches this search.</p>
-              <form id="new-work-form" class="new-work">
-                <span aria-hidden="true">＋</span>
-                <input id="new-work-input" type="text" placeholder="New work…" aria-label="New work" autocomplete="off" />
-                <div class="new-work-actions">
-                  <button id="new-work-submit" type="submit" class="btn small">Add work</button>
-                  <button id="capture-idea-btn" type="button" class="quiet-btn" title="Create an idea linked to the active intent">Capture idea</button>
-                </div>
-              </form>
+              <div id="knowledge-search-results"></div>
             </section>
           </aside>
 
           <!-- Center: workspace -->
           <section class="center" aria-label="Workspace">
+            <div id="view-spatial" class="view">
+              <div id="spatial-load-error" hidden>
+                <p id="spatial-status" role="status"></p>
+                <button id="spatial-load" class="btn" type="button">Retry loading Unity</button>
+              </div>
+              <iframe id="spatial-frame" title="Resolute Spatial Workbench" allow="fullscreen"></iframe>
+            </div>
             <div id="view-experiment" class="view view-experiment" hidden>
               <div class="mode-head">
                 <div>
@@ -99,14 +88,12 @@
               </div>
               <div class="exp-layout">
                 <aside class="exp-side" aria-label="Experiments">
-                  <div class="exp-sphere">
-                    <canvas id="sphere" aria-label="Loom sphere — agent activity"></canvas>
-                    <p class="sphere-caption" id="sphere-caption">At rest — nothing is running.</p>
-                  </div>
-                  <button class="btn" id="exp-new" type="button">New experiment</button>
                   <ul id="exp-list" class="exp-list"></ul>
                 </aside>
-                <div id="exp-detail" class="exp-detail"></div>
+                <div class="exp-main">
+                  <div class="exp-actions"><button class="btn" id="exp-new" type="button">New experiment</button><button class="btn ghost" id="abtest-btn" type="button">Compare providers</button></div>
+                  <div id="exp-detail" class="exp-detail"></div>
+                </div>
               </div>
             </div>
 
@@ -117,10 +104,17 @@
                   <p id="work-mode-sub">The selected work, its intent, and what it has produced.</p>
                 </div>
               </div>
+              <form id="new-work-form" class="new-work">
+                <label for="new-work-input">Work title</label>
+                <input id="new-work-input" type="text" placeholder="What would you like to work on?" required autocomplete="off" />
+                <div class="new-work-actions">
+                  <button id="new-work-submit" type="submit" class="btn">Create work</button>
+                </div>
+              </form>
               <div id="work-detail" class="work-detail"></div>
             </div>
 
-            <div id="view-code" class="view view-code">
+            <div id="view-code" class="view view-code" hidden>
               <div class="mode-head code-mode-head">
                 <div>
                   <h2>Code</h2>
@@ -160,7 +154,7 @@
                   </div>
                   <div id="code-path" class="code-path" hidden></div>
                   <p id="code-error" class="file-create-error" role="alert" hidden></p>
-                  <textarea id="code-editor" spellcheck="false" aria-label="File editor" hidden></textarea>
+                  <div id="code-editor" role="application" aria-label="File editor" hidden></div>
                   <div id="code-foot" class="code-foot" hidden>
                     <button id="code-save" class="btn" type="button">Save</button>
                     <button id="code-ask" class="btn ghost" type="button">Ask Loom about this</button>
@@ -174,22 +168,39 @@
               <div class="mode-head">
                 <div>
                   <h2>Agents</h2>
-                  <p>Agents registered with the Loom server.</p>
+                  <p>Agents registered with the Loom server, and the MCP servers they can use.</p>
+                </div>
+                <div class="agents-actions">
+                  <button id="agent-create-btn" class="btn" type="button">Create agent</button>
+                  <button id="mcp-add-btn" class="btn ghost" type="button">Add MCP server</button>
+                  <button id="mcp-health-btn" class="btn ghost" type="button">Health check</button>
                 </div>
               </div>
+              <nav id="agents-tabs" class="knowledge-tabs" aria-label="Agents views">
+                <button type="button" class="tab active" data-tab="agents">Agents</button>
+                <button type="button" class="tab" data-tab="mcp">MCP Servers</button>
+                <button type="button" class="tab" data-tab="apps">Apps</button>
+              </nav>
               <div id="agents-list" class="scroll-list"></div>
+              <div id="mcp-list" class="scroll-list" hidden></div>
+              <div id="apps-list" class="scroll-list" hidden></div>
+              <p id="agents-notice" class="knowledge-notice" role="status" hidden></p>
             </div>
 
-            <div id="view-evidence" class="view view-list" hidden>
+            <div id="view-knowledge" class="view view-knowledge" hidden>
               <div class="mode-head">
-                <div>
-                  <h2>Evidence</h2>
-                  <p>What workspace claims rest on. Every item carries its provenance.</p>
+                <h2>Knowledge</h2>
+                <div class="knowledge-tools">
+                  <button id="knowledge-new" type="button" class="btn">New note</button>
+                  <button id="knowledge-sync" type="button" class="btn ghost">Sync from Loom</button>
+                  <button id="knowledge-refresh" type="button" class="btn ghost">Refresh</button>
                 </div>
               </div>
-              <div id="evidence-list" class="scroll-list"></div>
+              <nav id="knowledge-tabs" class="knowledge-tabs" aria-label="Knowledge views"></nav>
+              <div id="knowledge-search-slot" class="knowledge-search-slot" hidden></div>
+              <p id="knowledge-notice" class="knowledge-notice" role="status" hidden></p>
+              <div id="knowledge-content" class="knowledge-content"></div>
             </div>
-
             <div id="view-artifacts" class="view view-list" hidden>
               <div class="mode-head">
                 <div>
@@ -201,6 +212,8 @@
                 <button type="button" class="tab active" data-atab="artifacts">Artifacts</button>
                 <button type="button" class="tab" data-atab="documents">Documents</button>
               </div>
+              <input id="artifact-search" type="search" placeholder="Search artifacts…" aria-label="Search artifacts" autocomplete="off" />
+              <p id="artifact-search-error" class="file-create-error" role="alert" hidden></p>
               <div id="artifacts-list" class="scroll-list"></div>
             </div>
           </section>
@@ -208,10 +221,11 @@
           <!-- Right pane: one contextual surface with two tabs. The chat
                lives here so opening it never squeezes the work surface. -->
           <aside class="right-col" id="right-col" aria-label="Context">
+            <div class="right-resize" id="right-resize" role="separator" aria-orientation="vertical" aria-label="Resize context panel" tabindex="0"></div>
             <div class="pane-head right-head">
               <div class="inspector-tabs" role="tablist" aria-label="Context panel">
-                <button class="inspector-tab active" id="tab-context" type="button" role="tab" aria-selected="true" aria-controls="inspector-context">Context</button>
-                <button class="inspector-tab" id="tab-conversation" type="button" role="tab" aria-selected="false" aria-controls="chat-panel">Conversation</button>
+                <button class="inspector-tab active" id="tab-context" type="button" role="tab" aria-selected="true" aria-controls="inspector-context" title="Details of the selected session or agent">Context</button>
+                <button class="inspector-tab" id="tab-conversation" type="button" role="tab" aria-selected="false" aria-controls="chat-panel" title="Conversation with Loom for the selected work">Conversation</button>
               </div>
               <button class="icon-btn small drawer-close" id="right-close" type="button" aria-label="Close context panel">✕</button>
             </div>
@@ -281,13 +295,17 @@
                   <option value="">No session</option>
                 </select>
                 <button class="icon-btn small" id="session-new" type="button" title="New session" aria-label="New session">＋</button>
+                <button class="icon-btn small" id="session-resume" type="button" title="Resume the selected session" aria-label="Resume session">↻</button>
+                <button class="icon-btn small" id="session-delete" type="button" title="Delete the selected session" aria-label="Delete session">🗑</button>
                 <select id="agent-select" class="agent-select" aria-label="Agent" title="Agent">
                   <option value="">Default agent</option>
                 </select>
               </div>
+              <p id="session-note" class="session-note" role="status" hidden></p>
               <div id="chat-log" class="chat-log"></div>
               <form id="chat-form" class="chat-input">
                 <input id="chat-text" type="text" placeholder="Message Loom…" aria-label="Message Loom" autocomplete="off" />
+                <button class="icon-btn small" id="chat-stop" type="button" title="Ask Loom to stop (cooperative cancellation — tools already started are not rolled back)" aria-label="Stop the reply" hidden>■</button>
                 <button type="submit" class="send-btn" aria-label="Send">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4 20-7z" />
@@ -302,36 +320,163 @@
           <div class="scrim" id="scrim" hidden></div>
         </div>
 
-        <!-- ======================= Footer (row 3) ======================= -->
-        <footer class="app-footer">
-          <nav class="mode-nav" aria-label="Workspace mode">
-            <button class="mode-btn active" data-mode="code" type="button" aria-current="page">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6L3 12l5 6" /><path d="M16 6l5 6-5 6" /></svg>
-              <span class="mode-label">Code</span>
-            </button>
-            <button class="mode-btn" data-mode="experiment" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6" /><path d="M10 3v5.5L4.5 18a2.4 2.4 0 0 0 2.1 3.5h10.8a2.4 2.4 0 0 0 2.1-3.5L14 8.5V3" /><path d="M7.5 14h9" /></svg>
-              <span class="mode-label">Experiment</span>
-            </button>
-            <button class="mode-btn" data-mode="work" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></svg>
-              <span class="mode-label">Work</span>
-            </button>
-            <button class="mode-btn" data-mode="agents" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l9 5v10l-9 5-9-5V7l9-5z" /><path d="M12 12l9-5" /><path d="M12 12v10" /></svg>
-              <span class="mode-label">Agents</span>
-            </button>
-            <button class="mode-btn" data-mode="evidence" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" /></svg>
-              <span class="mode-label">Evidence</span>
-            </button>
-          </nav>
-        </footer>
-
         <!-- Water reflection band: atmosphere for the Experiment overview only -->
         <div class="water" aria-hidden="true"></div>
       </div>
     </div>
+    <dialog id="knowledge-dialog" class="knowledge-dialog" aria-labelledby="knowledge-dialog-title"></dialog>
+    <dialog id="trace-dialog" class="app-help-dialog trace-dialog" aria-labelledby="trace-dialog-title">
+      <div class="trace-head">
+        <h2 id="trace-dialog-title">Trace</h2>
+        <button id="trace-close" class="icon-btn small" type="button" aria-label="Close trace">✕</button>
+      </div>
+      <div id="trace-body" class="trace-body"></div>
+    </dialog>
+    <dialog id="permission-dialog" class="app-help-dialog" aria-labelledby="permission-dialog-title">
+      <h2 id="permission-dialog-title">Request tool permission</h2>
+      <p>Ask Loom to hold <strong id="permission-tool-name"></strong> behind a human decision for a session.</p>
+      <label for="permission-session">Session</label>
+      <input id="permission-session" type="text" autocomplete="off" spellcheck="false" />
+      <label for="permission-risk">Risk level</label>
+      <select id="permission-risk">
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+      </select>
+      <label for="permission-args">Arguments (JSON, optional)</label>
+      <textarea id="permission-args" rows="3" spellcheck="false"></textarea>
+      <p id="permission-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="permission-submit" class="btn" type="button">Submit request</button>
+        <button id="permission-close" class="btn ghost" type="button">Close</button>
+      </div>
+    </dialog>
+    <dialog id="migration-dialog" class="app-help-dialog" aria-labelledby="migration-dialog-title">
+      <h2 id="migration-dialog-title">Work → task migration preview</h2>
+      <p>Read-only preview: proposed Loom task names, conflicts and open decisions. Nothing is migrated here — the migration itself is an explicit, user-triggered action.</p>
+      <div id="migration-list" class="scroll-list"></div>
+      <p id="migration-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="migration-close" class="btn" type="button">Close</button>
+      </div>
+    </dialog>
+    <dialog id="mcp-dialog" class="app-help-dialog" aria-labelledby="mcp-dialog-title">
+      <h2 id="mcp-dialog-title">Add MCP server</h2>
+      <p>Configure a server Loom's agents can call tools from. Test before saving to validate the command.</p>
+      <label for="mcp-name">Name</label>
+      <input id="mcp-name" type="text" required autocomplete="off" spellcheck="false" />
+      <label for="mcp-transport">Transport</label>
+      <select id="mcp-transport">
+        <option value="stdio">stdio</option>
+        <option value="http">http</option>
+        <option value="sse">sse</option>
+      </select>
+      <label for="mcp-command">Command (stdio)</label>
+      <input id="mcp-command" type="text" autocomplete="off" spellcheck="false" placeholder="npx -y @some/mcp-server" />
+      <label for="mcp-url">URL (http/sse)</label>
+      <input id="mcp-url" type="text" autocomplete="off" spellcheck="false" placeholder="http://localhost:9000/mcp" />
+      <label for="mcp-args">Arguments (space-separated)</label>
+      <input id="mcp-args" type="text" autocomplete="off" spellcheck="false" />
+      <p id="mcp-dialog-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="mcp-test" class="btn ghost" type="button">Test connection</button>
+        <button id="mcp-submit" class="btn" type="button">Add server</button>
+        <button id="mcp-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="abtest-dialog" class="app-help-dialog" aria-labelledby="abtest-title">
+      <h2 id="abtest-title">Compare providers</h2>
+      <p>Run the same prompt through several providers and compare their answers, scores, latency and cost. The winner is scored by Loom.</p>
+      <label for="abtest-prompt">Prompt</label>
+      <textarea id="abtest-prompt" rows="3" spellcheck="false"></textarea>
+      <label for="abtest-mode">Mode</label>
+      <select id="abtest-mode"></select>
+      <label>Providers</label>
+      <div id="abtest-providers" class="abtest-providers"></div>
+      <p id="abtest-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="abtest-start" class="btn" type="button">Run comparison</button>
+        <button id="abtest-cancel" class="btn ghost" type="button">Close</button>
+      </div>
+      <div id="abtest-body" class="abtest-body"></div>
+    </dialog>
+    <dialog id="schedule-dialog" class="app-help-dialog" aria-labelledby="schedule-title">
+      <h2 id="schedule-title">New schedule</h2>
+      <p>Run a saved workflow on a cron schedule (minute hour day month weekday).</p>
+      <label for="schedule-workflow">Workflow</label>
+      <select id="schedule-workflow"></select>
+      <label for="schedule-cron">Cron expression</label>
+      <input id="schedule-cron" type="text" autocomplete="off" spellcheck="false" />
+      <label for="schedule-timezone">Timezone</label>
+      <input id="schedule-timezone" type="text" autocomplete="off" spellcheck="false" />
+      <p id="schedule-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="schedule-submit" class="btn" type="button">Create schedule</button>
+        <button id="schedule-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="board-dialog" class="app-help-dialog" aria-labelledby="board-title">
+      <h2 id="board-title">New board</h2>
+      <p>Boards live in Loom; Work shows them beside local work items, labelled by source.</p>
+      <label for="board-name">Board name</label>
+      <input id="board-name" type="text" autocomplete="off" spellcheck="false" />
+      <p id="board-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="board-submit" class="btn" type="button">Create board</button>
+        <button id="board-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="task-dialog" class="app-help-dialog" aria-labelledby="task-title">
+      <h2 id="task-title">New task</h2>
+      <label for="task-title">Title</label>
+      <input id="task-title" type="text" autocomplete="off" spellcheck="false" />
+      <label for="task-description">Description</label>
+      <textarea id="task-description" rows="4" spellcheck="false"></textarea>
+      <p id="task-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="task-submit" class="btn" type="button">Create task</button>
+        <button id="task-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="tool-dialog" class="app-help-dialog" aria-labelledby="tool-dialog-title">
+      <h2 id="tool-dialog-title">Register tool</h2>
+      <p>Register a tool definition with Loom (POST /v1/tools:register).</p>
+      <label for="tool-json">Tool definition (JSON)</label>
+      <textarea id="tool-json" class="agent-config" rows="12" spellcheck="false"></textarea>
+      <p id="tool-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="tool-submit" class="btn" type="button">Register tool</button>
+        <button id="tool-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="app-dialog" class="app-help-dialog" aria-labelledby="app-dialog-title">
+      <h2 id="app-dialog-title">Add app</h2>
+      <p>Create an embedded Loom app served at /apps.</p>
+      <label for="app-name">Name</label>
+      <input id="app-name" type="text" autocomplete="off" spellcheck="false" />
+      <label for="app-desc">Description</label>
+      <textarea id="app-desc" rows="4" spellcheck="false"></textarea>
+      <p id="app-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="app-submit" class="btn" type="button">Create app</button>
+        <button id="app-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
+    <dialog id="agent-create-dialog" class="app-help-dialog" aria-labelledby="agent-create-title">      <h2 id="agent-create-title">Create agent</h2>
+      <p>Describe the agent, and the Weaver proposes a config for your review — or paste a config (or choose a preset) directly.</p>
+      <label for="agent-describe">Describe the agent</label>
+      <textarea id="agent-describe" rows="3" spellcheck="false" placeholder="An agent that reviews markdown notes and proposes links…"></textarea>
+      <button id="agent-describe-btn" class="btn ghost" type="button">Describe → build config</button>
+      <label for="agent-preset">Or start from a preset</label>
+      <select id="agent-preset"><option value="">No preset</option></select>
+      <label for="agent-config">Agent config (JSON)</label>
+      <textarea id="agent-config" class="agent-config" rows="10" spellcheck="false"></textarea>
+      <p id="agent-create-error" class="file-create-error" role="alert" hidden></p>
+      <div class="file-create-buttons">
+        <button id="agent-create-submit" class="btn" type="button">Create agent</button>
+        <button id="agent-create-cancel" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </dialog>
     <dialog id="open-folder-dialog" class="app-help-dialog" aria-labelledby="open-folder-title">
       <form id="open-folder-form">
         <h2 id="open-folder-title">Open folder</h2>

@@ -65,6 +65,8 @@ export interface Intent {
   why?: string | null;
   acceptance: AcceptanceCriterion[];
   autonomy: IntentAutonomy;
+  max_rounds?: number | null;
+  timeout_seconds?: number | null;
   status: "active" | "done";
   version: number;
   history: IntentVersion[];
@@ -126,6 +128,61 @@ export interface ChatReply {
   // Provenance of the reply's content: what kind of claim it rests on.
   // Defaults to "unknown" when the server does not report one.
   evidenceKind?: EvidenceKind;
+  // The trace id the server reports when tracing is enabled — the
+  // handle for the observability surface (GetTrace).
+  trace_id?: string | null;
+  // The turn's cost from the server's CostInfo (USD). Missing means
+  // unknown — never treated as zero.
+  cost_usd?: number | null;
+}
+
+/// One WeaveProgress event from POST /v1/weave:stream, re-emitted by the
+/// backend as a Tauri event. Field names follow the Loom proto (snake_case).
+export interface WeaveProgressEvent {
+  stage?: string | number;
+  progress?: number;
+  message?: string;
+  tool_name?: string;
+  partial_content?: string;
+  is_token_stream?: boolean;
+  token_count?: number;
+  is_tool_started?: boolean;
+  is_tool_completed?: boolean;
+  tool_input?: unknown;
+  tool_result?: unknown;
+  tool_error?: string;
+  tool_success?: boolean;
+  tool_call_id?: string;
+  hitl_request?: {
+    request_id?: string;
+    question?: string;
+  } | null;
+}
+
+export interface LoomStreamEvent {
+  requestId: string;
+  kind: "progress" | "done" | "error" | "cancelled";
+  event?: WeaveProgressEvent;
+  error?: string | null;
+}
+
+export interface McpServer {
+  name: string;
+  enabled: boolean;
+  connected: boolean;
+  transport: string;
+  command: string;
+  args: string[];
+  env: Record<string, unknown>;
+  status: string;
+  error: string;
+  url: string;
+}
+
+export interface VaultSignature {
+  notes: number;
+  pending: number;
+  changed_at_ms: number;
 }
 
 export interface Session {
@@ -142,6 +199,7 @@ export interface Agent {
   id: string;
   name: string;
   status: string;
+  error: string;
   uptime_seconds: number;
   active_sessions: number;
   total_messages: number;
@@ -386,6 +444,11 @@ function normalizeCriteria(criteria: AcceptanceCriterion[]): AcceptanceCriterion
     .filter((c) => c.text.length > 0);
 }
 
+/** A positive budget value travels; anything else is "server default". */
+function normalizeBudget(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
 /** Create an intent in the browser fallback store. Mirrors the backend:
     the first intent becomes the active one. */
 function createLocalIntent(
@@ -393,6 +456,8 @@ function createLocalIntent(
   why?: string | null,
   acceptance: AcceptanceCriterion[] = [],
   autonomy?: IntentAutonomy | null,
+  max_rounds?: number | null,
+  timeout_seconds?: number | null,
 ): Intent {
   // Mirror the backend: the statement is required and the level must be
   // one of the four.
@@ -409,6 +474,8 @@ function createLocalIntent(
     why: why?.trim() ? why.trim() : null,
     acceptance: normalizeCriteria(acceptance),
     autonomy: autonomy ?? "collaborative",
+    max_rounds: normalizeBudget(max_rounds),
+    timeout_seconds: normalizeBudget(timeout_seconds),
     status: "active",
     version: 1,
     history: [],
@@ -541,6 +608,29 @@ export async function setWorkAutonomy(
   return invoke<WorkItem>("set_work_autonomy", { id, autonomy, justification });
 }
 
+
+export interface MigrationPreviewItem {
+  id: string;
+  title: string;
+  status: string;
+  autonomy: string;
+  proposed_task_name: string;
+  conflicts: string[];
+  notes: string[];
+}
+
+export interface MigrationPreview {
+  items: MigrationPreviewItem[];
+  total: number;
+  ready: number;
+  needs_decision: number;
+}
+
+/** Read-only preview of the work→task migration (decision 6): never
+    migrates anything, never calls Loom. */
+export const workMigrationPreview = () =>
+  invokeCmd<MigrationPreview>("work_migration_preview");
+
 export async function setWorkSession(
   id: string,
   sessionId: string | null,
@@ -571,9 +661,18 @@ export async function createIntent(args: {
   why?: string | null;
   acceptance?: AcceptanceCriterion[];
   autonomy?: IntentAutonomy | null;
+  max_rounds?: number | null;
+  timeout_seconds?: number | null;
 }): Promise<Intent> {
   if (!IN_TAURI) {
-    return createLocalIntent(args.statement, args.why, args.acceptance ?? [], args.autonomy);
+    return createLocalIntent(
+      args.statement,
+      args.why,
+      args.acceptance ?? [],
+      args.autonomy,
+      args.max_rounds,
+      args.timeout_seconds,
+    );
   }
   // `acceptance` is a required list on the backend: always send the key,
   // empty when there are no criteria yet.
@@ -582,6 +681,8 @@ export async function createIntent(args: {
     why: args.why ?? null,
     acceptance: normalizeCriteria(args.acceptance ?? []),
     autonomy: args.autonomy ?? null,
+    max_rounds: args.max_rounds ?? null,
+    timeout_seconds: args.timeout_seconds ?? null,
   });
 }
 
@@ -592,6 +693,8 @@ export async function updateIntent(args: {
   autonomy?: IntentAutonomy | null;
   status?: "active" | "done" | null;
   justification?: string | null;
+  max_rounds?: number | null;
+  timeout_seconds?: number | null;
 }): Promise<Intent> {
   if (!IN_TAURI) {
     const list = localIntents();
@@ -657,18 +760,35 @@ export async function updateIntent(args: {
       updated.status = args.status;
       updated.updated_at = nowUnix();
     }
+    if (args.max_rounds !== undefined) {
+      updated.max_rounds = normalizeBudget(args.max_rounds);
+      updated.updated_at = nowUnix();
+    }
+    if (args.timeout_seconds !== undefined) {
+      updated.timeout_seconds = normalizeBudget(args.timeout_seconds);
+      updated.updated_at = nowUnix();
+    }
     list.intents[idx] = updated;
     saveLocalIntents(list);
     return updated;
   }
-  return invoke<Intent>("update_intent", {
+  // Budget uses a three-way value: undefined = leave unchanged (omit the
+  // key), null = clear to server default (send 0), positive = set.
+  const payload: Record<string, unknown> = {
     id: args.id,
     statement: args.statement ?? null,
     why: args.why ?? null,
     autonomy: args.autonomy ?? null,
     status: args.status ?? null,
     justification: args.justification ?? null,
-  });
+  };
+  if (args.max_rounds !== undefined) {
+    payload.max_rounds = args.max_rounds === null ? 0 : args.max_rounds;
+  }
+  if (args.timeout_seconds !== undefined) {
+    payload.timeout_seconds = args.timeout_seconds === null ? 0 : args.timeout_seconds;
+  }
+  return invoke<Intent>("update_intent", payload);
 }
 
 export async function setIntentAcceptance(args: {
@@ -798,19 +918,83 @@ async function loomRequest(path: string, body?: object, timeoutMs?: number): Pro
 
 // Throws when the Loom server cannot be reached or answers without
 // usable text. The caller shows the error; nothing invents a reply.
+// Browser preview owns a local store; re-read it at dispatch, including fallbacks.
+// This is a convenience guard. The desktop authority lives in Rust.
+function browserExecutionLevel(workId: string | null | undefined, intentId: string | null | undefined, sessionId?: string): IntentAutonomy {
+  let items: WorkItem[];
+  let list: IntentsList;
+  try {
+    items = JSON.parse(localStorage.getItem(LOCAL_KEY) ?? "[]");
+    list = JSON.parse(localStorage.getItem(INTENTS_KEY) ?? '{"active_intent_id":null,"intents":[]}');
+    if (!Array.isArray(items) || !Array.isArray(list.intents)) throw new Error("Invalid records");
+  } catch {
+    throw new Error("Cannot read stored execution policy. Repair the browser's work and intent records before running again.");
+  }
+  if (workId != null && !workId.trim() || intentId != null && !intentId.trim()) {
+    throw new Error("Execution owner identifiers cannot be empty.");
+  }
+  const sessionOwners = sessionId ? items.filter(w => w.session_id === sessionId) : [];
+  if (sessionOwners.length > 1) throw new Error("This session has multiple work owners. Reopen the owning work before running again.");
+  if (sessionOwners.length === 1) {
+    if ((workId != null && workId !== sessionOwners[0].id) || (workId === null && intentId === null)) throw new Error("The session belongs to a work item. Reopen that work before executing.");
+    workId = sessionOwners[0].id;
+  }
+  const work = workId != null ? items.find(w => w.id === workId) : undefined;
+  if (workId != null && !work) throw new Error("The referenced work item no longer exists. Reopen the work item.");
+  if (work && intentId != null && intentId !== work.intent_id) throw new Error("The intent does not belong to this work item.");
+  const governingIntentId = work ? work.intent_id : intentId;
+  const intent = governingIntentId != null ? list.intents.find(i => i.id === governingIntentId) : undefined;
+  if (governingIntentId != null && !intent) throw new Error("The referenced intent no longer exists. Reopen the intent.");
+  if (!work && !intent) {
+    if (workId !== null || intentId !== null || list.active_intent_id != null) {
+      throw new Error("Choose the governing work or intent before executing this request.");
+    }
+    return "collaborative";
+  }
+  let rank = AUTONOMY_LEVELS.length - 1;
+  for (const owner of [work, intent]) {
+    if (!owner) continue;
+    const ownerRank = AUTONOMY_LEVELS.indexOf(owner.autonomy);
+    if (ownerRank < 0) throw new Error("The stored autonomy level is invalid. Correct the governing work or intent.");
+    rank = Math.min(rank, ownerRank);
+  }
+  if (rank === 0) throw new Error("Manual autonomy forbids agent chat. Raise the governing work or intent to Assisted or higher, or do it by hand.");
+  return AUTONOMY_LEVELS[rank];
+}
+
 export async function askLoom(
   message: string,
   sessionId?: string,
   agentId?: string,
+  context?: Record<string, string>,
+  maxRounds?: number,
+  timeoutSeconds?: number,
+  workId?: string | null,
+  intentId?: string | null,
 ): Promise<ChatReply> {
   if (IN_TAURI) {
-    return invoke<ChatReply>("ask_loom", { message, sessionId, agentId });
+    return invoke<ChatReply>("ask_loom", {
+      message,
+      sessionId,
+      agentId,
+      context,
+      maxRounds,
+      timeoutSeconds,
+      workId,
+      intentId,
+      unscoped: workId === null && intentId === null,
+    });
   }
   if (!message.trim()) throw new Error("Enter a message first.");
-  const body: Record<string, string> = { query: message };
+  const autonomy = browserExecutionLevel(workId, intentId, sessionId);
+  const body: Record<string, unknown> = { query: message };
   if (sessionId?.trim()) body.sessionId = sessionId;
   if (agentId?.trim()) body.agentId = agentId;
-  const value = await loomRequest("/v1/weave", body);
+  if (context && Object.keys(context).length > 0) body.context = context;
+  if (maxRounds && maxRounds > 0) body.maxRounds = maxRounds;
+  if (timeoutSeconds && timeoutSeconds > 0) body.timeoutSeconds = timeoutSeconds;
+  body.backendConfig = { autonomy };
+  const value = await loomRequest("/v1/weave", body as object);
   const text = [value.text, value.response, value.content, value.reply, value.message]
     .find(value => typeof value === "string" && value.trim());
   if (!text) throw new Error("Loom returned an empty response. Check its agent configuration.");
@@ -952,8 +1136,10 @@ export async function listWorkflows(): Promise<Workflow[]> {
 
 export async function executeWorkflow(
   workflowRef: string,
+  workId?: string | null,
+  intentId?: string | null,
 ): Promise<ExecuteWorkflowResponse> {
-  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef });
+  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef, workId, intentId, unscoped: workId === null && intentId === null });
 }
 
 export async function getWorkflowExecution(
@@ -1001,6 +1187,27 @@ export async function listProviders(): Promise<ProviderEntry[]> {
 }
 
 
+/// An execution trace (GET /v1/traces/{trace_id}). Mirrors the Rust
+/// Trace / TraceSpan structs in src-tauri/src/lib.rs.
+export interface TraceSpan {
+  id: string;
+  parent_id: string;
+  name: string;
+  start_time_us: number;
+  end_time_us: number;
+  duration_us: number;
+  status: string;
+  attributes: Record<string, string>;
+}
+
+export interface Trace {
+  id: string;
+  session_id: string;
+  root_span?: TraceSpan | null;
+  spans: TraceSpan[];
+  total_duration_ms: number;
+}
+
 // ---- Artifact detail and statistics (real Loom server) ----
 
 export async function getArtifact(artifactId: string): Promise<Artifact> {
@@ -1009,6 +1216,35 @@ export async function getArtifact(artifactId: string): Promise<Artifact> {
 
 export async function getArtifactStats(): Promise<ArtifactStats> {
   return invokeCmd<ArtifactStats>("get_artifact_stats");
+}
+
+// ---- Trace, model switch, artifact content + search (real Loom server) ----
+// These backend commands existed in src-tauri/src/lib.rs but had no
+// frontend wrapper, so no view could call them. They fail honestly
+// outside the Tauri app, like every other invokeCmd wrapper.
+
+export async function getTrace(traceId: string): Promise<Trace> {
+  return invokeCmd<Trace>("get_trace", { traceId });
+}
+
+export async function switchModel(
+  sessionId: string,
+  agentId?: string,
+  provider?: string,
+  model?: string,
+): Promise<unknown> {
+  return invokeCmd<unknown>("switch_model", { sessionId, agentId, provider, model });
+}
+
+export async function getArtifactContent(
+  artifactId: string,
+  encoding?: string,
+): Promise<string> {
+  return invokeCmd<string>("get_artifact_content", { artifactId, encoding });
+}
+
+export async function searchArtifacts(query: string): Promise<Artifact[]> {
+  return invokeCmd<Artifact[]>("search_artifacts", { query });
 }
 
 // ---- Server info (real Loom server) ----
@@ -1021,8 +1257,303 @@ export async function getStorageStatus(): Promise<StorageStatus> {
   return invokeCmd<StorageStatus>("get_storage_status");
 }
 
-/** Opens the native knowledge surface while preserving its vault and theme. */
-export async function openLivingWorkbench(): Promise<void> {
-  if (!IN_TAURI) throw new Error("Open the desktop Tauri application to launch Living Workbench.");
-  await invoke("open_living_workbench");
+// Markdown knowledge is desktop-only; never substitute a browser JSON store.
+export interface KnowledgeMeta {
+  id: string; kind: string; title: string; created: number; modified: number;
+  author: string; source: string; status: string; version: number;
 }
+export interface KnowledgeNote { meta: KnowledgeMeta; body: string; path: string; original: string }
+export interface KnowledgeEdge { from: string; to: string; kind: string }
+export interface KnowledgeAudit { at: number; action: string; object: string; actor: string; detail: string }
+export interface KnowledgeListing {
+  notes: KnowledgeNote[]; archived: KnowledgeNote[]; edges: KnowledgeEdge[]; activity: KnowledgeAudit[];
+  pending: number; revision: string; root: string; kinds: string[]; folders: string[]; relations: string[];
+}
+export interface KnowledgeDetail { note: KnowledgeNote; edges: KnowledgeEdge[]; versions: KnowledgeNote[]; backlinks: KnowledgeEdge[]; audit: KnowledgeAudit[]; revision: string }
+function vaultInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (!IN_TAURI) return Promise.reject(new Error("Open Loom in Tauri to use your markdown vault."));
+  return invoke<T>(command, args);
+}
+export const listKnowledge = (query = "") => vaultInvoke<KnowledgeListing>("knowledge_list", { query });
+export const readKnowledge = (id: string) => vaultInvoke<KnowledgeDetail>("knowledge_read", { id });
+export const createKnowledge = (title: string, body: string, kind: string, folder: string, revision: string) =>
+  vaultInvoke<string>("knowledge_create", { title, body, kind, folder, revision, actor: "human" });
+export const saveKnowledge = (note: KnowledgeNote, revision: string) => vaultInvoke<void>("knowledge_save", { note, revision });
+export const relateKnowledge = (edge: KnowledgeEdge, unlink: boolean, revision: string) => vaultInvoke<void>("knowledge_relate", { edge, unlink, revision });
+export const reviewKnowledge = (id: string, approved: boolean, reason: string, original: string, revision: string) =>
+  vaultInvoke<void>("knowledge_review", { id, approved, reason, original, revision });
+export const archiveKnowledge = (id: string, original: string, revision: string) =>
+  vaultInvoke<void>("knowledge_archive", { id, original, revision });
+export const restoreKnowledge = (id: string, original: string, revision: string) =>
+  vaultInvoke<void>("knowledge_restore", { id, original, revision });
+export const exportKnowledgeCanvas = () => vaultInvoke<string>("knowledge_export_canvas");
+export const syncKnowledge = () => vaultInvoke<number>("knowledge_sync_from_loom");
+export const knowledgeSignature = () => vaultInvoke<VaultSignature>("knowledge_signature");
+export const saveCanvasLayout = (positions: { id: string; x: number; y: number }[]) =>
+  vaultInvoke<void>("knowledge_canvas_layout_save", { positions });
+export const loadCanvasLayout = () =>
+  vaultInvoke<{ id: string; x: number; y: number }[]>("knowledge_canvas_layout_load");
+
+// ---- Streaming chat (POST /v1/weave:stream over the backend's SSE bridge) ----
+
+export async function askLoomStream(
+  requestId: string,
+  message: string,
+  sessionId?: string,
+  agentId?: string,
+  context?: Record<string, string>,
+  maxRounds?: number,
+  timeoutSeconds?: number,
+  workId?: string | null,
+  intentId?: string | null,
+): Promise<void> {
+  return invokeCmd<void>("ask_loom_stream", {
+    requestId,
+    message,
+    sessionId,
+    agentId,
+    context,
+    maxRounds,
+    timeoutSeconds,
+    workId,
+    intentId,
+    unscoped: workId === null && intentId === null,
+  });
+}
+
+export async function cancelLoomStream(requestId: string): Promise<void> {
+  return invokeCmd<void>("cancel_loom_stream", { requestId });
+}
+
+export async function answerClarification(
+  sessionId: string,
+  questionId: string,
+  answer: string,
+): Promise<string> {
+  return invokeCmd<string>("answer_clarification", { sessionId, questionId, answer });
+}
+
+// ---- MCP server management ----
+
+export const listMcpServers = () => invokeCmd<McpServer[]>("mcp_servers_list");
+export const getMcpServer = (serverName: string) =>
+  invokeCmd<McpServer>("mcp_server_get", { serverName });
+export const addMcpServer = (
+  name: string, transport: string,
+  command?: string, args?: string[], url?: string, enabled?: boolean,
+) => invokeCmd<McpServer>("mcp_server_add", { name, transport, command, args, url, enabled });
+export const updateMcpServer = (
+  serverName: string,
+  transport?: string, command?: string, args?: string[], url?: string, enabled?: boolean,
+) => invokeCmd<McpServer>("mcp_server_update", { serverName, transport, command, args, url, enabled });
+export const deleteMcpServer = (serverName: string) =>
+  invokeCmd<string>("mcp_server_delete", { serverName });
+export const restartMcpServer = (serverName: string) =>
+  invokeCmd<McpServer>("mcp_server_restart", { serverName });
+export const respondHumanRequest = (
+  requestId: string, status: "approved" | "rejected" | "responded", response?: string,
+) => invokeCmd<unknown>("respond_human_request", { requestId, status, response });
+
+export const healthCheckMcpServers = () =>
+  invokeCmd<McpServer[]>("mcp_servers_health_check");
+export interface McpTestResult {
+  success: boolean;
+  message: string;
+  tool_count: number;
+}
+
+export const testMcpServer = (
+  name: string, transport: string,
+  command?: string, args?: string[], url?: string,
+) => invokeCmd<McpTestResult>("mcp_server_test", { name, transport, command, args, url });
+export const listMcpServerTools = (serverName: string) =>
+  invokeCmd<unknown[]>("mcp_server_tools", { serverName });
+
+// ---- Agent lifecycle ----
+
+export const createAgent = (config: Record<string, unknown>) =>
+  invokeCmd<unknown>("agent_create", { config });
+export const startAgent = (agentId: string) => invokeCmd<unknown>("agent_start", { agentId });
+export const stopAgent = (agentId: string) => invokeCmd<unknown>("agent_stop", { agentId });
+export const reloadAgent = (agentId: string) => invokeCmd<unknown>("agent_reload", { agentId });
+export const deleteAgent = (agentId: string) => invokeCmd<unknown>("agent_delete", { agentId });
+export const listAgentPresets = () => invokeCmd<unknown[]>("agent_presets_list");
+export const listWorkflowTemplates = () => invokeCmd<unknown[]>("workflow_templates_list");
+
+// ---- Patterns ----
+
+export const listPatterns = () => invokeCmd<unknown[]>("patterns_list");
+export const getPattern = (name: string) => invokeCmd<unknown>("pattern_get", { name });
+export const createPattern = (body: Record<string, unknown>) =>
+  invokeCmd<unknown>("pattern_create", { body });
+export const loadPatterns = (source: string) => invokeCmd<unknown>("patterns_load", { source });
+
+// ---- Embedded MCP apps ----
+
+export const listApps = () => invokeCmd<unknown[]>("apps_list");
+
+// ---- Session completeness ----
+
+export const deleteSession = (sessionId: string) =>
+  invokeCmd<string>("session_delete", { sessionId });
+export const resumeSession = (sessionId: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("session_resume", { sessionId, workId, intentId, unscoped: workId === null && intentId === null });
+export const resolveSessionGap = (sessionId: string) =>
+  invokeCmd<unknown>("session_resolve_gap", { sessionId });
+
+// ---- Workflow streaming, session subscribe, provider A/B (SSE bridges) ----
+
+export interface WorkflowProgressEvent {
+  /** Protojson (grpc-gateway NDJSON) camelCase; int64 arrives as a string. */
+  executionId?: string;
+  patternType?: string;
+  currentAgentId?: string;
+  progress?: number;
+  message?: string;
+  timestamp?: string | number;
+  partialResults?: unknown[];
+}
+export interface AbTestEvent {
+  /** ABTestEvent is flat; the gateway NDJSON wire is protojson camelCase
+      and int64 latency_ms arrives as a JSON string. */
+  providerName?: string;
+  contentChunk?: string;
+  finished?: boolean;
+  score?: number;
+  latencyMs?: string | number;
+  costUsd?: number;
+  winner?: string;
+  abTestId?: string;
+}
+export interface StreamEnvelope<T> {
+  requestId: string;
+  kind: "progress" | "done" | "error" | "cancelled";
+  event?: T;
+  error?: string | null;
+}
+
+export const executeWorkflowStream = (requestId: string, workflowRef: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<void>("execute_workflow_stream", { requestId, workflowRef, workId, intentId, unscoped: workId === null && intentId === null });
+export const sessionSubscribe = (requestId: string, sessionId: string) =>
+  invokeCmd<void>("session_subscribe", { requestId, sessionId });
+export const providerAbtest = (
+  requestId: string, prompt: string, providerNames?: string[], mode?: string,
+  workId?: string | null, intentId?: string | null,
+) => invokeCmd<void>("provider_abtest", { requestId, prompt, providerNames, mode, workId, intentId, unscoped: workId === null && intentId === null });
+
+// ---- Workflow scheduling ----
+
+export const listWorkflowSchedules = () => invokeCmd<unknown[]>("workflow_schedules_list");
+export const getWorkflowSchedule = (scheduleId: string) =>
+  invokeCmd<unknown>("workflow_schedule_get", { scheduleId });
+export const createWorkflowSchedule = (
+  workflowName: string, cron: string, timezone?: string, enabled?: boolean,
+  workId?: string | null, intentId?: string | null,
+) => invokeCmd<unknown>("workflow_schedule_create", { workflowName, cron, timezone, enabled, workId, intentId, unscoped: workId === null && intentId === null });
+export const updateWorkflowSchedule = (
+  scheduleId: string, cron?: string, timezone?: string, enabled?: boolean,
+  workId?: string | null, intentId?: string | null,
+) => invokeCmd<unknown>("workflow_schedule_update", { scheduleId, cron, timezone, enabled, workId, intentId, unscoped: workId === null && intentId === null });
+export const deleteWorkflowSchedule = (scheduleId: string) =>
+  invokeCmd<string>("workflow_schedule_delete", { scheduleId });
+export const triggerWorkflowSchedule = (scheduleId: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId, workId, intentId, unscoped: workId === null && intentId === null });
+export const cancelScheduleExecution = (executionId: string) =>
+  invokeCmd<unknown>("workflow_schedule_cancel_execution", { executionId });
+
+export const workflowScheduleHistory = (scheduleId: string) =>
+  invokeCmd<unknown[]>("workflow_schedule_history", { scheduleId });
+export const pauseWorkflowSchedule = (scheduleId: string) =>
+  invokeCmd<unknown>("workflow_schedule_pause", { scheduleId });
+export const resumeWorkflowSchedule = (scheduleId: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("workflow_schedule_resume", { scheduleId, workId, intentId, unscoped: workId === null && intentId === null });
+export const cancelScheduledExecution = (executionId: string) =>
+  invokeCmd<unknown>("workflow_schedule_cancel_execution", { executionId });
+export const patternUpdatesStream = (requestId: string) =>
+  invokeCmd<void>("pattern_updates_stream", { requestId });
+export const taskUpdatesStream = (requestId: string, boardId: string) =>
+  invokeCmd<void>("task_updates_stream", { requestId, boardId });
+
+// ---- Loom tasks and boards (100% HTTP — no transport decision) ----
+
+export interface LoomTask {
+  id?: string;
+  title?: string;
+  description?: string;
+  objective?: string;
+  approach?: string;
+  acceptance_criteria?: string;
+  status?: string | number;
+  priority?: string | number;
+  board_id?: string;
+  assignee_agent_id?: string;
+  parent_id?: string;
+}
+
+export const listLoomBoards = () => invokeCmd<unknown[]>("task_boards_list");
+export const getLoomBoard = (boardId: string) => invokeCmd<unknown>("task_board_get", { boardId });
+export const createLoomBoard = (board: Record<string, unknown>) =>
+  invokeCmd<unknown>("task_board_create", { board });
+export const listLoomTasks = (boardId?: string, status?: string, query?: string) =>
+  invokeCmd<unknown[]>("loom_tasks_list", { boardId, status, query });
+export const getLoomTask = (taskId: string) => invokeCmd<unknown>("loom_task_get", { taskId });
+export const createLoomTask = (task: Record<string, unknown>) =>
+  invokeCmd<unknown>("loom_task_create", { task });
+export const updateLoomTask = (task: Record<string, unknown>) =>
+  invokeCmd<unknown>("loom_task_update", { task });
+export const deleteLoomTask = (taskId: string) =>
+  invokeCmd<string>("loom_task_delete", { taskId });
+export const claimLoomTask = (taskId: string, agentId?: string, sessionId?: string) =>
+  invokeCmd<unknown>("loom_task_claim", { taskId, agentId, sessionId });
+export const releaseLoomTask = (taskId: string) =>
+  invokeCmd<unknown>("loom_task_release", { taskId });
+export const closeLoomTask = (taskId: string) =>
+  invokeCmd<unknown>("loom_task_close", { taskId });
+export const transitionLoomTask = (taskId: string, newStatus: string, reason?: string) =>
+  invokeCmd<unknown>("loom_task_transition", { taskId, newStatus, reason });
+export const addLoomTaskDependency = (fromTaskId: string, toTaskId: string) =>
+  invokeCmd<unknown>("loom_task_add_dependency", { fromTaskId, toTaskId });
+export const removeLoomTaskDependency = (fromTaskId: string, toTaskId: string) =>
+  invokeCmd<string>("loom_task_remove_dependency", { fromTaskId, toTaskId });
+export const boardReadyTasks = (boardId: string) =>
+  invokeCmd<unknown[]>("task_board_ready", { boardId });
+export const boardBlockedTasks = (boardId: string) =>
+  invokeCmd<unknown[]>("task_board_blocked", { boardId });
+export const decomposeLoomTask = (goal: string, context?: string, boardId?: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("loom_task_decompose", { goal, context, boardId, workId, intentId, unscoped: workId === null && intentId === null });
+export const loomTaskContext = (agentId: string) =>
+  invokeCmd<unknown>("loom_task_context", { agentId });
+
+// ---- Skills (100% HTTP) ----
+
+export const addSkill = (inline: Record<string, unknown>) =>
+  invokeCmd<unknown>("skills_add", { inline });
+export const classifySkill = (skillName: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("skills_classify", { skillName, workId, intentId, unscoped: workId === null && intentId === null });
+export const bulkImportSkills = (requestId: string, srcDir: string, outDir?: string) =>
+  invokeCmd<void>("skills_bulk_import", { requestId, srcDir, outDir });
+
+// ---- MCP apps CRUD ----
+
+export const getApp = (name: string) => invokeCmd<unknown>("apps_get", { name });
+export const createApp = (body: Record<string, unknown>) =>
+  invokeCmd<unknown>("apps_create", { body });
+export const updateApp = (name: string, body: Record<string, unknown>) =>
+  invokeCmd<unknown>("apps_update", { name, body });
+export const deleteApp = (name: string) => invokeCmd<string>("apps_delete", { name });
+export const listComponentTypes = () => invokeCmd<unknown[]>("apps_component_types");
+
+// ---- Tools: register + permission ----
+
+export const registerTool = (tool: Record<string, unknown>) =>
+  invokeCmd<unknown>("tools_register", { tool });
+export const requestToolPermissionCmd = (
+  sessionId: string, toolName: string,
+  argsJson?: string, description?: string, riskLevel?: string,
+) => invokeCmd<unknown>("tool_permission_request", { sessionId, toolName, argsJson, description, riskLevel });
+
+// ---- Server administration ----
+
+export const getTlsStatus = () => invokeCmd<unknown>("tls_status");
+export const renewCertificate = () => invokeCmd<unknown>("tls_renew");
+export const runMigration = () => invokeCmd<unknown>("run_migration");

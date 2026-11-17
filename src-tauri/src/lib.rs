@@ -1,11 +1,13 @@
 //! Loom IDE — Tauri backend.
 //!
-//! Two data sources, kept strictly separate:
+//! Three data sources, kept strictly separate:
 //!
 //! 1. Local, structured work items (`<app-data>/loom-ide/work.json`) and a
 //!    user files in a separate workspace folder (Documents/Loom by default).
 //! 2. The Loom server on localhost:5006: sessions and agents, and chat via
 //!    `POST /v1/weave` with the selected session/agent.
+//!
+//! 3. Shared markdown knowledge in native-app/Research Vault, via knowledge.rs.
 //!
 //! Nothing here invents a reply or fakes progress. When the server is not
 //! reachable, session/agent/chat commands fail and the UI shows the error.
@@ -21,17 +23,24 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
 
 mod experiment;
+mod knowledge;
 #[path = "../../shared/navigation.rs"]
 mod navigation;
 use experiment::{Experiment, ExperimentStore};
+mod loom_http;
+mod loom_stream;
+mod loom_tasks;
+mod spatial;
 mod store;
 mod workspace;
+
 use store::{
-    AcceptanceCriterion, AttentionItem, CollabStep, Intent, IntentStore, WorkItem, WorkStore,
-    autonomy_rank,
+    AcceptanceCriterion, AttentionItem, Intent, IntentStore, WorkItem, WorkStore, autonomy_rank,
 };
 use workspace::{WorkspaceInfo, WorkspaceStore};
 
+#[cfg(test)]
+mod execution_admission_tests;
 #[cfg(test)]
 mod gateway_tests;
 #[cfg(test)]
@@ -81,6 +90,11 @@ fn percent_encode(s: &str) -> String {
     out
 }
 
+/// Percent-encode a query-parameter value (spaces become %20).
+fn percent_encode_query(s: &str) -> String {
+    percent_encode(s)
+}
+
 fn workspace_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
@@ -115,40 +129,6 @@ fn intents_file_path(app: &AppHandle) -> std::path::PathBuf {
         .join("intents.json")
 }
 
-/// Open the existing native surface from this repository; no secondary source tree.
-#[tauri::command]
-fn open_living_workbench() -> Result<(), String> {
-    if navigation::activate(navigation::WORKBENCH)? {
-        return Ok(());
-    }
-    static CHILD: Mutex<Option<std::process::Child>> = Mutex::new(None);
-    let mut child = CHILD.lock().map_err(|e| e.to_string())?;
-    if let Some(running) = child.as_mut() {
-        if running.try_wait().map_err(|e| e.to_string())?.is_none() {
-            return Ok(());
-        }
-    }
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or("Repository path unavailable")?;
-    let executable = [
-        repo.join("native-app/target/debug/living-workbench"),
-        repo.join("native-app/target/release/living-workbench"),
-    ]
-    .into_iter()
-    .find(|p| p.is_file())
-    .ok_or("Build Living Workbench first: cargo build --manifest-path native-app/Cargo.toml")?;
-    *child = Some(
-        std::process::Command::new(executable)
-            .current_dir(repo)
-            .arg("--vault")
-            .arg(repo.join("native-app/Research Vault"))
-            .spawn()
-            .map_err(|e| format!("Could not open Living Workbench: {e}"))?,
-    );
-    Ok(())
-}
-
 pub struct AppState {
     work: Mutex<WorkStore>,
     experiments: Mutex<ExperimentStore>,
@@ -178,6 +158,9 @@ fn add_work_item(
     }
     // Lock order is ALWAYS intents first, then work (never the reverse).
     let mut intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
+    // The intent this call auto-created, if any: deleted again if the
+    // work save below fails, so a failed add leaves no orphan intent.
+    let mut auto_created: Option<String> = None;
     let resolved: Intent = match intent_id {
         Some(id) => intents
             .get(&id)
@@ -193,21 +176,140 @@ fn add_work_item(
                     None,
                     Vec::new(),
                     Some("collaborative".to_string()),
+                    None,
+                    None,
                 )?;
+                auto_created = Some(intent.id.clone());
                 if intents.active_id().as_deref() != Some(intent.id.as_str()) {
-                    intent = intents.set_active(&intent.id)?;
+                    intent = match intents.set_active(&intent.id) {
+                        Ok(intent) => intent,
+                        Err(e) => {
+                            let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+                            let _ = intents.delete(&intent.id, &work);
+                            return Err(e);
+                        }
+                    };
                 }
                 intent
             }
         },
     };
     let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-    let mut item = work.add(title, Some(resolved.id.clone()))?;
-    // Inheritance (rule 3): the work starts at the intent's autonomy.
-    if resolved.autonomy != "collaborative" {
-        item = work.set_autonomy(&item.id, &resolved.autonomy)?;
+    let created = (|| -> Result<WorkItem, String> {
+        let mut item = work.add(title, Some(resolved.id.clone()))?;
+        // Inheritance (rule 3): the work starts at the intent's autonomy.
+        if resolved.autonomy != "collaborative" {
+            item = work.set_autonomy(&item.id, &resolved.autonomy)?;
+        }
+        Ok(item)
+    })();
+    match created {
+        Ok(item) => Ok(item),
+        Err(e) => {
+            if let Some(id) = auto_created {
+                // The work save failed (and no work references the intent
+                // yet, so delete refuses nothing): remove it again.
+                let _ = intents.delete(&id, &work);
+            }
+            Err(e)
+        }
     }
-    Ok(item)
+}
+
+/// One local work item's preview row for the full work→task migration
+/// (decision 6, Step 10): the proposed Loom task and every conflict or
+/// decision it carries. This is a READ-ONLY preview — it never writes,
+/// never calls Loom, and never migrates anything. The migration itself
+/// stays an explicit, user-triggered, journaled action.
+#[derive(Serialize)]
+pub struct MigrationPreviewItem {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub autonomy: String,
+    pub proposed_task_name: String,
+    pub conflicts: Vec<String>,
+    pub notes: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct MigrationPreview {
+    pub items: Vec<MigrationPreviewItem>,
+    pub total: usize,
+    /// Rows with no conflicts and no open decisions.
+    pub ready: usize,
+    /// Rows carrying a conflict or an open decision.
+    pub needs_decision: usize,
+}
+
+fn migration_task_name(title: &str) -> String {
+    let mut slug: String = title
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    while slug.contains("--") {
+        slug = slug.replace("--", "-");
+    }
+    slug.trim_matches('-').to_string()
+}
+
+/// The pure preview mapping: conflict detection only, no I/O (Step 10 —
+/// "full migration is explicitly interactive and must never be silent").
+fn build_migration_preview(items: &[WorkItem]) -> MigrationPreview {
+    let mut rows: Vec<MigrationPreviewItem> = Vec::new();
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut ready = 0usize;
+    let mut needs = 0usize;
+    for item in items {
+        let mut conflicts: Vec<String> = Vec::new();
+        let mut notes: Vec<String> = Vec::new();
+        let name = migration_task_name(&item.title);
+        if name.is_empty() {
+            conflicts.push("No usable title — rename before migrating.".into());
+        } else if let Some(owner) = seen.get(&name) {
+            conflicts.push(format!("Task name \"{name}\" collides with \"{owner}\"."));
+        } else {
+            seen.insert(name.clone(), item.title.clone());
+        }
+        // Loom tasks have no autonomy field: the level stays LOCAL.
+        notes.push(format!(
+            "Autonomy \"{}\" stays local (Loom tasks carry no autonomy field).",
+            item.autonomy
+        ));
+        // Decision 6: the intents/attention mapping is defined before
+        // migrating — an open decision, never guessed here. It applies to
+        // EVERY row today, which is why the preview separates "name-ready"
+        // rows (ready) from conflict rows (needs_decision).
+        notes.push("Intent/attention mapping awaits the decision-6 definition.".into());
+        if conflicts.is_empty() {
+            ready += 1;
+        } else {
+            needs += 1;
+        }
+        rows.push(MigrationPreviewItem {
+            id: item.id.clone(),
+            title: item.title.clone(),
+            status: item.status.clone(),
+            autonomy: item.autonomy.clone(),
+            proposed_task_name: name,
+            conflicts,
+            notes,
+        });
+    }
+    MigrationPreview {
+        total: rows.len(),
+        items: rows,
+        ready,
+        needs_decision: needs,
+    }
+}
+
+#[tauri::command]
+fn work_migration_preview(state: State<AppState>) -> MigrationPreview {
+    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+    build_migration_preview(&work.items())
 }
 
 #[tauri::command]
@@ -219,6 +321,187 @@ fn set_work_status(id: String, status: String, state: State<AppState>) -> Result
         .set_status(&id, &status)
 }
 
+/// The local autonomy admission rule (Rule 3), independent of Tauri
+/// plumbing so the boundary is directly testable. A work item's level can
+/// be tightened freely; raising it above its intent's ceiling, or raising
+/// without a justification, is rejected. This governs LOCAL work metadata
+/// only — Loom's runtime reads no autonomy level, and this gate is not,
+/// and must not be presented as, server-side tool authorization.
+fn autonomy_admission(
+    from: &str,
+    requested: &str,
+    intent_autonomy: Option<&str>,
+    justification: Option<&str>,
+) -> Result<(), String> {
+    let requested_rank =
+        autonomy_rank(requested).ok_or_else(|| format!("Unknown autonomy level: {requested}"))?;
+    let current_rank = autonomy_rank(from).unwrap_or(0);
+    if let Some(intent) = intent_autonomy {
+        let allowed = autonomy_rank(intent).unwrap_or(2);
+        if requested_rank > allowed {
+            return Err(format!(
+                "Cannot raise this work item to \"{requested}\": its intent allows at most \"{intent}\". Loosen the intent's autonomy first, or pick a lower level for this work item."
+            ));
+        }
+    }
+    // Moving down (tightening) is always instant; moving up requires
+    // justification — the system never grants itself more freedom.
+    if requested_rank > current_rank {
+        let just = justification.unwrap_or("").trim();
+        if just.is_empty() {
+            return Err(format!(
+                "Raising autonomy from \"{from}\" to \"{requested}\" requires a justification — why is more freedom needed?"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The governing policy for one execution request, resolved from STORED
+/// records — never from a caller-supplied level string (QC-01/W-2
+/// hardening: changing or omitting a frontend autonomy string cannot
+/// override stored policy).
+#[derive(Debug)]
+pub(crate) struct ExecutionPolicy {
+    /// Resolved autonomy level (for the wire's backend_config and the UI).
+    pub level: String,
+}
+
+fn validate_stored_level(level: &str) -> Result<(), String> {
+    if autonomy_rank(level).is_some() {
+        Ok(())
+    } else {
+        Err(format!("The stored autonomy level \"{level}\" is invalid."))
+    }
+}
+
+/// Resolve explicit ownership and apply the intent ceiling to stored work policy.
+/// Unscoped execution is an explicit project-default action, allowed only when
+/// there is no active intent. Missing ownership is never silently inferred.
+pub(crate) fn resolve_execution_policy(
+    work: &WorkStore,
+    intents: &IntentStore,
+    work_id: Option<&str>,
+    intent_id: Option<&str>,
+    unscoped: bool,
+    session_id: Option<&str>,
+    action: &str,
+) -> Result<ExecutionPolicy, String> {
+    if work_id.is_some_and(|id| id.trim().is_empty())
+        || intent_id.is_some_and(|id| id.trim().is_empty())
+    {
+        return Err("Execution ownership contains an empty identifier. Reopen the work or intent and try again.".into());
+    }
+    if unscoped && (work_id.is_some() || intent_id.is_some()) {
+        return Err("An execution cannot be both owned and unscoped.".into());
+    }
+    let items = work.items();
+    // A known session cannot escape its work policy by omitting or changing ids.
+    let session_owners: Vec<_> = session_id
+        .filter(|id| !id.trim().is_empty())
+        .map(|id| {
+            items
+                .iter()
+                .filter(|w| w.session_id.as_deref() == Some(id))
+                .collect()
+        })
+        .unwrap_or_default();
+    if session_owners.len() > 1 {
+        return Err("This session is linked to more than one work item. Correct its work links before executing.".into());
+    }
+    let linked_work = session_owners.first().copied();
+    if let Some(linked) = linked_work {
+        if work_id.is_some_and(|id| id != linked.id) || unscoped {
+            return Err(format!(
+                "This session belongs to work item \"{}\". Reopen that work item before executing.",
+                linked.title
+            ));
+        }
+    }
+    let work_id = work_id.or_else(|| linked_work.map(|w| w.id.as_str()));
+    let requested_intent = intent_id
+        .map(|id| intents.get(id).ok_or_else(|| "The intent referenced by this request no longer exists. Reopen the intent and try again.".to_string()))
+        .transpose()?;
+    if let Some(intent) = &requested_intent {
+        validate_stored_level(&intent.autonomy)?;
+    }
+    let (level, owner) = if let Some(id) = work_id {
+        let item = items.iter().find(|w| w.id == id).ok_or_else(|| {
+            "The work item referenced by this request no longer exists. Reopen the work item and try again.".to_string()
+        })?;
+        validate_stored_level(&item.autonomy)?;
+        let parent = item.intent_id.as_deref().map(|id| {
+            intents.get(id).ok_or_else(|| "The work item's intent no longer exists. Repair its intent link before executing.".to_string())
+        }).transpose()?;
+        if intent_id.is_some() && intent_id != item.intent_id.as_deref() {
+            return Err("The requested intent does not own this work item. Reopen the work item and try again.".into());
+        }
+        if let Some(parent) = &parent {
+            validate_stored_level(&parent.autonomy)?;
+        }
+        let ceiling = parent.as_ref();
+        if let Some(intent) =
+            ceiling.filter(|i| autonomy_rank(&i.autonomy) < autonomy_rank(&item.autonomy))
+        {
+            (
+                intent.autonomy.clone(),
+                format!(
+                    "intent \"{}\" governing work item \"{}\"",
+                    intent.statement, item.title
+                ),
+            )
+        } else {
+            (
+                item.autonomy.clone(),
+                format!("work item \"{}\"", item.title),
+            )
+        }
+    } else if let Some(intent) = requested_intent {
+        (intent.autonomy, format!("intent \"{}\"", intent.statement))
+    } else {
+        if !unscoped {
+            return Err("Execution ownership is required. Select a work item or intent, or explicitly start an unscoped request.".into());
+        }
+        if intents.active_id().is_some() {
+            return Err("An active intent exists. Execute under that intent instead of an unscoped request.".into());
+        }
+        (
+            "collaborative".to_string(),
+            "the project default (collaborative)".to_string(),
+        )
+    };
+    if autonomy_rank(&level) == Some(0) {
+        return Err(format!(
+            "Manual autonomy forbids {action} under {owner}. Raise that autonomy to Assisted or higher to let the agent act — or do it by hand."
+        ));
+    }
+    Ok(ExecutionPolicy { level })
+}
+
+impl AppState {
+    pub(crate) fn admit_execution(
+        &self,
+        work_id: Option<&str>,
+        intent_id: Option<&str>,
+        unscoped: Option<bool>,
+        session_id: Option<&str>,
+        action: &str,
+    ) -> Result<ExecutionPolicy, String> {
+        // Match the mutation commands' lock order to avoid deadlocking the dial.
+        let intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
+        let work = self.work.lock().unwrap_or_else(|e| e.into_inner());
+        resolve_execution_policy(
+            &work,
+            &intents,
+            work_id,
+            intent_id,
+            unscoped.unwrap_or(false),
+            session_id,
+            action,
+        )
+    }
+}
+
 #[tauri::command]
 fn set_work_autonomy(
     id: String,
@@ -226,8 +509,6 @@ fn set_work_autonomy(
     justification: Option<String>,
     state: State<AppState>,
 ) -> Result<WorkItem, String> {
-    let requested =
-        autonomy_rank(&autonomy).ok_or_else(|| format!("Unknown autonomy level: {autonomy}"))?;
     // Lock order is ALWAYS intents first, then work (never the reverse).
     let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
     let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
@@ -239,33 +520,25 @@ fn set_work_autonomy(
         .into_iter()
         .find(|w| w.id == id)
         .ok_or_else(|| format!("Unknown work item: {id}"))?;
+    let intent_autonomy = item
+        .intent_id
+        .as_deref()
+        .and_then(|iid| intents.get(iid))
+        .map(|i| i.autonomy.clone());
+    autonomy_admission(
+        &item.autonomy,
+        &autonomy,
+        intent_autonomy.as_deref(),
+        justification.as_deref(),
+    )?;
     let current_rank = autonomy_rank(&item.autonomy).unwrap_or(0);
-    if let Some(intent_id) = &item.intent_id {
-        if let Some(intent) = intents.get(intent_id) {
-            let allowed = autonomy_rank(&intent.autonomy).unwrap_or(2);
-            if requested > allowed {
-                return Err(format!(
-                    "Cannot raise this work item to \"{autonomy}\": its intent allows at most \"{}\". Loosen the intent's autonomy first, or pick a lower level for this work item.",
-                    intent.autonomy
-                ));
-            }
-        }
-    }
-    // Moving down (tightening) is always instant; moving up requires
-    // justification — the system never grants itself more freedom.
-    if requested > current_rank {
-        let just = justification.as_deref().unwrap_or("").trim();
-        if just.is_empty() {
-            return Err(format!(
-                "Raising autonomy from \"{}\" to \"{}\" requires a justification — why is more freedom needed?",
-                item.autonomy, autonomy
-            ));
-        }
-        let _ = work.autonomy_history_push(
+    let requested_rank = autonomy_rank(&autonomy).unwrap_or(0);
+    if requested_rank > current_rank {
+        work.autonomy_history_push(
             &id,
             &autonomy,
             justification.as_deref().map(|s| s.trim().to_string()),
-        );
+        )?;
     }
     work.set_autonomy(&id, &autonomy)
 }
@@ -340,13 +613,22 @@ fn create_intent(
     why: Option<String>,
     acceptance: Vec<AcceptanceCriterion>,
     autonomy: Option<String>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
     state: State<AppState>,
 ) -> Result<Intent, String> {
     state
         .intents
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .create(statement, why, acceptance, autonomy)
+        .create(
+            statement,
+            why,
+            acceptance,
+            autonomy,
+            max_rounds,
+            timeout_seconds,
+        )
 }
 
 #[tauri::command]
@@ -357,26 +639,62 @@ fn update_intent(
     autonomy: Option<String>,
     status: Option<String>,
     justification: Option<String>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
     state: State<AppState>,
 ) -> Result<Intent, String> {
     let updated = state
         .intents
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .update(&id, statement, why, autonomy.clone(), status, justification)?;
+        .update(
+            &id,
+            statement,
+            why,
+            autonomy.clone(),
+            status,
+            justification,
+            max_rounds,
+            timeout_seconds,
+        )?;
     // If the intent's autonomy was lowered, tighten any work items that
     // now exceed the new ceiling. Moving down is instant — no justification
     // needed, and the system does it automatically to preserve the rule.
     if let Some(a) = &autonomy {
         let new_rank = autonomy_rank(a).unwrap_or(0);
         let mut work = state.work.lock().unwrap_or_else(|e| e.into_inner());
+        // The intent itself already updated above; a failure to tighten
+        // a work item must not hide behind a success, so collect the
+        // failures and report them instead of swallowing them.
+        let mut failures: Vec<String> = Vec::new();
         for item in work.items() {
             if item.intent_id.as_deref() == Some(&id) {
                 let item_rank = autonomy_rank(&item.autonomy).unwrap_or(0);
                 if item_rank > new_rank {
-                    let _ = work.set_autonomy(&item.id, a);
+                    // Record the automatic tightening in the work item's
+                    // history, so the change is visible, not silent.
+                    if let Err(e) = work.autonomy_history_push(
+                        &item.id,
+                        a,
+                        Some(
+                            "Tightened automatically: the intent's autonomy was lowered."
+                                .to_string(),
+                        ),
+                    ) {
+                        failures.push(format!("{}: {e}", item.id));
+                        continue;
+                    }
+                    if let Err(e) = work.set_autonomy(&item.id, a) {
+                        failures.push(format!("{}: {e}", item.id));
+                    }
                 }
             }
+        }
+        if !failures.is_empty() {
+            return Err(format!(
+                "Intent updated, but some work items could not be tightened: {}",
+                failures.join("; ")
+            ));
         }
     }
     Ok(updated)
@@ -505,14 +823,9 @@ fn clear_experiment_decision(id: String, state: State<AppState>) -> Result<Exper
 }
 
 // ---------------------------------------------------------------------------
-// Collaboration + attention (empty until the Loom server exposes them)
+// Attention (derived locally from experiments awaiting a decision; Loom
+// exposes no attention endpoint — collaboration.proto has no service)
 // ---------------------------------------------------------------------------
-
-#[tauri::command]
-fn get_collaboration() -> Vec<CollabStep> {
-    // The Loom server does not expose step-by-step execution yet.
-    Vec::new()
-}
 
 #[tauri::command]
 fn get_attention(state: State<AppState>) -> Vec<AttentionItem> {
@@ -575,6 +888,8 @@ pub struct Agent {
     pub name: String,
     #[serde(default)]
     pub status: String,
+    #[serde(default)]
+    pub error: String,
     #[serde(default, alias = "uptimeSeconds", deserialize_with = "de_i64")]
     pub uptime_seconds: i64,
     #[serde(default, alias = "activeSessions")]
@@ -1081,6 +1396,12 @@ struct ChatReply {
     // The session the reply belongs to; set when the server reports one
     // (so a first message without a session adopts the auto-created one).
     session_id: Option<String>,
+    // The trace id the server reports, when tracing is enabled — the
+    // handle for the observability surface (GetTrace).
+    trace_id: Option<String>,
+    // The turn's cost from the server's CostInfo (USD). Missing cost is
+    // unknown, never zero (QC-14/Step 6).
+    cost_usd: Option<f64>,
 }
 
 /// Summarize the non-healthy components of a /v1/health body, if any.
@@ -1109,27 +1430,39 @@ async fn get_loom_status() -> LoomStatus {
     // configured LLM provider, so it gets a longer read timeout, and any
     // 2xx counts as "the server is up" regardless of the body shape.
     let result = tauri::async_runtime::spawn_blocking(|| {
-        loom_http_raw("GET", "/v1/health", None, Duration::from_secs(30))
+        loom_http_raw("GET", "/v1/health", None, Duration::from_secs(30), &[])
     })
     .await;
     let (online, detail) = match result {
         Ok(Ok((status, payload))) if (200..300).contains(&status) => {
             match serde_json::from_slice::<serde_json::Value>(&payload) {
-                Ok(value) => match value.get("status").and_then(|v| v.as_str()) {
-                    Some("healthy") => (true, "Loom HTTP service is healthy.".to_string()),
-                    Some("degraded") => (
-                        true,
-                        format!("Loom is degraded ({}).", component_errors(&value)),
-                    ),
-                    Some(other) => (
-                        false,
-                        format!("Loom reports {other}: {}.", component_errors(&value)),
-                    ),
-                    None => (true, "Loom HTTP service is up.".to_string()),
-                },
+                Ok(value) => {
+                    // The probe validates the body shape (§2.2.2): a 2xx
+                    // without the health contract is not "up".
+                    let has_contract = value.get("status").and_then(|v| v.as_str()).is_some();
+                    if !has_contract {
+                        (
+                            false,
+                            "Loom answered without a health body (missing status).".to_string(),
+                        )
+                    } else {
+                        match value.get("status").and_then(|v| v.as_str()) {
+                            Some("healthy") => (true, "Loom HTTP service is healthy.".to_string()),
+                            Some("degraded") => (
+                                true,
+                                format!("Loom is degraded ({}).", component_errors(&value)),
+                            ),
+                            Some(other) => (
+                                false,
+                                format!("Loom reports {other}: {}.", component_errors(&value)),
+                            ),
+                            None => (true, "Loom HTTP service is up.".to_string()),
+                        }
+                    }
+                }
                 Err(_) => (
-                    true,
-                    "Loom HTTP service is up (health body unreadable).".to_string(),
+                    false,
+                    "Loom HTTP service is up but its health body is unreadable.".to_string(),
                 ),
             }
         }
@@ -1145,21 +1478,48 @@ async fn get_loom_status() -> LoomStatus {
     }
 }
 
+// Parse a `Content-Length` value out of an HTTP response head, if one is
+// present and numeric. Returns None when the header is absent or invalid,
+// in which case callers fall back to reading until EOF.
+fn parse_content_length(head: &str) -> Option<usize> {
+    head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if name.trim().eq_ignore_ascii_case("content-length") {
+            value.trim().parse().ok()
+        } else {
+            None
+        }
+    })
+}
+
 /// Raw HTTP request over a plain TCP connection, including chunked
 /// responses from gRPC-gateway. Returns (status, body). The read has a
 /// *total* deadline (not per-read) and a 16 MB size cap, so a server that
 /// dribbles bytes cannot hold a worker forever and a runaway response
 /// cannot grow memory without bound. Timeouts surface as a plain
 /// "timed out" message instead of raw OS text.
+/// The Loom server address: `LOOM_ADDR` overrides the localhost default
+/// (§2.2.4 — configurable without recompiling).
+pub(crate) fn loom_addr() -> String {
+    std::env::var("LOOM_ADDR")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "127.0.0.1:5006".to_string())
+}
+
 fn loom_http_raw(
     method: &str,
     path: &str,
     body: Option<String>,
     read_timeout: Duration,
+    extra_headers: &[(&str, &str)],
 ) -> Result<(u16, Vec<u8>), String> {
-    let mut stream =
-        TcpStream::connect_timeout(&"127.0.0.1:5006".parse().unwrap(), Duration::from_secs(2))
-            .map_err(|e| format!("Loom is unavailable. Start looms serve --http-port 5006. {e}"))?;
+    let addr = loom_addr();
+    let mut stream = TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_secs(2))
+        .map_err(|e| {
+            format!("Loom is unavailable at {addr}. Start looms serve --http-port 5006. {e}")
+        })?;
     stream
         .set_read_timeout(Some(read_timeout))
         .map_err(|e| e.to_string())?;
@@ -1167,8 +1527,15 @@ fn loom_http_raw(
         .set_write_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
     let body = body.unwrap_or_default();
+    let mut headers = String::from("Content-Type: application/json\r\n");
+    for (name, value) in extra_headers {
+        headers.push_str(name);
+        headers.push_str(": ");
+        headers.push_str(value);
+        headers.push_str("\r\n");
+    }
     let request = format!(
-        "{method} {path} HTTP/1.1\r\nHost: localhost:5006\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
     stream
@@ -1191,6 +1558,23 @@ fn loom_http_raw(
                 raw.extend_from_slice(&buf[..n]);
                 if raw.len() > MAX_RESPONSE_BYTES {
                     return Err("Loom response exceeded 16 MB.".to_string());
+                }
+                // Stop as soon as the whole body is here: with a
+                // Content-Length the server need not close the
+                // connection first. Chunked bodies have no usable
+                // length, so they still read to EOF.
+                if let Some(end) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&raw[..end]);
+                    if !head
+                        .to_ascii_lowercase()
+                        .contains("transfer-encoding: chunked")
+                    {
+                        if let Some(len) = parse_content_length(&head) {
+                            if raw.len() >= end + 4 + len {
+                                break;
+                            }
+                        }
+                    }
                 }
             }
             Err(e)
@@ -1253,8 +1637,32 @@ fn loom_request(
     path: &str,
     body: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    loom_request_with_headers(method, path, body, &[])
+}
+
+/// `loom_request` with extra request headers. Used by the weave path to
+/// assert the slot origin: absent the header the server classifies every
+/// turn as BATCH and it queues at the admission door when the active-turn
+/// ceiling is reached (issue 013).
+fn loom_request_with_headers(
+    method: &str,
+    path: &str,
+    body: Option<String>,
+    extra_headers: &[(&str, &str)],
+) -> Result<serde_json::Value, String> {
     let read_timeout = Duration::from_secs(if body.is_some() { 180 } else { 4 });
-    let (status, payload) = loom_http_raw(method, path, body, read_timeout)?;
+    // One retry for transient connection failures on idempotent GETs only
+    // (§2.2.5); a failed POST is never replayed — it may have executed.
+    let first = loom_http_raw(method, path, body.clone(), read_timeout, extra_headers);
+    let (status, payload) = match first {
+        Err(e)
+            if method == "GET" && (e.contains("Connection refused") || e.contains("timed out")) =>
+        {
+            std::thread::sleep(Duration::from_millis(500));
+            loom_http_raw(method, path, body, read_timeout, extra_headers).map_err(|_| e)?
+        }
+        other => other?,
+    };
     if status == 204 {
         return Ok(serde_json::Value::Null);
     }
@@ -1349,9 +1757,24 @@ async fn list_workflows() -> Result<Vec<Workflow>, String> {
 }
 
 #[tauri::command]
-async fn execute_workflow(workflow_ref: String) -> Result<ExecuteWorkflowResponse, String> {
+async fn execute_workflow(
+    workflow_ref: String,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    unscoped: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<ExecuteWorkflowResponse, String> {
     if workflow_ref.trim().is_empty() {
         return Err("No workflow selected.".to_string());
+    }
+    {
+        state.admit_execution(
+            work_id.as_deref(),
+            intent_id.as_deref(),
+            unscoped,
+            None,
+            "workflow runs",
+        )?;
     }
     let body = serde_json::json!({ "workflowRef": workflow_ref }).to_string();
     let value = tauri::async_runtime::spawn_blocking(move || {
@@ -1389,7 +1812,7 @@ async fn get_workflow_execution(execution_id: String) -> Result<WorkflowExecutio
 #[tauri::command]
 async fn list_workflow_executions() -> Result<Vec<WorkflowExecution>, String> {
     let value = tauri::async_runtime::spawn_blocking(|| {
-        loom_request("GET", "/v1/workflows/executions", None)
+        loom_request("GET", "/v1/workflows/executions?limit=500", None)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -1507,22 +1930,36 @@ async fn list_providers() -> Result<Vec<ProviderEntry>, String> {
 #[tauri::command]
 async fn switch_model(
     session_id: String,
+    agent_id: Option<String>,
     provider: Option<String>,
     model: Option<String>,
 ) -> Result<serde_json::Value, String> {
     if session_id.trim().is_empty() {
         return Err("No session selected.".to_string());
     }
+    let provider = provider
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty());
+    let model = model
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty());
+    if provider.is_none() && model.is_none() {
+        return Err("Choose a provider, a model, or both before switching.".to_string());
+    }
     let mut obj = serde_json::Map::new();
+    if let Some(a) = agent_id
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+    {
+        // The authoritative owner agent (QC-21): the switch applies at the
+        // agent level, so it must name whose configuration changes.
+        obj.insert("agentId".into(), a.into());
+    }
     if let Some(p) = provider {
-        if !p.trim().is_empty() {
-            obj.insert("provider".into(), p.into());
-        }
+        obj.insert("provider".into(), p.into());
     }
     if let Some(m) = model {
-        if !m.trim().is_empty() {
-            obj.insert("model".into(), m.into());
-        }
+        obj.insert("model".into(), m.into());
     }
     let body = serde_json::Value::Object(obj).to_string();
     let value = tauri::async_runtime::spawn_blocking(move || {
@@ -1534,6 +1971,16 @@ async fn switch_model(
     })
     .await
     .map_err(|e| e.to_string())??;
+    // SwitchModelResponse { success, previous_model, new_model, message }:
+    // a 200 with success=false is still a rejection.
+    if value.get("success").and_then(|v| v.as_bool()) == Some(false) {
+        return Err(value
+            .get("message")
+            .or_else(|| value.get("error"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("Loom rejected the model switch.")
+            .to_string());
+    }
     Ok(value)
 }
 
@@ -1587,7 +2034,7 @@ async fn search_artifacts(query: String) -> Result<Vec<Artifact>, String> {
         return Err("No search query provided.".to_string());
     }
     let path = format!(
-        "/v1/artifacts:search?query={}",
+        "/v1/artifacts:search?query={}&limit=200",
         percent_encode(&query.trim())
     );
     let value = tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
@@ -1630,30 +2077,96 @@ async fn get_storage_status() -> Result<StorageStatus, String> {
     Ok(resp.status)
 }
 
+/// Build the unary weave request body. The grpc-gateway decodes with
+/// protojson, so these keys are camelCase (`sessionId`, `agentId`,
+/// `maxRounds`, `timeoutSeconds`, `enableTrace`) — the mirror of the
+/// snake_case stream body in `loom_stream.rs`. Blank optionals are omitted;
+/// budget values only travel when positive (None/0 = server default).
+fn weave_unary_body(
+    message: &str,
+    session_id: Option<&str>,
+    agent_id: Option<&str>,
+    context: Option<&HashMap<String, String>>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
+    autonomy: Option<&str>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut obj = serde_json::Map::new();
+    obj.insert("query".into(), message.into());
+    if let Some(s) = session_id.filter(|s| !s.trim().is_empty()) {
+        obj.insert("sessionId".into(), s.into());
+    }
+    if let Some(a) = agent_id.filter(|a| !a.trim().is_empty()) {
+        obj.insert("agentId".into(), a.into());
+    }
+    if let Some(r) = max_rounds.filter(|&v| v > 0) {
+        obj.insert("maxRounds".into(), serde_json::json!(r));
+    }
+    if let Some(t) = timeout_seconds.filter(|&v| v > 0) {
+        obj.insert("timeoutSeconds".into(), serde_json::json!(t));
+    }
+    if let Some(c) = context {
+        if !c.is_empty() {
+            obj.insert("context".into(), serde_json::json!(c));
+        }
+    }
+    // The governing autonomy level rides in backend_config so a patched
+    // Loom runtime can hold or refuse tool calls per level (QC-01/W-2,
+    // 17-autonomy-enforcement.md). protojson camelCases the map field.
+    if let Some(a) = autonomy {
+        obj.insert("backendConfig".into(), serde_json::json!({ "autonomy": a }));
+    }
+    obj.insert("enableTrace".into(), serde_json::Value::Bool(true));
+    obj
+}
+
 #[tauri::command]
 async fn ask_loom(
     message: String,
     session_id: Option<String>,
     agent_id: Option<String>,
+    context: Option<HashMap<String, String>>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    unscoped: Option<bool>,
+    state: State<'_, AppState>,
 ) -> Result<ChatReply, String> {
     if message.trim().is_empty() {
         return Err("Enter a message first.".into());
     }
-    let mut obj = serde_json::Map::new();
-    obj.insert("query".into(), message.into());
-    if let Some(s) = session_id {
-        if !s.trim().is_empty() {
-            obj.insert("sessionId".into(), s.into());
-        }
-    }
-    if let Some(a) = agent_id {
-        if !a.trim().is_empty() {
-            obj.insert("agentId".into(), a.into());
-        }
-    }
-    let body = serde_json::Value::Object(obj).to_string();
+    // Authoritative admission: the stored records decide, not the caller
+    // (QC-01/W-2 hardening). Manual is rejected before any network work.
+    // Guards are scoped so no store lock crosses the await below.
+    let policy = {
+        state.admit_execution(
+            work_id.as_deref(),
+            intent_id.as_deref(),
+            unscoped,
+            session_id.as_deref(),
+            "agent chat",
+        )?
+    };
+    let body = serde_json::Value::Object(weave_unary_body(
+        &message,
+        session_id.as_deref(),
+        agent_id.as_deref(),
+        context.as_ref(),
+        max_rounds,
+        timeout_seconds,
+        Some(&policy.level),
+    ))
+    .to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        let value = loom_request("POST", "/v1/weave", Some(body))?;
+        // Interactive slot origin: a human is waiting on this turn, so it
+        // must bypass the batch admission door (issue 013).
+        let value = loom_request_with_headers(
+            "POST",
+            "/v1/weave",
+            Some(body),
+            &[("X-Loom-Slot-Origin", "interactive")],
+        )?;
         let text = ["text", "response", "content", "reply", "message"]
             .iter()
             .find_map(|key| {
@@ -1669,11 +2182,27 @@ async fn ask_loom(
             .and_then(|v| v.as_str())
             .filter(|s| !s.trim().is_empty())
             .map(|s| s.to_string());
+        let trace_id = value
+            .get("trace_id")
+            .or_else(|| value.get("traceId"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string());
+        // WeaveResponse.cost (CostInfo.total_cost_usd); protojson emits
+        // camelCase, the SSE handler snake_case — accept both at the
+        // boundary. Absent cost stays None (unknown), never 0.
+        let cost_usd = value.get("cost").and_then(|c| {
+            c.get("totalCostUsd")
+                .or_else(|| c.get("total_cost_usd"))
+                .and_then(|v| v.as_f64())
+        });
         Ok(ChatReply {
             text: text.into(),
             source: "live".into(),
             card: None,
             session_id,
+            trace_id,
+            cost_usd,
         })
     })
     .await
@@ -1923,7 +2452,19 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            open_living_workbench,
+            knowledge::knowledge_list,
+            knowledge::knowledge_read,
+            knowledge::knowledge_create,
+            knowledge::knowledge_save,
+            knowledge::knowledge_relate,
+            knowledge::knowledge_review,
+            knowledge::knowledge_archive,
+            knowledge::knowledge_restore,
+            knowledge::knowledge_export_canvas,
+            knowledge::knowledge_sync_from_loom,
+            knowledge::knowledge_signature,
+            knowledge::knowledge_canvas_layout_save,
+            knowledge::knowledge_canvas_layout_load,
             get_work_items,
             add_work_item,
             set_work_status,
@@ -1931,16 +2472,90 @@ pub fn run() {
             set_work_session,
             set_work_success_criteria,
             set_work_artifacts,
+            work_migration_preview,
             get_intents,
             create_intent,
             update_intent,
             set_intent_acceptance,
             set_active_intent,
             delete_intent,
-            get_collaboration,
             get_attention,
             get_loom_status,
             ask_loom,
+            loom_stream::ask_loom_stream,
+            loom_stream::cancel_loom_stream,
+            loom_stream::answer_clarification,
+            loom_stream::execute_workflow_stream,
+            loom_stream::session_subscribe,
+            loom_stream::provider_abtest,
+            loom_stream::pattern_updates_stream,
+            loom_stream::task_updates_stream,
+            loom_http::mcp_servers_list,
+            loom_http::mcp_server_get,
+            loom_http::mcp_server_add,
+            loom_http::mcp_server_update,
+            loom_http::mcp_server_delete,
+            loom_http::mcp_server_restart,
+            loom_http::mcp_servers_health_check,
+            loom_http::respond_human_request,
+            loom_http::mcp_server_test,
+            loom_http::mcp_server_tools,
+            loom_http::agent_create,
+            loom_http::agent_start,
+            loom_http::agent_stop,
+            loom_http::agent_reload,
+            loom_http::agent_delete,
+            loom_http::agent_presets_list,
+            loom_http::workflow_templates_list,
+            loom_http::workflow_schedules_list,
+            loom_http::workflow_schedule_get,
+            loom_http::workflow_schedule_create,
+            loom_http::workflow_schedule_update,
+            loom_http::workflow_schedule_delete,
+            loom_http::workflow_schedule_trigger,
+            loom_http::workflow_schedule_history,
+            loom_http::workflow_schedule_pause,
+            loom_http::workflow_schedule_resume,
+            loom_http::workflow_schedule_cancel_execution,
+            loom_http::skills_add,
+            loom_http::skills_classify,
+            loom_http::skills_bulk_import,
+            loom_http::apps_get,
+            loom_http::apps_create,
+            loom_http::apps_update,
+            loom_http::apps_delete,
+            loom_http::apps_component_types,
+            loom_http::tools_register,
+            loom_http::tool_permission_request,
+            loom_http::tls_status,
+            loom_http::tls_renew,
+            loom_http::run_migration,
+            loom_tasks::task_boards_list,
+            loom_tasks::task_board_get,
+            loom_tasks::task_board_create,
+            loom_tasks::loom_tasks_list,
+            loom_tasks::loom_task_get,
+            loom_tasks::loom_task_create,
+            loom_tasks::loom_task_update,
+            loom_tasks::loom_task_delete,
+            loom_tasks::loom_task_claim,
+            loom_tasks::loom_task_release,
+            loom_tasks::loom_task_close,
+            loom_tasks::loom_task_transition,
+            loom_tasks::loom_task_add_dependency,
+            loom_tasks::loom_task_remove_dependency,
+            loom_tasks::task_board_ready,
+            loom_tasks::task_board_blocked,
+            loom_tasks::loom_task_decompose,
+            loom_tasks::loom_task_context,
+            loom_http::patterns_list,
+            loom_http::pattern_get,
+            loom_http::pattern_create,
+            loom_http::patterns_load,
+            loom_http::apps_list,
+            loom_http::session_delete,
+            loom_http::session_resume,
+            loom_http::session_resolve_gap,
             list_sessions,
             create_session,
             list_agents,
@@ -1988,6 +2603,271 @@ mod tests {
     use super::*;
 
     // ------------------------------------------------------------------
+    // weave_unary_body: the gateway is protojson (camelCase), so the
+    // budget fields must be `maxRounds`/`timeoutSeconds` (W-1).
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn weave_unary_body_carries_budget_as_camel_case_when_positive() {
+        let body = weave_unary_body("hi", None, None, None, Some(4), Some(120), None);
+        assert_eq!(body.get("maxRounds"), Some(&serde_json::json!(4)));
+        assert_eq!(body.get("timeoutSeconds"), Some(&serde_json::json!(120)));
+        // protojson ignores snake_case budget keys.
+        assert!(body.get("max_rounds").is_none());
+        assert!(body.get("timeout_seconds").is_none());
+    }
+
+    #[test]
+    fn weave_unary_body_omits_non_positive_budget() {
+        let body = weave_unary_body("hi", None, None, None, Some(0), Some(-3), None);
+        assert!(body.get("maxRounds").is_none());
+        assert!(body.get("timeoutSeconds").is_none());
+    }
+
+    // ------------------------------------------------------------------
+    // Autonomy on the wire (QC-01/W-2): the governing level rides in
+    // backend_config — camelCase on the protojson unary path
+    // (`backendConfig`), snake_case on the SSE stream path.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn weave_unary_body_carries_autonomy_in_camel_case_backend_config() {
+        let body = weave_unary_body("hi", None, None, None, None, None, Some("manual"));
+        assert_eq!(
+            body.get("backendConfig"),
+            Some(&serde_json::json!({ "autonomy": "manual" }))
+        );
+        let without = weave_unary_body("hi", None, None, None, None, None, None);
+        assert!(without.get("backendConfig").is_none());
+    }
+
+    // ------------------------------------------------------------------
+    // resolve_execution_policy (QC-01/W-2 hardening): stored records are
+    // authoritative; caller-supplied level strings no longer exist, so a
+    // changed or omitted frontend value cannot override policy.
+    // ------------------------------------------------------------------
+
+    fn admission_stores() -> (std::path::PathBuf, WorkStore, IntentStore) {
+        let dir = std::env::temp_dir().join(format!(
+            "loom-ide-admission-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let work = WorkStore::load(dir.join("work.json")).unwrap();
+        let intents = IntentStore::load(dir.join("intents.json")).unwrap();
+        (dir, work, intents)
+    }
+
+    #[test]
+    fn stored_manual_work_rejects_execution_no_matter_what_the_caller_wants() {
+        let (_dir, mut work, mut intents) = admission_stores();
+        let intent = intents
+            .create(
+                "t".into(),
+                None,
+                vec![],
+                Some("delegated".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        let item = work.add("manual work".into(), Some(intent.id)).unwrap();
+        // The stored record is Manual even though its intent is Delegated:
+        // the work item governs its own execution.
+        work.set_autonomy(&item.id, "manual").unwrap();
+        for action in ["agent chat", "workflow runs"] {
+            let err = resolve_execution_policy(
+                &work,
+                &intents,
+                Some(&item.id),
+                None,
+                false,
+                None,
+                action,
+            )
+            .unwrap_err();
+            assert!(
+                err.contains("Manual autonomy forbids"),
+                "unexpected message: {err}"
+            );
+            assert!(err.contains("manual work"), "owner not named: {err}");
+        }
+    }
+
+    #[test]
+    fn stored_manual_intent_rejects_when_no_work_is_referenced() {
+        let (_dir, work, mut intents) = admission_stores();
+        let intent = intents
+            .create(
+                "strict intent".into(),
+                None,
+                vec![],
+                Some("manual".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        let err = resolve_execution_policy(
+            &work,
+            &intents,
+            None,
+            Some(&intent.id),
+            false,
+            None,
+            "agent chat",
+        )
+        .unwrap_err();
+        assert!(err.contains("Manual autonomy forbids"), "{err}");
+        assert!(err.contains("strict intent"), "{err}");
+    }
+
+    #[test]
+    fn missing_referenced_records_are_rejected() {
+        let (_dir, work, intents) = admission_stores();
+        assert!(
+            resolve_execution_policy(
+                &work,
+                &intents,
+                Some("ghost"),
+                None,
+                false,
+                None,
+                "agent chat"
+            )
+            .unwrap_err()
+            .contains("no longer exists")
+        );
+        assert!(
+            resolve_execution_policy(
+                &work,
+                &intents,
+                None,
+                Some("ghost"),
+                false,
+                None,
+                "agent chat"
+            )
+            .unwrap_err()
+            .contains("no longer exists")
+        );
+    }
+
+    #[test]
+    fn valid_non_manual_policy_passes_and_names_its_owner() {
+        let (_dir, mut work, mut intents) = admission_stores();
+        let intent = intents
+            .create(
+                "t".into(),
+                None,
+                vec![],
+                Some("collaborative".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        let item = work.add("open work".into(), Some(intent.id)).unwrap();
+        let policy = resolve_execution_policy(
+            &work,
+            &intents,
+            Some(&item.id),
+            None,
+            false,
+            None,
+            "agent chat",
+        )
+        .unwrap();
+        assert_eq!(policy.level, "collaborative");
+        // Owner naming is asserted through the Manual rejection message
+        // in stored_manual_work_rejects_execution_no_matter_what.
+    }
+
+    #[test]
+    fn invalid_stored_level_is_rejected() {
+        // Store loading itself rejects unknown levels loudly; the
+        // resolver's validation is the second layer and is tested here
+        // directly.
+        assert!(validate_stored_level("supervised").is_err());
+        assert!(validate_stored_level("manual").is_ok());
+    }
+
+    #[test]
+    fn omitted_ownership_is_rejected_and_unscoped_requires_no_active_intent() {
+        let (_dir, work, mut intents) = admission_stores();
+        assert!(
+            resolve_execution_policy(&work, &intents, None, None, false, None, "agent chat")
+                .is_err()
+        );
+        assert_eq!(
+            resolve_execution_policy(&work, &intents, None, None, true, None, "agent chat")
+                .unwrap()
+                .level,
+            "collaborative"
+        );
+        let manual = intents
+            .create(
+                "strict".into(),
+                None,
+                vec![],
+                Some("manual".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        intents.set_active(&manual.id).unwrap();
+        assert!(
+            resolve_execution_policy(&work, &intents, None, None, true, None, "agent chat")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn policy_lowered_before_fallback_is_seen_by_the_recheck() {
+        let (_dir, mut work, mut intents) = admission_stores();
+        let intent = intents
+            .create(
+                "t".into(),
+                None,
+                vec![],
+                Some("delegated".into()),
+                None,
+                None,
+            )
+            .unwrap();
+        let item = work.add("fallback work".into(), Some(intent.id)).unwrap();
+        // First pass: Delegated — the request may start.
+        assert!(
+            resolve_execution_policy(
+                &work,
+                &intents,
+                Some(&item.id),
+                None,
+                false,
+                None,
+                "agent chat"
+            )
+            .is_ok()
+        );
+        // The owner becomes Manual before the fallback dispatches: the
+        // re-resolution (a fresh call per request) must reject.
+        work.set_autonomy(&item.id, "manual").unwrap();
+        assert!(
+            resolve_execution_policy(
+                &work,
+                &intents,
+                Some(&item.id),
+                None,
+                false,
+                None,
+                "agent chat"
+            )
+            .is_err()
+        );
+    }
+
+    // ------------------------------------------------------------------
     // de_i64: the gateway sends every int64 as a JSON string.
     // ------------------------------------------------------------------
 
@@ -2027,6 +2907,23 @@ mod tests {
     #[test]
     fn de_i64_missing_key_defaults_to_zero() {
         assert_eq!(parse_i64(r#"{}"#).unwrap(), 0);
+    }
+
+    // ------------------------------------------------------------------
+    // parse_content_length (loom_http_raw stops reading once the body
+    // is complete instead of waiting for EOF)
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn parse_content_length_finds_the_header_and_ignores_the_rest() {
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 42";
+        assert_eq!(parse_content_length(head), Some(42));
+        let head = "HTTP/1.1 200 OK\r\ncontent-length: 0";
+        assert_eq!(parse_content_length(head), Some(0));
+        let head = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked";
+        assert_eq!(parse_content_length(head), None);
+        let head = "HTTP/1.1 200 OK\r\nContent-Length: not-a-number";
+        assert_eq!(parse_content_length(head), None);
     }
 
     // ------------------------------------------------------------------

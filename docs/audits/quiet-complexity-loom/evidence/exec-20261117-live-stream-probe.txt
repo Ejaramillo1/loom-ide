@@ -1,0 +1,86 @@
+=== LIVE CHAT STREAM PROBE ===
+{
+  "target": "127.0.0.1:5006",
+  "serverReached": true,
+  "statusLine": "HTTP/1.1 200 OK",
+  "contentType": "Content-Type: text/event-stream",
+  "transferEncoding": "Transfer-Encoding: chunked",
+  "bytesReceived": 1476,
+  "latencyToFirstByteMs": 3894,
+  "firstEvent": {
+    "latencyMs": 3895,
+    "keys": [
+      "stage",
+      "progress",
+      "message",
+      "timestamp"
+    ],
+    "sample": {
+      "stage": 3,
+      "progress": 30,
+      "message": "Generating response (turn 1)",
+      "timestamp": 1794940906
+    }
+  },
+  "eventCount": 4,
+  "lastEvent": {
+    "stage": 7,
+    "progress": 100,
+    "message": "Query completed successfully",
+    "timestamp": 1794940908,
+    "partial_result": {
+      "type": "text",
+      "data_json": "pong"
+    },
+    "partial_content": "pong",
+    "cost": {
+      "total_cost_usd": 0.0065975,
+      "llm_cost": {
+        "input_tokens": 67,
+        "output_tokens": 3,
+        "cost_usd": 0.0065975,
+        "model": "deepseek-v4-pro",
+        "provider": "openai",
+        "cache_read_input_tokens": 5120
+      }
+    },
+    "context_state": {
+      "context_tokens_used": 5924,
+      "context_tokens_max": 200000,
+      "tools_loaded": [
+        "agent_management",
+        "graph_memory",
+        "group_by_query",
+        "load_pattern",
+        "publish",
+        "query_tool_result",
+        "recall",
+        "send_message",
+        "shared_memory_read",
+        "shared_memory_write",
+        "shell_execute",
+        "top_n_query",
+        "workspace"
+      ]
+    }
+  }
+}
+
+=== RAW RESPONSE HEAD ===
+HTTP/1.1 200 OK
+Access-Control-Allow-Headers: *
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH
+Access-Control-Expose-Headers: Content-Length, Content-Type
+Access-Control-Max-Age: 86400
+Cache-Control: no-cache
+Content-Type: text/event-stream
+X-Accel-Buffering: no
+Date: Tue, 17 Nov 2026 18:41:44 GMT
+Connection: close
+Transfer-Encoding: chunked
+
+=== SSE EVENTS (index, latencyMs, payload) ===
+0	3895ms	{"stage":3,"progress":30,"message":"Generating response (turn 1)","timestamp":1794940906}
+1	3895ms	{"stage":3,"progress":50,"message":"Streaming LLM response...","timestamp":1794940908,"partial_content":"p","is_token_stream":true,"token_count":1,"ttft_ms":1701}
+2	3895ms	{"stage":3,"progress":100,"message":"LLM response complete","timestamp":1794940908,"partial_content":"pong","token_count":2,"ttft_ms":1701}
+3	3895ms	{"stage":7,"progress":100,"message":"Query completed successfully","timestamp":1794940908,"partial_result":{"type":"text","data_json":"pong"},"partial_content":"pong","cost":{"total_cost_usd":0.0065975,"llm_cost":{"input_tokens":67,"output_tokens":3,"cost_usd":0.0065975,"model":"deepseek-v4-pro","provider":"openai","cache_read_input_tokens":5120}},"context_state":{"context_tokens_used":5924,"context_tokens_max":200000,"tools_loaded":["agent_management","graph_memory","group_by_query","load_pattern","publish","query_tool_result","recall","send_message","shared_memory_read","shared_memory_write","shell_execute","top_n_query","workspace"]}}

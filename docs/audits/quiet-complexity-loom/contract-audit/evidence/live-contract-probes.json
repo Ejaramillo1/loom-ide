@@ -1,0 +1,80 @@
+[
+  {
+    "method": "GET",
+    "path": "/v1/boards",
+    "status": 404,
+    "content_type": "application/json",
+    "cors_origin": "*",
+    "top_level_keys": [
+      "code",
+      "message"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/v1/tasks",
+    "status": 404,
+    "content_type": "application/json",
+    "cors_origin": "*",
+    "top_level_keys": [
+      "code",
+      "message"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/v1/mcp/servers:health",
+    "status": 200,
+    "content_type": "application/json",
+    "cors_origin": "*",
+    "top_level_keys": []
+  },
+  {
+    "method": "GET",
+    "path": "/v1/patterns",
+    "status": 200,
+    "content_type": "application/json",
+    "cors_origin": "*",
+    "body_shape": "not a complete JSON object in first 4096 bytes"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/schedules",
+    "status": 200,
+    "content_type": "application/json",
+    "cors_origin": "*",
+    "top_level_keys": []
+  },
+  {
+    "method": "POST",
+    "path": "/v1/weave:stream",
+    "status": 200,
+    "content_type": "text/event-stream",
+    "cors_origin": "*",
+    "body": "data: {\"error\":\"rpc error: code = InvalidArgument desc = query cannot be empty\",\"progress\":0,\"stage\":\"EXECUTION_STAGE_FAILED\"}\n\n"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows:stream",
+    "status": 400,
+    "content_type": "application/json",
+    "cors_origin": "*",
+    "body": "{\"error\":{\"code\":3,\"message\":\"either pattern or workflow_ref is required\"}}\n"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/providers:abtest",
+    "status": 400,
+    "content_type": "application/json",
+    "cors_origin": "*",
+    "body": "{\"error\":{\"code\":3,\"message\":\"prompt is required\"}}\n"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/clarifications/audit-no-session/answer",
+    "status": 200,
+    "content_type": "application/json",
+    "cors_origin": "*",
+    "body": "{\"error\":\"question not found or already answered\"}"
+  }
+]

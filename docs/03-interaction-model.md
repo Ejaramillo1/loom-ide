@@ -14,11 +14,11 @@ state, evidence, and a control setting. Chat remains available as a way to
 
 | Object | What it is, in plain words | Lives in Loom today as |
 |---|---|---|
-| **Intent** | What the person wants, why, what "done" means, and how much freedom the system has. One intent owns many pieces of work. | Closest: a Weaver request, a task-board goal (`documentation/architecture/task-system.md`, `weaver-system.md`) — but neither is a persistent, person-owned object yet. |
+| **Intent** | What the person wants, why, what "done" means, and how much freedom the system has. One intent owns many pieces of work. | Closest: a Weaver request, a task-board goal (`docs/architecture/task-system.md`, `weaver-system.md`) — but neither is a persistent, person-owned object yet. |
 | **Work** | One piece of work toward an intent: investigate, fix, review, run an experiment. Has state, blockers, and an owner (person, system, or shared). | Tasks on the task board: persistent, dependency-aware, with OPEN / BLOCKED / DONE-style states and claim/close actions. |
-| **Artifact** | Something made or changed: agent, workflow, skill, report, code change, dashboard. Versioned and openable. | Agents/workflows/skills as YAML; artifacts store; MCP Apps served at stable `/apps/<name>` addresses (`documentation/guides/mcp-apps-guide.md`). |
+| **Artifact** | Something made or changed: agent, workflow, skill, report, code change, dashboard. Versioned and openable. | Agents/workflows/skills as YAML; artifacts store; MCP Apps served at stable `/apps/<name>` addresses (`docs/guides/mcp-apps-guide.md`). |
 | **Evidence** | The proof or record behind a claim: test result, trace, judge score, measurement, source link. Always attached to the object it supports. | Observability traces and spans; judge scores; pattern usage records. Today these exist for the system, not yet presented for the person. |
-| **Control** | The settings that decide what the system may do without asking: autonomy level, budget, allowed tools, timeout behaviour. Visible on the object it governs. | `contact_human` requests, workflow HITL gates, learning autonomy modes, decision-layer bands (`documentation/guides/human-in-the-loop.md`, `documentation/reference/agent-configuration.md`). Real — but scattered. |
+| **Control** | The settings that decide what the system may do without asking: autonomy level, budget, allowed tools, timeout behaviour. Visible on the object it governs. | `contact_human` requests, workflow HITL gates, learning autonomy modes, decision-layer bands (`docs/guides/human-in-the-loop.md`, `docs/reference/agent-configuration.md`). Real — but scattered. |
 
 ### Supporting objects (real, but one layer down)
 
@@ -121,7 +121,7 @@ Five levels, set per Intent and adjustable per Work item:
 - Working indicators appear only on the object being worked on, as plain
   state ("running tests — 4 of 9"), never as theatre.
 - Keep-alive and "a hold is coming" signals from Loom are **never** shown.
-  Per `documentation/guides/human-in-the-loop.md`, only a human-in-the-loop
+  Per `docs/guides/human-in-the-loop.md`, only a human-in-the-loop
   request with a non-empty request id is answerable; the other shapes must
   stay invisible. Showing them creates answer boxes that go nowhere.
 

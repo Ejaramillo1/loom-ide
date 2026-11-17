@@ -271,3 +271,125 @@ fn saves_preserve_permissions_and_reject_readonly_files_and_external_symlinks() 
     assert!(workspace::write_text(&fixture.0, "link.md", "overwrite", "keep").is_err());
     assert_eq!(std::fs::read_to_string(external).unwrap(), "keep");
 }
+
+// The local autonomy admission gate (Rule 3) at the command boundary: the
+// exact helper `set_work_autonomy` invokes, tested against direct
+// invocations that bypass the UI entirely (Step 8 / QC-01 — this gate is
+// LOCAL metadata policy, and is never presented as server enforcement).
+
+#[test]
+fn autonomy_admission_rejects_raising_above_the_intent_ceiling() {
+    let err = autonomy_admission("assisted", "delegated", Some("assisted"), None).unwrap_err();
+    assert!(err.contains("its intent allows at most"), "got: {err}");
+    // The same raise WITH justification is still rejected: the ceiling
+    // is not overridable by prose.
+    let err =
+        autonomy_admission("assisted", "delegated", Some("assisted"), Some("because")).unwrap_err();
+    assert!(err.contains("its intent allows at most"), "got: {err}");
+}
+
+#[test]
+fn autonomy_admission_requires_justification_to_raise_within_the_ceiling() {
+    let err = autonomy_admission("manual", "assisted", Some("delegated"), None).unwrap_err();
+    assert!(err.contains("requires a justification"), "got: {err}");
+    assert!(autonomy_admission("manual", "assisted", Some("delegated"), Some("a reason")).is_ok());
+}
+
+#[test]
+fn autonomy_admission_lets_tightening_through_without_justification() {
+    assert!(autonomy_admission("delegated", "manual", Some("delegated"), None).is_ok());
+    assert!(autonomy_admission("collaborative", "assisted", Some("delegated"), None).is_ok());
+}
+
+#[test]
+fn autonomy_admission_rejects_unknown_levels_and_ignores_missing_intents() {
+    assert!(autonomy_admission("manual", "sovereign", None, None).is_err());
+    // Work items without an intent are unaffected by ceilings.
+    assert!(autonomy_admission("assisted", "delegated", None, Some("a reason")).is_ok());
+}
+
+// Migration preview (decision 6 / Step 10): read-only, conflict-honest.
+// The migration itself stays an explicit user-triggered action; these
+// fixtures prove the preview detects collisions and never guesses the
+// open intent-mapping decision.
+
+#[test]
+fn migration_preview_detects_task_name_collisions() {
+    let items = vec![
+        WorkItem {
+            id: "w1".into(),
+            title: "Ship report".into(),
+            status: "active".into(),
+            autonomy: "assisted".into(),
+            updated_label: "Now".into(),
+            updated_at: 0,
+            session_id: None,
+            success_criteria: vec![],
+            artifact_ids: vec![],
+            intent_id: None,
+            autonomy_history: vec![],
+        },
+        WorkItem {
+            id: "w2".into(),
+            title: "ship-report".into(),
+            status: "active".into(),
+            autonomy: "manual".into(),
+            updated_label: "Now".into(),
+            updated_at: 0,
+            session_id: None,
+            success_criteria: vec![],
+            artifact_ids: vec![],
+            intent_id: None,
+            autonomy_history: vec![],
+        },
+    ];
+    let preview = build_migration_preview(&items);
+    assert_eq!(preview.total, 2);
+    assert_eq!(preview.ready, 1);
+    assert_eq!(preview.needs_decision, 1);
+    assert!(
+        preview.items[1]
+            .conflicts
+            .iter()
+            .any(|c| c.contains("collides"))
+    );
+    // Autonomy stays local: noted on every row.
+    assert!(
+        preview.items[0]
+            .notes
+            .iter()
+            .any(|n| n.contains("stays local"))
+    );
+}
+
+#[test]
+fn migration_preview_rejects_untitled_items() {
+    let items = vec![WorkItem {
+        id: "w1".into(),
+        title: "   ".into(),
+        status: "active".into(),
+        autonomy: "manual".into(),
+        updated_label: "Now".into(),
+        updated_at: 0,
+        session_id: None,
+        success_criteria: vec![],
+        artifact_ids: vec![],
+        intent_id: None,
+        autonomy_history: vec![],
+    }];
+    let preview = build_migration_preview(&items);
+    assert!(
+        preview.items[0]
+            .conflicts
+            .iter()
+            .any(|c| c.contains("No usable title"))
+    );
+    assert_eq!(preview.items[0].proposed_task_name, "");
+}
+
+#[test]
+fn migration_task_names_are_url_safe_slugs() {
+    assert_eq!(migration_task_name("Ship the report!"), "ship-the-report");
+    assert_eq!(migration_task_name("  A/B test  "), "a-b-test");
+    assert_eq!(migration_task_name("---"), "");
+}

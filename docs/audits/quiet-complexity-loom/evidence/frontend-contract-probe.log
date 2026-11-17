@@ -1,0 +1,5 @@
+CONFIRMED: live-shaped failed progress marks Loom verified; EOF follows the done path
+CONFIRMED: workflow completion associates execution with work selected at completion
+CONFIRMED: a slow old artifact search overwrites the newer query results
+(node:229407) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

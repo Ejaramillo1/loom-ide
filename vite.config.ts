@@ -16,7 +16,7 @@ export default defineConfig({
       },
     },
     watch: {
-      ignored: ["**/src-tauri/**"],
+      ignored: ["**/src-tauri/**", "**/unity-memory-palace/**"],
     },
   },
   build: {

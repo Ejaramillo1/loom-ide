@@ -1,0 +1,14 @@
+<linker>
+  <!-- GameObject.CreatePrimitive adds a collider via AddComponent, which the
+       IL2CPP managed stripper cannot see as a direct reference. In the WebGL
+       build it removed SphereCollider and CapsuleCollider, so the robot,
+       magnifier, flask and other bench portals rendered but had no colliders
+       to raycast against and could not be clicked. Preserve every primitive
+       collider type so CreatePrimitive always works. -->
+  <assembly fullname="UnityEngine.PhysicsModule">
+    <type fullname="UnityEngine.BoxCollider" preserve="all" />
+    <type fullname="UnityEngine.SphereCollider" preserve="all" />
+    <type fullname="UnityEngine.CapsuleCollider" preserve="all" />
+    <type fullname="UnityEngine.MeshCollider" preserve="all" />
+  </assembly>
+</linker>

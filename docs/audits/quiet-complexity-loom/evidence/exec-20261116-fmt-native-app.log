@@ -1,0 +1,1886 @@
+CWD=/home/ed/loom-ide-tauri
+COMMIT=f75ad9f498106bf676182d5e563794e8e196bd54
+CMD=cargo fmt --check --manifest-path native-app/Cargo.toml
+Diff in /home/ed/loom-ide-tauri/native-app/src/files.rs:243:
+ }
+ 
+ pub fn open_tauri() -> Result<(), String> {
+[31m-    if crate::navigation::activate(crate::navigation::TAURI)? { return Ok(()); }
+(B[m[32m+    if crate::navigation::activate(crate::navigation::TAURI)? {
+(B[m[32m+        return Ok(());
+(B[m[32m+    }
+(B[m     static CHILD: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+     let mut child = CHILD.lock().map_err(|e| e.to_string())?;
+     if let Some(running) = child.as_mut() {
+Diff in /home/ed/loom-ide-tauri/native-app/src/knowledge.rs:1:
+ use serde::{Deserialize, Serialize};
+ use std::{
+[31m-    collections::{HashSet},
+(B[m[32m+    collections::HashSet,
+(B[m     fs,
+     io::Write,
+     path::{Path, PathBuf},
+Diff in /home/ed/loom-ide-tauri/native-app/src/knowledge.rs:234:
+ impl Vault {
+     /// Fixture-backed storage used by the existing domain tests only.
+     #[cfg(test)]
+[31m-    pub fn open(root: PathBuf) -> Result<Self, String> { Self::open_inner(root, false) }
+(B[m[32m+    pub fn open(root: PathBuf) -> Result<Self, String> {
+(B[m[32m+        Self::open_inner(root, false)
+(B[m[32m+    }
+(B[m     /// Normal application view: no starter data and no historical samples.
+[31m-    pub fn open_frontend(root: PathBuf) -> Result<Self, String> { Self::open_inner(root, true) }
+(B[m[32m+    pub fn open_frontend(root: PathBuf) -> Result<Self, String> {
+(B[m[32m+        Self::open_inner(root, true)
+(B[m[32m+    }
+(B[m     fn open_inner(root: PathBuf, frontend: bool) -> Result<Self, String> {
+         if fs::symlink_metadata(&root)
+             .map(|m| m.file_type().is_symlink())
+Diff in /home/ed/loom-ide-tauri/native-app/src/knowledge.rs:271:
+             if frontend {
+                 vault.settings.intent.clear();
+                 let mut writes = Vec::new();
+[31m-                if !vault.root.join(".loom/ledger.json").exists() { writes.push(Self::ledger_op(&vault.ledger)); }
+(B[m[32m+                if !vault.root.join(".loom/ledger.json").exists() {
+(B[m[32m+                    writes.push(Self::ledger_op(&vault.ledger));
+(B[m[32m+                }
+(B[m                 if !vault.root.join(".loom/settings.json").exists() {
+[31m-                    writes.push(WriteOp { path: ".loom/settings.json".into(), content: serde_json::to_string_pretty(&vault.settings).unwrap() });
+(B[m[32m+                    writes.push(WriteOp {
+(B[m[32m+                        path: ".loom/settings.json".into(),
+(B[m[32m+                        content: serde_json::to_string_pretty(&vault.settings).unwrap(),
+(B[m[32m+                    });
+(B[m                 }
+[31m-                writes.push(WriteOp { path: ".loom/initialized".into(), content: "1".into() });
+(B[m[32m+                writes.push(WriteOp {
+(B[m[32m+                    path: ".loom/initialized".into(),
+(B[m[32m+                    content: "1".into(),
+(B[m[32m+                });
+(B[m                 vault.commit(writes)?;
+[31m-            } else { #[cfg(test)] vault.seed()?; }
+(B[m[32m+            } else {
+(B[m[32m+                #[cfg(test)]
+(B[m[32m+                vault.seed()?;
+(B[m[32m+            }
+(B[m         }
+         vault.reload()?;
+         Ok(vault)
+Diff in /home/ed/loom-ide-tauri/native-app/src/knowledge.rs:355:
+                     || n.meta.author == "offline sparring fixture"
+                     || n.meta.source.starts_with("Historical research fixture")
+                     || n.meta.source.starts_with("Historical Mastermind fixture")
+[31m-                    || (n.body.starts_with("Recorded: you chose Configuration ") && n.body.contains("No server experiment ran"));
+(B[m[31m-                if sample { self.hidden_ids.insert(n.meta.id.clone()); }
+(B[m[32m+                    || (n.body.starts_with("Recorded: you chose Configuration ")
+(B[m[32m+                        && n.body.contains("No server experiment ran"));
+(B[m[32m+                if sample {
+(B[m[32m+                    self.hidden_ids.insert(n.meta.id.clone());
+(B[m[32m+                }
+(B[m                 !sample
+             });
+         }
+Diff in /home/ed/loom-ide-tauri/native-app/src/knowledge.rs:405:
+             detail: detail.into(),
+         });
+     }
+[31m-    pub fn is_hidden(&self, id: &str) -> bool { self.hidden_ids.contains(id) }
+(B[m[32m+    pub fn is_hidden(&self, id: &str) -> bool {
+(B[m[32m+        self.hidden_ids.contains(id)
+(B[m[32m+    }
+(B[m     pub fn display_intent(&self) -> &str {
+[31m-        if self.frontend && self.settings.intent == "Understanding agent memory performance" { "" } else { &self.settings.intent }
+(B[m[32m+        if self.frontend && self.settings.intent == "Understanding agent memory performance" {
+(B[m[32m+            ""
+(B[m[32m+        } else {
+(B[m[32m+            &self.settings.intent
+(B[m[32m+        }
+(B[m     }
+     pub fn get(&self, id: &str) -> Option<&Note> {
+         self.notes.iter().find(|n| n.meta.id == id)
+Diff in /home/ed/loom-ide-tauri/native-app/src/knowledge.rs:779:
+     }
+     #[test]
+     fn frontend_starts_empty_and_keeps_real_notes_after_reload() {
+[31m-        let root=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-data").join(new_id());
+(B[m[31m-        let mut v=Vault::open_frontend(root.clone()).unwrap();
+(B[m[31m-        assert!(v.notes.is_empty());assert_eq!(v.display_intent(),"");assert_eq!(v.pending(),0);
+(B[m[31m-        let id=v.create("My memory research","A personal note, not a product example","note",Actor::Human).unwrap();
+(B[m[31m-        let reopened=Vault::open_frontend(root.clone()).unwrap();
+(B[m[31m-        assert_eq!(reopened.notes.len(),1);assert!(reopened.get(&id).is_some());
+(B[m[32m+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+(B[m[32m+            .join("test-data")
+(B[m[32m+            .join(new_id());
+(B[m[32m+        let mut v = Vault::open_frontend(root.clone()).unwrap();
+(B[m[32m+        assert!(v.notes.is_empty());
+(B[m[32m+        assert_eq!(v.display_intent(), "");
+(B[m[32m+        assert_eq!(v.pending(), 0);
+(B[m[32m+        let id = v
+(B[m[32m+            .create(
+(B[m[32m+                "My memory research",
+(B[m[32m+                "A personal note, not a product example",
+(B[m[32m+                "note",
+(B[m[32m+                Actor::Human,
+(B[m[32m+            )
+(B[m[32m+            .unwrap();
+(B[m[32m+        let reopened = Vault::open_frontend(root.clone()).unwrap();
+(B[m[32m+        assert_eq!(reopened.notes.len(), 1);
+(B[m[32m+        assert!(reopened.get(&id).is_some());
+(B[m         fs::remove_dir_all(root).unwrap();
+     }
+     #[test]
+Diff in /home/ed/loom-ide-tauri/native-app/src/knowledge.rs:791:
+     fn frontend_hides_historical_records_without_deleting_or_overwriting_them() {
+[31m-        let root=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-data").join(new_id());
+(B[m[31m-        let mut fixture=Vault::open(root.clone()).unwrap();
+(B[m[31m-        let originals=fixture.notes.iter().map(|n|(n.path.clone(),fs::read(root.join(&n.path)).unwrap())).collect::<Vec<_>>();
+(B[m[31m-        let id=fixture.create("My own note","Keep this visible","note",Actor::Human).unwrap();
+(B[m[31m-        let settings=fs::read(root.join(".loom/settings.json")).unwrap();
+(B[m[31m-        let mut live=Vault::open_frontend(root.clone()).unwrap();
+(B[m[31m-        assert_eq!(live.notes.len(),1);assert!(live.get(&id).is_some());assert!(live.get("mastermind").is_none());assert_eq!(live.pending(),0);
+(B[m[31m-        live.create("Second note","Still real","note",Actor::Human).unwrap();live.reload().unwrap();
+(B[m[31m-        assert_eq!(live.notes.len(),2);
+(B[m[31m-        for (path,bytes) in originals {assert_eq!(fs::read(root.join(path)).unwrap(),bytes);}
+(B[m[31m-        assert_eq!(fs::read(root.join(".loom/settings.json")).unwrap(),settings);
+(B[m[32m+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+(B[m[32m+            .join("test-data")
+(B[m[32m+            .join(new_id());
+(B[m[32m+        let mut fixture = Vault::open(root.clone()).unwrap();
+(B[m[32m+        let originals = fixture
+(B[m[32m+            .notes
+(B[m[32m+            .iter()
+(B[m[32m+            .map(|n| (n.path.clone(), fs::read(root.join(&n.path)).unwrap()))
+(B[m[32m+            .collect::<Vec<_>>();
+(B[m[32m+        let id = fixture
+(B[m[32m+            .create("My own note", "Keep this visible", "note", Actor::Human)
+(B[m[32m+            .unwrap();
+(B[m[32m+        let settings = fs::read(root.join(".loom/settings.json")).unwrap();
+(B[m[32m+        let mut live = Vault::open_frontend(root.clone()).unwrap();
+(B[m[32m+        assert_eq!(live.notes.len(), 1);
+(B[m[32m+        assert!(live.get(&id).is_some());
+(B[m[32m+        assert!(live.get("mastermind").is_none());
+(B[m[32m+        assert_eq!(live.pending(), 0);
+(B[m[32m+        live.create("Second note", "Still real", "note", Actor::Human)
+(B[m[32m+            .unwrap();
+(B[m[32m+        live.reload().unwrap();
+(B[m[32m+        assert_eq!(live.notes.len(), 2);
+(B[m[32m+        for (path, bytes) in originals {
+(B[m[32m+            assert_eq!(fs::read(root.join(path)).unwrap(), bytes);
+(B[m[32m+        }
+(B[m[32m+        assert_eq!(
+(B[m[32m+            fs::read(root.join(".loom/settings.json")).unwrap(),
+(B[m[32m+            settings
+(B[m[32m+        );
+(B[m         live.export_canvas().unwrap();
+[31m-        let canvas=fs::read_to_string(root.join("50 Projects/Agent Memory/Artifacts/Knowledge.canvas")).unwrap();
+(B[m[31m-        assert!(!canvas.contains("mastermind"));assert!(!canvas.contains("hypothesis"));
+(B[m[32m+        let canvas =
+(B[m[32m+            fs::read_to_string(root.join("50 Projects/Agent Memory/Artifacts/Knowledge.canvas"))
+(B[m[32m+                .unwrap();
+(B[m[32m+        assert!(!canvas.contains("mastermind"));
+(B[m[32m+        assert!(!canvas.contains("hypothesis"));
+(B[m         fs::remove_dir_all(root).unwrap();
+     }
+     #[test]
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1:
+ #[allow(dead_code)]
+ mod adapter;
+[31m-mod knowledge;
+(B[m mod files;
+[31m-#[path = "../../shared/navigation.rs"]
+(B[m[31m-mod navigation;
+(B[m[31m-mod work;
+(B[m[32m+mod knowledge;
+(B[m mod loom_adapter;
+ mod loom_sync;
+ mod mechanics;
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:11:
+[32m+#[path = "../../shared/navigation.rs"]
+(B[m[32m+mod navigation;
+(B[m mod scene;
+ mod visual;
+[32m+mod work;
+(B[m use adapter::{AgentAdapter, ContextPack};
+ use eframe::egui::*;
+ use knowledge::*;
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:133:
+             Ok(v) => (Some(v), String::new()),
+             Err(e) => (None, e),
+         };
+[31m-        let colors = Palette::new(vault.as_ref().map(|v| v.settings.light_mode).unwrap_or(false));
+(B[m[32m+        let colors = Palette::new(
+(B[m[32m+            vault
+(B[m[32m+                .as_ref()
+(B[m[32m+                .map(|v| v.settings.light_mode)
+(B[m[32m+                .unwrap_or(false),
+(B[m[32m+        );
+(B[m         apply_appearance(&cc.egui_ctx, colors);
+         let bg = cc
+             .egui_ctx
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:186:
+         }
+     }
+     fn set_appearance(&mut self, ctx: &Context, light: bool) {
+[31m-        if light == self.colors.light { return; }
+(B[m[32m+        if light == self.colors.light {
+(B[m[32m+            return;
+(B[m[32m+        }
+(B[m         if let Some(vault) = self.vault.as_mut() {
+             if let Err(error) = vault.set_appearance(light) {
+                 self.notify(error, true);
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:203:
+         p.rect_filled(r, 14., self.colors.overlay(10));
+         p.rect_stroke(r, 14., Stroke::new(1_f32, self.colors.overlay(22)));
+         for (i, (label, light)) in [("Dark", false), ("White", true)].into_iter().enumerate() {
+[31m-            let hit = Rect::from_min_size(r.min + vec2(3. + i as f32 * 64., 3.), vec2(64., r.height() - 6.));
+(B[m[32m+            let hit = Rect::from_min_size(
+(B[m[32m+                r.min + vec2(3. + i as f32 * 64., 3.),
+(B[m[32m+                vec2(64., r.height() - 6.),
+(B[m[32m+            );
+(B[m             let response = ui.interact(hit, ui.id().with(("appearance", label)), Sense::click());
+[31m-            response.widget_info(|| WidgetInfo::selected(WidgetType::SelectableLabel, true, light == self.colors.light, format!("{label} appearance")));
+(B[m[32m+            response.widget_info(|| {
+(B[m[32m+                WidgetInfo::selected(
+(B[m[32m+                    WidgetType::SelectableLabel,
+(B[m[32m+                    true,
+(B[m[32m+                    light == self.colors.light,
+(B[m[32m+                    format!("{label} appearance"),
+(B[m[32m+                )
+(B[m[32m+            });
+(B[m             if light == self.colors.light || response.hovered() || response.has_focus() {
+[31m-                p.rect_filled(hit, 11., self.colors.accent(if light == self.colors.light { 42 } else { 18 }));
+(B[m[32m+                p.rect_filled(
+(B[m[32m+                    hit,
+(B[m[32m+                    11.,
+(B[m[32m+                    self.colors
+(B[m[32m+                        .accent(if light == self.colors.light { 42 } else { 18 }),
+(B[m[32m+                );
+(B[m             }
+[31m-            p.text(hit.center(), Align2::CENTER_CENTER, label, FontId::proportional(12.),
+(B[m[31m-                if light == self.colors.light { self.colors.text } else { self.colors.second });
+(B[m[31m-            if response.clicked() { self.set_appearance(ui.ctx(), light); }
+(B[m[31m-            response.on_hover_text(format!("Use {label} appearance")).on_hover_cursor(CursorIcon::PointingHand);
+(B[m[32m+            p.text(
+(B[m[32m+                hit.center(),
+(B[m[32m+                Align2::CENTER_CENTER,
+(B[m[32m+                label,
+(B[m[32m+                FontId::proportional(12.),
+(B[m[32m+                if light == self.colors.light {
+(B[m[32m+                    self.colors.text
+(B[m[32m+                } else {
+(B[m[32m+                    self.colors.second
+(B[m[32m+                },
+(B[m[32m+            );
+(B[m[32m+            if response.clicked() {
+(B[m[32m+                self.set_appearance(ui.ctx(), light);
+(B[m[32m+            }
+(B[m[32m+            response
+(B[m[32m+                .on_hover_text(format!("Use {label} appearance"))
+(B[m[32m+                .on_hover_cursor(CursorIcon::PointingHand);
+(B[m         }
+     }
+     fn notify(&mut self, message: impl Into<String>, error: bool) {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:219:
+         if !error {
+[31m-            self.completed_until = self.started.elapsed().as_secs_f64() + mechanics::COMPLETION_SECONDS;
+(B[m[32m+            self.completed_until =
+(B[m[32m+                self.started.elapsed().as_secs_f64() + mechanics::COMPLETION_SECONDS;
+(B[m         }
+         self.toast = Some((message.into(), Instant::now(), error));
+     }
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:277:
+         {
+             Some(State::Error)
+         } else if self.dialog == Some(Dialog::Review)
+[31m-            || self.vault.as_ref().map(|v| v.state() == State::AwaitingApproval).unwrap_or(false)
+(B[m[32m+            || self
+(B[m[32m+                .vault
+(B[m[32m+                .as_ref()
+(B[m[32m+                .map(|v| v.state() == State::AwaitingApproval)
+(B[m[32m+                .unwrap_or(false)
+(B[m         {
+             Some(State::AwaitingApproval)
+         } else {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:284:
+             None
+         };
+[31m-        mechanics::sphere_state(attention,
+(B[m[31m-            self.started.elapsed().as_secs_f64() < self.processing_until, false, &self.input,
+(B[m[31m-            self.started.elapsed().as_secs_f64() < self.completed_until)
+(B[m[32m+        mechanics::sphere_state(
+(B[m[32m+            attention,
+(B[m[32m+            self.started.elapsed().as_secs_f64() < self.processing_until,
+(B[m[32m+            false,
+(B[m[32m+            &self.input,
+(B[m[32m+            self.started.elapsed().as_secs_f64() < self.completed_until,
+(B[m[32m+        )
+(B[m     }
+     fn orb_image(&self, p: &Painter, c: Pos2, d: f32, logo: bool) {
+[31m-        let reduced = self.vault.as_ref().map(|v| v.settings.reduced_motion).unwrap_or(true);
+(B[m[32m+        let reduced = self
+(B[m[32m+            .vault
+(B[m[32m+            .as_ref()
+(B[m[32m+            .map(|v| v.settings.reduced_motion)
+(B[m[32m+            .unwrap_or(true);
+(B[m         let elapsed = self.started.elapsed().as_secs_f64();
+         if !logo {
+             let tint = match self.current_state() {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:306:
+                 let t = ring as f32 / 24.;
+                 let radius = d * 0.5 + (outer - d * 0.5) * t;
+                 let alpha = (mechanics::glow_alpha(elapsed, reduced) as f32
+[31m-                    * 0.55 * (1. - t).powi(2)) as u8;
+(B[m[32m+                    * 0.55
+(B[m[32m+                    * (1. - t).powi(2)) as u8;
+(B[m                 let channel = |c: u8| (c as u16 * alpha as u16 / 255) as u8;
+                 let color = Color32::from_rgba_premultiplied(
+[31m-                    channel(tint.r()), channel(tint.g()), channel(tint.b()), alpha);
+(B[m[32m+                    channel(tint.r()),
+(B[m[32m+                    channel(tint.g()),
+(B[m[32m+                    channel(tint.b()),
+(B[m[32m+                    alpha,
+(B[m[32m+                );
+(B[m                 for segment in 0..=96 {
+                     let a = segment as f32 / 96. * std::f32::consts::TAU;
+                     halo.colored_vertex(c + vec2(a.cos(), a.sin()) * radius, color);
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:331:
+         );
+         if !logo {
+             for k in 0..6 {
+[31m-                let points = mechanics::wave_points(d * 0.5, elapsed, reduced, self.current_state(), k)
+(B[m[31m-                    .into_iter().map(|[x,y]| c + vec2(x,y)).collect::<Vec<_>>();
+(B[m[32m+                let points =
+(B[m[32m+                    mechanics::wave_points(d * 0.5, elapsed, reduced, self.current_state(), k)
+(B[m[32m+                        .into_iter()
+(B[m[32m+                        .map(|[x, y]| c + vec2(x, y))
+(B[m[32m+                        .collect::<Vec<_>>();
+(B[m                 if points.len() >= mechanics::RIBBON_MIN_POINTS {
+[31m-                    p.add(Shape::line(points, Stroke::new(mechanics::RIBBON_WIDTH,
+(B[m[31m-                        Color32::from_rgba_premultiplied(20, 16, 14, 24))));
+(B[m[32m+                    p.add(Shape::line(
+(B[m[32m+                        points,
+(B[m[32m+                        Stroke::new(
+(B[m[32m+                            mechanics::RIBBON_WIDTH,
+(B[m[32m+                            Color32::from_rgba_premultiplied(20, 16, 14, 24),
+(B[m[32m+                        ),
+(B[m[32m+                    ));
+(B[m                 }
+             }
+         }
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:342:
+     }
+     fn top(&mut self, ui: &mut Ui, w: f32, workspace: bool) {
+[31m-        ui.allocate_new_ui(UiBuilder::new().max_rect(rect(160., 8., (w - 520.).max(140.), 26.)), |ui| {
+(B[m[31m-            ui.horizontal(|ui| {
+(B[m[31m-                ui.menu_button("File", |ui| {
+(B[m[31m-                    if ui.button("Files & editor").clicked() { self.folder=None; self.view=View::Files; self.dialog=None; ui.close_menu(); }
+(B[m[31m-                    if ui.button("Capture note").clicked() { self.dialog=Some(Dialog::New);ui.close_menu(); }
+(B[m[31m-                    if ui.button("Go to Tauri environment").clicked() { if let Err(e)=files::open_tauri(){self.notify(e,true);} ui.close_menu(); }
+(B[m[32m+        ui.allocate_new_ui(
+(B[m[32m+            UiBuilder::new().max_rect(rect(160., 8., (w - 520.).max(140.), 26.)),
+(B[m[32m+            |ui| {
+(B[m[32m+                ui.horizontal(|ui| {
+(B[m[32m+                    ui.menu_button("File", |ui| {
+(B[m[32m+                        if ui.button("Files & editor").clicked() {
+(B[m[32m+                            self.folder = None;
+(B[m[32m+                            self.view = View::Files;
+(B[m[32m+                            self.dialog = None;
+(B[m[32m+                            ui.close_menu();
+(B[m[32m+                        }
+(B[m[32m+                        if ui.button("Capture note").clicked() {
+(B[m[32m+                            self.dialog = Some(Dialog::New);
+(B[m[32m+                            ui.close_menu();
+(B[m[32m+                        }
+(B[m[32m+                        if ui.button("Go to Tauri environment").clicked() {
+(B[m[32m+                            if let Err(e) = files::open_tauri() {
+(B[m[32m+                                self.notify(e, true);
+(B[m[32m+                            }
+(B[m[32m+                            ui.close_menu();
+(B[m[32m+                        }
+(B[m[32m+                    });
+(B[m[32m+                    ui.menu_button("View", |ui| {
+(B[m[32m+                        for (label, view) in [
+(B[m[32m+                            ("Home", View::Home),
+(B[m[32m+                            ("Work", View::Work),
+(B[m[32m+                            ("Files", View::Files),
+(B[m[32m+                            ("Knowledge", View::Knowledge),
+(B[m[32m+                            ("Canvas", View::Canvas),
+(B[m[32m+                            ("Experiments", View::Experiments),
+(B[m[32m+                            ("Decisions", View::Decisions),
+(B[m[32m+                            ("Activity", View::Activity),
+(B[m[32m+                        ] {
+(B[m[32m+                            if ui.button(label).clicked() {
+(B[m[32m+                                self.folder = None;
+(B[m[32m+                                self.view = view;
+(B[m[32m+                                ui.close_menu();
+(B[m[32m+                            }
+(B[m[32m+                        }
+(B[m[32m+                    });
+(B[m                 });
+[31m-                ui.menu_button("View", |ui| {
+(B[m[31m-                    for (label,view) in [("Home",View::Home),("Work",View::Work),("Files",View::Files),("Knowledge",View::Knowledge),("Canvas",View::Canvas),("Experiments",View::Experiments),("Decisions",View::Decisions),("Activity",View::Activity)] {
+(B[m[31m-                        if ui.button(label).clicked(){self.folder=None;self.view=view;ui.close_menu();}
+(B[m[31m-                    }
+(B[m[31m-                });
+(B[m[31m-            });
+(B[m[31m-        });
+(B[m[32m+            },
+(B[m[32m+        );
+(B[m         let p = ui.painter().clone();
+         let r = rect(32., 20., 125., 48.);
+         let home = ui.interact(r, Id::new("Home logo"), Sense::click());
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:377:
+                 .as_ref()
+                 .map(|v| v.display_intent())
+                 .unwrap_or("Knowledge workspace");
+[31m-            txt(&p.with_clip_rect(rect(160., 52., w - 520., 26.)), 160., 54., intent, 14., self.colors.second);
+(B[m[32m+            txt(
+(B[m[32m+                &p.with_clip_rect(rect(160., 52., w - 520., 26.)),
+(B[m[32m+                160.,
+(B[m[32m+                54.,
+(B[m[32m+                intent,
+(B[m[32m+                14.,
+(B[m[32m+                self.colors.second,
+(B[m[32m+            );
+(B[m         }
+         self.appearance_switch(ui, rect(w - 334., 27., 134., 34.));
+         if icon_button(
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:438:
+             .unwrap_or("Your local research workspace".into());
+         let rr = rect(48., 137., iw, 36.);
+         let ir = ui.interact(rr, Id::new("Active human intent"), Sense::click());
+[31m-        wrapped(&p, rr, if intent.is_empty() { "Set your intent".into() } else { intent }, 25., self.colors.text);
+(B[m[32m+        wrapped(
+(B[m[32m+            &p,
+(B[m[32m+            rr,
+(B[m[32m+            if intent.is_empty() {
+(B[m[32m+                "Set your intent".into()
+(B[m[32m+            } else {
+(B[m[32m+                intent
+(B[m[32m+            },
+(B[m[32m+            25.,
+(B[m[32m+            self.colors.text,
+(B[m[32m+        );
+(B[m         if ir.clicked() {
+             self.intent_draft = self
+                 .vault
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:467:
+             (w * (630. / 1600.)).min(w - 640.)
+         };
+         let cy = (h * 0.48333).max(345.).min(h - 230.);
+[31m-        let d = if narrow { 330_f32.min(w * 0.61) } else { 370. }
+(B[m[31m-            .min((h - 440.).max(200.));
+(B[m[32m+        let d = if narrow { 330_f32.min(w * 0.61) } else { 370. }.min((h - 440.).max(200.));
+(B[m         let orbrect = Rect::from_center_size(pos2(cx, cy), vec2(d, d));
+         self.orb_image(&p, orbrect.center(), d, false);
+         let or = ui.interact(orbrect, Id::new("Sphere activity"), Sense::click());
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:486:
+             p.text(
+                 pos2(cx, cy + d / 2. + 44.),
+                 Align2::CENTER_CENTER,
+[31m-                format!("{} · View activity", mechanics::state_words(self.current_state())),
+(B[m[32m+                format!(
+(B[m[32m+                    "{} · View activity",
+(B[m[32m+                    mechanics::state_words(self.current_state())
+(B[m[32m+                ),
+(B[m                 FontId::proportional(12.),
+                 self.colors.second,
+             );
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:566:
+         let p = ui.painter().clone();
+         glass(&p, r, panel_radius());
+         icon(&p, "chat", r.min + vec2(30., 32.), 20., self.colors.text);
+[31m-        txt(&p, r.left() + 51., r.top() + 21., "Conversation", 16., self.colors.text);
+(B[m[32m+        txt(
+(B[m[32m+            &p,
+(B[m[32m+            r.left() + 51.,
+(B[m[32m+            r.top() + 21.,
+(B[m[32m+            "Conversation",
+(B[m[32m+            16.,
+(B[m[32m+            self.colors.text,
+(B[m[32m+        );
+(B[m         if icon_button(
+             ui,
+             rect(r.right() - 47., r.top() + 12., 34., 36.),
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:609:
+                                         .show(ui, |ui| {
+                                             ui.set_width(232.);
+                                             ui.label(
+[31m-                                                RichText::new(&msg.text).size(14.).color(self.colors.text),
+(B[m[32m+                                                RichText::new(&msg.text)
+(B[m[32m+                                                    .size(14.)
+(B[m[32m+                                                    .color(self.colors.text),
+(B[m                                             );
+                                         });
+                                 });
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:621:
+                                     self.orb_image(ui.painter(), ir.center(), 22., true);
+                                     ui.vertical(|ui| {
+                                         ui.set_width(history.width() - 47.);
+[31m-                                        ui.label(RichText::new(&msg.text).size(14.).color(self.colors.second));
+(B[m[32m+                                        ui.label(
+(B[m[32m+                                            RichText::new(&msg.text)
+(B[m[32m+                                                .size(14.)
+(B[m[32m+                                                .color(self.colors.second),
+(B[m[32m+                                        );
+(B[m                                         ui.add_space(8.);
+                                         if !msg.links.is_empty() {
+                                             Frame::none()
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:628:
+[31m-                                                .stroke(Stroke::new(1_f32,
+(B[m[31m-                                                    self.colors.overlay(25),
+(B[m[31m-                                                ))
+(B[m[32m+                                                .stroke(Stroke::new(1_f32, self.colors.overlay(25)))
+(B[m                                                 .rounding(control_radius())
+                                                 .inner_margin(3.)
+                                                 .show(ui, |ui| {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:634:
+                                                     for (i, id) in msg.links.iter().enumerate() {
+[31m-                                                        let label = self.vault
+(B[m[31m-                                                                .as_ref()
+(B[m[31m-                                                                .and_then(|v| v.get(id))
+(B[m[31m-                                                                .map(|n| n.meta.title.clone())
+(B[m[31m-                                                                .unwrap_or(id.clone());
+(B[m[32m+                                                        let label = self
+(B[m[32m+                                                            .vault
+(B[m[32m+                                                            .as_ref()
+(B[m[32m+                                                            .and_then(|v| v.get(id))
+(B[m[32m+                                                            .map(|n| n.meta.title.clone())
+(B[m[32m+                                                            .unwrap_or(id.clone());
+(B[m                                                         let (rr, res) = ui.allocate_exact_size(
+                                                             vec2(ui.available_width(), 43.),
+                                                             Sense::click(),
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:691:
+                                                                         rr.bottom(),
+                                                                     ),
+                                                                 ],
+[31m-                                                                Stroke::new(0.7_f32,
+(B[m[32m+                                                                Stroke::new(
+(B[m[32m+                                                                    0.7_f32,
+(B[m                                                                     self.colors.overlay(20),
+                                                                 ),
+                                                             );
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:704:
+                                 ui.add_space(15.);
+                             }
+                         }
+[31m-
+(B[m                     });
+             },
+         );
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:761:
+         }
+     }
+     fn send_message(&mut self) {
+[31m-        let manual = self.vault.as_ref().map(|v| v.settings.manual_chat).unwrap_or(false);
+(B[m[32m+        let manual = self
+(B[m[32m+            .vault
+(B[m[32m+            .as_ref()
+(B[m[32m+            .map(|v| v.settings.manual_chat)
+(B[m[32m+            .unwrap_or(false);
+(B[m         let q = match mechanics::prepare_chat(&self.input, manual) {
+             Ok(Some(text)) => text,
+             Ok(None) => return,
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:777:
+             return;
+         }
+         self.input.clear();
+[31m-        self.processing_until = self.started.elapsed().as_secs_f64() + mechanics::PROCESSING_SECONDS;
+(B[m[31m-        self.messages.push(Message { user: true, text: q.clone(), links: vec![] });
+(B[m[31m-            let intent = self
+(B[m[31m-                .vault
+(B[m[31m-                .as_ref()
+(B[m[31m-                .map(|v| v.display_intent().to_string())
+(B[m[31m-                .unwrap_or_default();
+(B[m[31m-            let object_ids = if self.selected.is_empty() {
+(B[m[31m-                Vec::new()
+(B[m[31m-            } else {
+(B[m[31m-                vec![self.selected.clone()]
+(B[m[31m-            };
+(B[m[31m-            let context = ContextPack {
+(B[m[31m-                intent,
+(B[m[31m-                object_ids,
+(B[m[31m-                excluded_ids: Vec::new(),
+(B[m[31m-                estimated_tokens: (q.chars().count() + 3) / 4,
+(B[m[31m-            };
+(B[m[31m-            match self.adapter.submit(&context, &q) {
+(B[m[31m-                Ok(text) => self.messages.push(Message {
+(B[m[31m-                    user: false,
+(B[m[31m-                    text,
+(B[m[31m-                    links: vec![],
+(B[m[31m-                }),
+(B[m[31m-                Err(e) => self.messages.push(Message {
+(B[m[31m-                    user: false,
+(B[m[31m-                    text: format!("Loom could not answer: {e}"),
+(B[m[31m-                    links: vec![],
+(B[m[31m-                }),
+(B[m[31m-            }
+(B[m[31m-            self.completed_until =
+(B[m[31m-                self.started.elapsed().as_secs_f64() + mechanics::COMPLETION_SECONDS;
+(B[m[32m+        self.processing_until =
+(B[m[32m+            self.started.elapsed().as_secs_f64() + mechanics::PROCESSING_SECONDS;
+(B[m[32m+        self.messages.push(Message {
+(B[m[32m+            user: true,
+(B[m[32m+            text: q.clone(),
+(B[m[32m+            links: vec![],
+(B[m[32m+        });
+(B[m[32m+        let intent = self
+(B[m[32m+            .vault
+(B[m[32m+            .as_ref()
+(B[m[32m+            .map(|v| v.display_intent().to_string())
+(B[m[32m+            .unwrap_or_default();
+(B[m[32m+        let object_ids = if self.selected.is_empty() {
+(B[m[32m+            Vec::new()
+(B[m[32m+        } else {
+(B[m[32m+            vec![self.selected.clone()]
+(B[m[32m+        };
+(B[m[32m+        let context = ContextPack {
+(B[m[32m+            intent,
+(B[m[32m+            object_ids,
+(B[m[32m+            excluded_ids: Vec::new(),
+(B[m[32m+            estimated_tokens: (q.chars().count() + 3) / 4,
+(B[m[32m+        };
+(B[m[32m+        match self.adapter.submit(&context, &q) {
+(B[m[32m+            Ok(text) => self.messages.push(Message {
+(B[m[32m+                user: false,
+(B[m[32m+                text,
+(B[m[32m+                links: vec![],
+(B[m[32m+            }),
+(B[m[32m+            Err(e) => self.messages.push(Message {
+(B[m[32m+                user: false,
+(B[m[32m+                text: format!("Loom could not answer: {e}"),
+(B[m[32m+                links: vec![],
+(B[m[32m+            }),
+(B[m[32m+        }
+(B[m[32m+        self.completed_until = self.started.elapsed().as_secs_f64() + mechanics::COMPLETION_SECONDS;
+(B[m     }
+     fn workspace(&mut self, ui: &mut Ui, r: Rect) {
+         let (w, h) = (r.width(), r.height());
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:862:
+                     name,
+                     rr.min + vec2(23., 18.),
+                     18.,
+[31m-                    if self.view == *view { self.colors.purple } else { self.colors.muted },
+(B[m[32m+                    if self.view == *view {
+(B[m[32m+                        self.colors.purple
+(B[m[32m+                    } else {
+(B[m[32m+                        self.colors.muted
+(B[m[32m+                    },
+(B[m                 );
+                 txt(
+                     &p,
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:870:
+                     rr.top() + 8.,
+                     *label,
+                     14.,
+[31m-                    if self.view == *view { self.colors.text } else { self.colors.second },
+(B[m[32m+                    if self.view == *view {
+(B[m[32m+                        self.colors.text
+(B[m[32m+                    } else {
+(B[m[32m+                        self.colors.second
+(B[m[32m+                    },
+(B[m                 );
+                 if res.clicked() {
+                     nav = Some(view.clone());
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1013:
+                             format!(
+                                 "{} objects  ·  {} relationships",
+                                 v.notes.len(),
+[31m-                                v.ledger.edges.iter().filter(|e| v.get(&e.from).is_some() && v.get(&e.to).is_some()).count()
+(B[m[32m+                                v.ledger
+(B[m[32m+                                    .edges
+(B[m[32m+                                    .iter()
+(B[m[32m+                                    .filter(|e| v.get(&e.from).is_some() && v.get(&e.to).is_some())
+(B[m[32m+                                    .count()
+(B[m                             )
+                         })
+                         .unwrap_or_default();
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1035:
+                     {
+                         self.sync_from_loom();
+                     }
+[31m-                    self.graph(ui, rect(content.left(), content.top()+88., content.width(), (content.height()-96.).max(100.)));
+(B[m[32m+                    self.graph(
+(B[m[32m+                        ui,
+(B[m[32m+                        rect(
+(B[m[32m+                            content.left(),
+(B[m[32m+                            content.top() + 88.,
+(B[m[32m+                            content.width(),
+(B[m[32m+                            (content.height() - 96.).max(100.),
+(B[m[32m+                        ),
+(B[m[32m+                    );
+(B[m                 }
+                 View::Canvas => {
+                     txt(
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1065:
+                         true,
+                     );
+                 }
+[31m-                View::Work => { ui.allocate_new_ui(UiBuilder::new().max_rect(content), |ui| { self.work.ui(ui); }); },
+(B[m[31m-                View::Files => { ui.allocate_new_ui(UiBuilder::new().max_rect(content), |ui| { self.files.ui(ui); }); },
+(B[m[32m+                View::Work => {
+(B[m[32m+                    ui.allocate_new_ui(UiBuilder::new().max_rect(content), |ui| {
+(B[m[32m+                        self.work.ui(ui);
+(B[m[32m+                    });
+(B[m[32m+                }
+(B[m[32m+                View::Files => {
+(B[m[32m+                    ui.allocate_new_ui(UiBuilder::new().max_rect(content), |ui| {
+(B[m[32m+                        self.files.ui(ui);
+(B[m[32m+                    });
+(B[m[32m+                }
+(B[m                 View::Experiments => self.note_list(ui, content, "experiment"),
+                 View::Decisions => self.note_list(ui, content, "decision"),
+                 View::Activity => self.traces(ui, content),
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1079:
+         p.rect_filled(r, 16., self.colors.surface(Color32::from_rgb(19, 21, 35)));
+         p.rect_stroke(r, 16., Stroke::new(1.0_f32, self.colors.overlay(17)));
+         icon(&p, "nodes", r.min + vec2(24., 24.), 18., self.colors.purple);
+[31m-        txt(&p, r.left() + 43., r.top() + 15., "Graph view", 14., self.colors.text);
+(B[m[32m+        txt(
+(B[m[32m+            &p,
+(B[m[32m+            r.left() + 43.,
+(B[m[32m+            r.top() + 15.,
+(B[m[32m+            "Graph view",
+(B[m[32m+            14.,
+(B[m[32m+            self.colors.text,
+(B[m[32m+        );
+(B[m         if self.focus_graph.is_some() {
+             if pill(
+                 ui,
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1127:
+             })
+             .collect();
+         if visible.is_empty() {
+[31m-            wrapped(&p, rect(r.left()+24.,r.top()+72.,r.width()-48.,60.), "No notes yet. Capture a note or sync from Loom to build your graph.",14.,self.colors.muted);
+(B[m[32m+            wrapped(
+(B[m[32m+                &p,
+(B[m[32m+                rect(r.left() + 24., r.top() + 72., r.width() - 48., 60.),
+(B[m[32m+                "No notes yet. Capture a note or sync from Loom to build your graph.",
+(B[m[32m+                14.,
+(B[m[32m+                self.colors.muted,
+(B[m[32m+            );
+(B[m             return;
+         }
+         let center = pos2(r.center().x, r.center().y + 18.);
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1145:
+         }
+         for e in &edges {
+             if let (Some(a), Some(b)) = (positions.get(&e.from), positions.get(&e.to)) {
+[31m-                p.line_segment(
+(B[m[31m-                    [*a, *b],
+(B[m[31m-                    Stroke::new(0.8f32, self.colors.overlay(65)),
+(B[m[31m-                );
+(B[m[32m+                p.line_segment([*a, *b], Stroke::new(0.8f32, self.colors.overlay(65)));
+(B[m                 let delta = (*b - *a).normalized();
+                 let end = *b - delta * 16.;
+                 p.add(Shape::line(
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1193:
+                 self.colors.text,
+                 145.,
+             );
+[31m-            p.galley(pos2(c.x - g.size().x / 2., c.y + radius + 8.), g, self.colors.text);
+(B[m[32m+            p.galley(
+(B[m[32m+                pos2(c.x - g.size().x / 2., c.y + radius + 8.),
+(B[m[32m+                g,
+(B[m[32m+                self.colors.text,
+(B[m[32m+            );
+(B[m             let response = ui.interact(
+                 Rect::from_center_size(c + vec2(0., 12.), vec2(130., 60.)),
+                 Id::new(("graph node", &n.meta.id)),
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1213:
+         }
+     }
+     fn canvas(&mut self, ui: &mut Ui, r: Rect, full: bool) {
+[31m-        let notes = self.vault.as_ref().map(|v| v.notes.clone()).unwrap_or_default();
+(B[m[31m-        let edges = self.vault.as_ref().map(|v| v.ledger.edges.clone()).unwrap_or_default();
+(B[m[32m+        let notes = self
+(B[m[32m+            .vault
+(B[m[32m+            .as_ref()
+(B[m[32m+            .map(|v| v.notes.clone())
+(B[m[32m+            .unwrap_or_default();
+(B[m[32m+        let edges = self
+(B[m[32m+            .vault
+(B[m[32m+            .as_ref()
+(B[m[32m+            .map(|v| v.ledger.edges.clone())
+(B[m[32m+            .unwrap_or_default();
+(B[m         let mut open = None;
+         let mut export = false;
+[31m-        ui.allocate_new_ui(UiBuilder::new().max_rect(r).layout(Layout::top_down(Align::Min)), |ui| {
+(B[m[31m-            ui.horizontal(|ui| {
+(B[m[31m-                ui.heading("Canvas");
+(B[m[31m-                if full && ui.add_enabled(!notes.is_empty(), Button::new("Export JSON Canvas")).clicked() { export = true; }
+(B[m[31m-            });
+(B[m[31m-            if notes.is_empty() {
+(B[m[31m-                ui.label("No notes yet. Capture a note to start your canvas.");
+(B[m[31m-                return;
+(B[m[31m-            }
+(B[m[31m-            ScrollArea::both().id_salt(("knowledge canvas", full)).max_height((r.height()-48.).max(40.)).show(ui, |ui| {
+(B[m[31m-                let columns = ((r.width()-24.)/240.).floor().max(1.) as usize;
+(B[m[31m-                let rows = notes.len().div_ceil(columns);
+(B[m[31m-                let (area,_) = ui.allocate_exact_size(vec2((columns*240) as f32, (rows*148+16) as f32), Sense::hover());
+(B[m[31m-                let painter = ui.painter().clone();
+(B[m[31m-                let mut positions = std::collections::HashMap::new();
+(B[m[31m-                for (i,note) in notes.iter().enumerate() {
+(B[m[31m-                    let default = pos2((i%columns) as f32*240., (i/columns) as f32*148.);
+(B[m[31m-                    let offset = self.canvas_positions.get(&note.meta.id).copied().unwrap_or(default);
+(B[m[31m-                    let rect = Rect::from_min_size(area.min+offset.to_vec2(),vec2(220.,128.));
+(B[m[31m-                    positions.insert(note.meta.id.clone(),rect);
+(B[m[31m-                }
+(B[m[31m-                for edge in &edges {
+(B[m[31m-                    if let (Some(a),Some(b))=(positions.get(&edge.from),positions.get(&edge.to)) {
+(B[m[31m-                        painter.line_segment([a.center(),b.center()],Stroke::new(1_f32,self.colors.purple));
+(B[m[32m+        ui.allocate_new_ui(
+(B[m[32m+            UiBuilder::new()
+(B[m[32m+                .max_rect(r)
+(B[m[32m+                .layout(Layout::top_down(Align::Min)),
+(B[m[32m+            |ui| {
+(B[m[32m+                ui.horizontal(|ui| {
+(B[m[32m+                    ui.heading("Canvas");
+(B[m[32m+                    if full
+(B[m[32m+                        && ui
+(B[m[32m+                            .add_enabled(!notes.is_empty(), Button::new("Export JSON Canvas"))
+(B[m[32m+                            .clicked()
+(B[m[32m+                    {
+(B[m[32m+                        export = true;
+(B[m                     }
+[32m+                });
+(B[m[32m+                if notes.is_empty() {
+(B[m[32m+                    ui.label("No notes yet. Capture a note to start your canvas.");
+(B[m[32m+                    return;
+(B[m                 }
+[31m-                for note in &notes {
+(B[m[31m-                    let rect = positions[&note.meta.id];
+(B[m[31m-                    let response = ui.interact(rect,Id::new(("canvas note",&note.meta.id,full)),Sense::click_and_drag());
+(B[m[31m-                    if response.dragged() {
+(B[m[31m-                        let new = (rect.min+response.drag_delta()-area.min).max(Vec2::ZERO);
+(B[m[31m-                        self.canvas_positions.insert(note.meta.id.clone(),pos2(new.x,new.y));
+(B[m[31m-                    }
+(B[m[31m-                    painter.rect_filled(rect,control_radius(),self.colors.surface(Color32::from_rgb(31,34,51)));
+(B[m[31m-                    painter.rect_stroke(rect,control_radius(),Stroke::new(1_f32,self.colors.overlay(45)));
+(B[m[31m-                    let clip = painter.with_clip_rect(rect.shrink(10.));
+(B[m[31m-                    txt(&clip,rect.left()+12.,rect.top()+10.,&note.meta.kind,12.,self.colors.purple);
+(B[m[31m-                    wrapped(&clip,Rect::from_min_size(pos2(rect.left()+12.,rect.top()+32.),vec2(196.,44.)),&note.meta.title,14.,self.colors.text);
+(B[m[31m-                    wrapped(&clip,Rect::from_min_size(pos2(rect.left()+12.,rect.top()+80.),vec2(196.,36.)),note.body.chars().take(120).collect::<String>(),12.,self.colors.second);
+(B[m[31m-                    if response.clicked() { open=Some(note.meta.id.clone()); }
+(B[m[31m-                }
+(B[m[31m-            });
+(B[m[31m-        });
+(B[m[32m+                ScrollArea::both()
+(B[m[32m+                    .id_salt(("knowledge canvas", full))
+(B[m[32m+                    .max_height((r.height() - 48.).max(40.))
+(B[m[32m+                    .show(ui, |ui| {
+(B[m[32m+                        let columns = ((r.width() - 24.) / 240.).floor().max(1.) as usize;
+(B[m[32m+                        let rows = notes.len().div_ceil(columns);
+(B[m[32m+                        let (area, _) = ui.allocate_exact_size(
+(B[m[32m+                            vec2((columns * 240) as f32, (rows * 148 + 16) as f32),
+(B[m[32m+                            Sense::hover(),
+(B[m[32m+                        );
+(B[m[32m+                        let painter = ui.painter().clone();
+(B[m[32m+                        let mut positions = std::collections::HashMap::new();
+(B[m[32m+                        for (i, note) in notes.iter().enumerate() {
+(B[m[32m+                            let default =
+(B[m[32m+                                pos2((i % columns) as f32 * 240., (i / columns) as f32 * 148.);
+(B[m[32m+                            let offset = self
+(B[m[32m+                                .canvas_positions
+(B[m[32m+                                .get(&note.meta.id)
+(B[m[32m+                                .copied()
+(B[m[32m+                                .unwrap_or(default);
+(B[m[32m+                            let rect =
+(B[m[32m+                                Rect::from_min_size(area.min + offset.to_vec2(), vec2(220., 128.));
+(B[m[32m+                            positions.insert(note.meta.id.clone(), rect);
+(B[m[32m+                        }
+(B[m[32m+                        for edge in &edges {
+(B[m[32m+                            if let (Some(a), Some(b)) =
+(B[m[32m+                                (positions.get(&edge.from), positions.get(&edge.to))
+(B[m[32m+                            {
+(B[m[32m+                                painter.line_segment(
+(B[m[32m+                                    [a.center(), b.center()],
+(B[m[32m+                                    Stroke::new(1_f32, self.colors.purple),
+(B[m[32m+                                );
+(B[m[32m+                            }
+(B[m[32m+                        }
+(B[m[32m+                        for note in &notes {
+(B[m[32m+                            let rect = positions[&note.meta.id];
+(B[m[32m+                            let response = ui.interact(
+(B[m[32m+                                rect,
+(B[m[32m+                                Id::new(("canvas note", &note.meta.id, full)),
+(B[m[32m+                                Sense::click_and_drag(),
+(B[m[32m+                            );
+(B[m[32m+                            if response.dragged() {
+(B[m[32m+                                let new =
+(B[m[32m+                                    (rect.min + response.drag_delta() - area.min).max(Vec2::ZERO);
+(B[m[32m+                                self.canvas_positions
+(B[m[32m+                                    .insert(note.meta.id.clone(), pos2(new.x, new.y));
+(B[m[32m+                            }
+(B[m[32m+                            painter.rect_filled(
+(B[m[32m+                                rect,
+(B[m[32m+                                control_radius(),
+(B[m[32m+                                self.colors.surface(Color32::from_rgb(31, 34, 51)),
+(B[m[32m+                            );
+(B[m[32m+                            painter.rect_stroke(
+(B[m[32m+                                rect,
+(B[m[32m+                                control_radius(),
+(B[m[32m+                                Stroke::new(1_f32, self.colors.overlay(45)),
+(B[m[32m+                            );
+(B[m[32m+                            let clip = painter.with_clip_rect(rect.shrink(10.));
+(B[m[32m+                            txt(
+(B[m[32m+                                &clip,
+(B[m[32m+                                rect.left() + 12.,
+(B[m[32m+                                rect.top() + 10.,
+(B[m[32m+                                &note.meta.kind,
+(B[m[32m+                                12.,
+(B[m[32m+                                self.colors.purple,
+(B[m[32m+                            );
+(B[m[32m+                            wrapped(
+(B[m[32m+                                &clip,
+(B[m[32m+                                Rect::from_min_size(
+(B[m[32m+                                    pos2(rect.left() + 12., rect.top() + 32.),
+(B[m[32m+                                    vec2(196., 44.),
+(B[m[32m+                                ),
+(B[m[32m+                                &note.meta.title,
+(B[m[32m+                                14.,
+(B[m[32m+                                self.colors.text,
+(B[m[32m+                            );
+(B[m[32m+                            wrapped(
+(B[m[32m+                                &clip,
+(B[m[32m+                                Rect::from_min_size(
+(B[m[32m+                                    pos2(rect.left() + 12., rect.top() + 80.),
+(B[m[32m+                                    vec2(196., 36.),
+(B[m[32m+                                ),
+(B[m[32m+                                note.body.chars().take(120).collect::<String>(),
+(B[m[32m+                                12.,
+(B[m[32m+                                self.colors.second,
+(B[m[32m+                            );
+(B[m[32m+                            if response.clicked() {
+(B[m[32m+                                open = Some(note.meta.id.clone());
+(B[m[32m+                            }
+(B[m[32m+                        }
+(B[m[32m+                    });
+(B[m[32m+            },
+(B[m[32m+        );
+(B[m         if export {
+[31m-            let result=self.vault.as_ref().ok_or("Vault unavailable".to_string()).and_then(|v|v.export_canvas());
+(B[m[31m-            self.outcome(result,"Canvas exported to the vault's Artifacts folder");
+(B[m[32m+            let result = self
+(B[m[32m+                .vault
+(B[m[32m+                .as_ref()
+(B[m[32m+                .ok_or("Vault unavailable".to_string())
+(B[m[32m+                .and_then(|v| v.export_canvas());
+(B[m[32m+            self.outcome(result, "Canvas exported to the vault's Artifacts folder");
+(B[m         }
+[31m-        if let Some(id)=open {self.open_note(&id);}
+(B[m[32m+        if let Some(id) = open {
+(B[m[32m+            self.open_note(&id);
+(B[m[32m+        }
+(B[m     }
+     fn note_list(&mut self, ui: &mut Ui, r: Rect, kind: &str) {
+         let p = ui.painter().clone();
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1275:
+         } else {
+             "Decisions".into()
+         };
+[31m-        txt(&p, r.left() + 5., r.top() + 7., title, 28., self.colors.text);
+(B[m         txt(
+             &p,
+             r.left() + 5.,
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1282:
+[32m+            r.top() + 7.,
+(B[m[32m+            title,
+(B[m[32m+            28.,
+(B[m[32m+            self.colors.text,
+(B[m[32m+        );
+(B[m[32m+        txt(
+(B[m[32m+            &p,
+(B[m[32m+            r.left() + 5.,
+(B[m             r.top() + 49.,
+             if kind == "experiment" {
+                 "Experiment notes you have recorded."
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1329:
+                     if notes.is_empty() {
+                         ui.add_space(35.);
+                         ui.label(
+[31m-                            RichText::new("This space is ready for your first note.").color(self.colors.second),
+(B[m[32m+                            RichText::new("This space is ready for your first note.")
+(B[m[32m+                                .color(self.colors.second),
+(B[m                         );
+                         ui.label(
+                             RichText::new("Capture an idea now; connect it when you're ready.")
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1340:
+                     for n in notes {
+                         let (rr, res) =
+                             ui.allocate_exact_size(vec2(list.width() - 12., 100.), Sense::click());
+[31m-                        ui.painter()
+(B[m[31m-                            .rect_filled(rr, 12., self.colors.surface(Color32::from_rgb(25, 28, 44)));
+(B[m[32m+                        ui.painter().rect_filled(
+(B[m[32m+                            rr,
+(B[m[32m+                            12.,
+(B[m[32m+                            self.colors.surface(Color32::from_rgb(25, 28, 44)),
+(B[m[32m+                        );
+(B[m                         ui.painter().rect_stroke(
+                             rr,
+                             12.,
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1348:
+[31m-                            Stroke::new(1_f32,
+(B[m[32m+                            Stroke::new(
+(B[m[32m+                                1_f32,
+(B[m                                 self.colors.overlay(if res.hovered() { 45 } else { 18 }),
+                             ),
+                         );
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1403:
+         }
+     }
+     fn traces(&mut self, ui: &mut Ui, r: Rect) {
+[31m-        txt(ui.painter(), r.left()+5., r.top()+7., "Activity", 28., self.colors.text);
+(B[m[31m-        txt(ui.painter(), r.left()+5., r.top()+50., "Edits, links and review decisions recorded in this vault.", 13., self.colors.muted);
+(B[m[31m-        self.audit_list(ui, rect(r.left()+5., r.top()+88., r.width()-10., (r.height()-96.).max(0.)));
+(B[m[32m+        txt(
+(B[m[32m+            ui.painter(),
+(B[m[32m+            r.left() + 5.,
+(B[m[32m+            r.top() + 7.,
+(B[m[32m+            "Activity",
+(B[m[32m+            28.,
+(B[m[32m+            self.colors.text,
+(B[m[32m+        );
+(B[m[32m+        txt(
+(B[m[32m+            ui.painter(),
+(B[m[32m+            r.left() + 5.,
+(B[m[32m+            r.top() + 50.,
+(B[m[32m+            "Edits, links and review decisions recorded in this vault.",
+(B[m[32m+            13.,
+(B[m[32m+            self.colors.muted,
+(B[m[32m+        );
+(B[m[32m+        self.audit_list(
+(B[m[32m+            ui,
+(B[m[32m+            rect(
+(B[m[32m+                r.left() + 5.,
+(B[m[32m+                r.top() + 88.,
+(B[m[32m+                r.width() - 10.,
+(B[m[32m+                (r.height() - 96.).max(0.),
+(B[m[32m+            ),
+(B[m[32m+        );
+(B[m     }
+     fn audit_list(&self, ui: &mut Ui, r: Rect) {
+         ui.allocate_new_ui(UiBuilder::new().max_rect(r), |ui| {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1422:
+                                 .color(self.colors.muted),
+                             );
+                         }
+[31m-                        for a in v.ledger.audit.iter().rev().filter(|a| !v.is_hidden(&a.object)).take(100) {
+(B[m[32m+                        for a in v
+(B[m[32m+                            .ledger
+(B[m[32m+                            .audit
+(B[m[32m+                            .iter()
+(B[m[32m+                            .rev()
+(B[m[32m+                            .filter(|a| !v.is_hidden(&a.object))
+(B[m[32m+                            .take(100)
+(B[m[32m+                        {
+(B[m                             let title = v
+                                 .get(&a.object)
+                                 .map(|n| n.meta.title.as_str())
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1533:
+         }
+     }
+     fn open_scene(&mut self) {
+[31m-        let result = self.vault.as_ref().ok_or_else(|| "Vault unavailable".to_string())
+(B[m[32m+        let result = self
+(B[m[32m+            .vault
+(B[m[32m+            .as_ref()
+(B[m[32m+            .ok_or_else(|| "Vault unavailable".to_string())
+(B[m             .and_then(|v| scene::Preset::load(&v.root));
+         match result {
+[31m-            Ok(preset) => self.scene = scene::ScenePreview { preset, ..Default::default() },
+(B[m[32m+            Ok(preset) => {
+(B[m[32m+                self.scene = scene::ScenePreview {
+(B[m[32m+                    preset,
+(B[m[32m+                    ..Default::default()
+(B[m[32m+                }
+(B[m[32m+            }
+(B[m             Err(error) => self.notify(format!("Could not load scene preset: {error}"), true),
+         }
+         self.dialog = Some(Dialog::Scene);
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1583:
+                 );
+             }
+         } else {
+[31m-            ui.label(RichText::new(&note.meta.title).size(25.).color(self.colors.text));
+(B[m[32m+            ui.label(
+(B[m[32m+                RichText::new(&note.meta.title)
+(B[m[32m+                    .size(25.)
+(B[m[32m+                    .color(self.colors.text),
+(B[m[32m+            );
+(B[m         }
+         ui.add_space(12.);
+         let available = (height - 420.).clamp(190., 470.);
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1619:
+                 CollapsingHeader::new("Source & provenance")
+                     .default_open(true)
+                     .show(ui, |ui| {
+[31m-                        ui.label(RichText::new(&note.meta.source).size(12.).color(self.colors.second));
+(B[m                         ui.label(
+[32m+                            RichText::new(&note.meta.source)
+(B[m[32m+                                .size(12.)
+(B[m[32m+                                .color(self.colors.second),
+(B[m[32m+                        );
+(B[m[32m+                        ui.label(
+(B[m                             RichText::new(format!(
+                                 "Author: {}\nStable ID: {}\nCreated: {} · Modified: {}\n{}",
+                                 note.meta.author,
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1642:
+                         v.ledger
+                             .edges
+                             .iter()
+[31m-                            .filter(|e| (e.from == note.meta.id || e.to == note.meta.id) && v.get(&e.from).is_some() && v.get(&e.to).is_some())
+(B[m[32m+                            .filter(|e| {
+(B[m[32m+                                (e.from == note.meta.id || e.to == note.meta.id)
+(B[m[32m+                                    && v.get(&e.from).is_some()
+(B[m[32m+                                    && v.get(&e.to).is_some()
+(B[m[32m+                            })
+(B[m                             .cloned()
+                             .collect::<Vec<_>>()
+                     })
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1673:
+                             .color(self.colors.muted),
+                         );
+                         if ui
+[31m-                            .add(Button::new(RichText::new(title).color(self.colors.second)).frame(false))
+(B[m[32m+                            .add(
+(B[m[32m+                                Button::new(RichText::new(title).color(self.colors.second))
+(B[m[32m+                                    .frame(false),
+(B[m[32m+                            )
+(B[m                             .clicked()
+                         {
+                             open_other = Some(other.clone());
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1876:
+         }
+     }
+     fn self_test_tick(&mut self, ctx: &Context) {
+[31m-        if self.self_test.is_none() || self.test_done { return; }
+(B[m[32m+        if self.self_test.is_none() || self.test_done {
+(B[m[32m+            return;
+(B[m[32m+        }
+(B[m         match self.frames {
+             12 => {
+[31m-                let result=(|| -> Result<(),String> {
+(B[m[31m-                    let v=self.vault.as_mut().ok_or("Vault unavailable")?;
+(B[m[31m-                    if !v.notes.is_empty() { return Err("New application vault must start empty".into()); }
+(B[m[31m-                    self.selected=v.create("Interaction test note","First draft","note",Actor::Human)?;
+(B[m[31m-                    self.relation_target=v.create("Supporting note","A saved supporting record","note",Actor::Human)?;
+(B[m[31m-                    self.view=View::Knowledge;
+(B[m[32m+                let result = (|| -> Result<(), String> {
+(B[m[32m+                    let v = self.vault.as_mut().ok_or("Vault unavailable")?;
+(B[m[32m+                    if !v.notes.is_empty() {
+(B[m[32m+                        return Err("New application vault must start empty".into());
+(B[m[32m+                    }
+(B[m[32m+                    self.selected =
+(B[m[32m+                        v.create("Interaction test note", "First draft", "note", Actor::Human)?;
+(B[m[32m+                    self.relation_target = v.create(
+(B[m[32m+                        "Supporting note",
+(B[m[32m+                        "A saved supporting record",
+(B[m[32m+                        "note",
+(B[m[32m+                        Actor::Human,
+(B[m[32m+                    )?;
+(B[m[32m+                    self.view = View::Knowledge;
+(B[m                     Ok(())
+                 })();
+                 self.test_steps.push(serde_json::json!({"step":"empty start and capture","passed":result.is_ok(),"detail":result.err()}));
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1891:
+             }
+             20 => {
+[31m-                let id=self.selected.clone();self.open_note(&id);
+(B[m[32m+                let id = self.selected.clone();
+(B[m[32m+                self.open_note(&id);
+(B[m                 self.test_steps.push(serde_json::json!({"step":"inspect real note","passed":self.draft.as_ref().map(|n|n.body=="First draft").unwrap_or(false)}));
+             }
+             30 => {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1897:
+[31m-                let result=(|| -> Result<(),String> {
+(B[m[31m-                    let v=self.vault.as_mut().ok_or("Vault unavailable")?;
+(B[m[31m-                    let mut n=v.get(&self.selected).ok_or("Captured note missing")?.clone();
+(B[m[31m-                    n.body="Edited and persisted".into();v.save_note(&n,Actor::Human)?;
+(B[m[31m-                    v.relate(&self.selected,&self.relation_target,"references")?;
+(B[m[31m-                    let reopened=Vault::open_frontend(v.root.clone())?;
+(B[m[31m-                    if reopened.get(&self.selected).map(|n|n.body.as_str())!=Some("Edited and persisted")
+(B[m[31m-                        || !reopened.backlinks(&self.relation_target).iter().any(|e|e.from==self.selected) { return Err("Persistence or backlink missing".into()); }
+(B[m[31m-                    v.unlink(&Edge{from:self.selected.clone(),to:self.relation_target.clone(),kind:"references".into()})?;
+(B[m[32m+                let result = (|| -> Result<(), String> {
+(B[m[32m+                    let v = self.vault.as_mut().ok_or("Vault unavailable")?;
+(B[m[32m+                    let mut n = v
+(B[m[32m+                        .get(&self.selected)
+(B[m[32m+                        .ok_or("Captured note missing")?
+(B[m[32m+                        .clone();
+(B[m[32m+                    n.body = "Edited and persisted".into();
+(B[m[32m+                    v.save_note(&n, Actor::Human)?;
+(B[m[32m+                    v.relate(&self.selected, &self.relation_target, "references")?;
+(B[m[32m+                    let reopened = Vault::open_frontend(v.root.clone())?;
+(B[m[32m+                    if reopened.get(&self.selected).map(|n| n.body.as_str())
+(B[m[32m+                        != Some("Edited and persisted")
+(B[m[32m+                        || !reopened
+(B[m[32m+                            .backlinks(&self.relation_target)
+(B[m[32m+                            .iter()
+(B[m[32m+                            .any(|e| e.from == self.selected)
+(B[m[32m+                    {
+(B[m[32m+                        return Err("Persistence or backlink missing".into());
+(B[m[32m+                    }
+(B[m[32m+                    v.unlink(&Edge {
+(B[m[32m+                        from: self.selected.clone(),
+(B[m[32m+                        to: self.relation_target.clone(),
+(B[m[32m+                        kind: "references".into(),
+(B[m[32m+                    })?;
+(B[m                     v.export_canvas()?;
+                     Ok(())
+                 })();
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1909:
+                 self.test_steps.push(serde_json::json!({"step":"save link reopen and export","passed":result.is_ok(),"detail":result.err()}));
+             }
+             50 => {
+[31m-                self.dialog=None;self.view=View::Home;
+(B[m[31m-                let result=(|| -> Result<(),String> {
+(B[m[31m-                    let v=self.vault.as_mut().ok_or("Vault unavailable")?;v.set_manual_chat(true)?;
+(B[m[31m-                    let root=v.root.clone();let messages=self.messages.len();
+(B[m[31m-                    self.input="Preserve this draft".into();self.send_message();
+(B[m[31m-                    if self.input!="Preserve this draft" || self.messages.len()!=messages || !Vault::open_frontend(root)?.settings.manual_chat { return Err("Manual draft guard failed".into()); }
+(B[m[31m-                    self.vault.as_mut().unwrap().set_manual_chat(false)?;self.input.clear();self.toast=None;
+(B[m[32m+                self.dialog = None;
+(B[m[32m+                self.view = View::Home;
+(B[m[32m+                let result = (|| -> Result<(), String> {
+(B[m[32m+                    let v = self.vault.as_mut().ok_or("Vault unavailable")?;
+(B[m[32m+                    v.set_manual_chat(true)?;
+(B[m[32m+                    let root = v.root.clone();
+(B[m[32m+                    let messages = self.messages.len();
+(B[m[32m+                    self.input = "Preserve this draft".into();
+(B[m[32m+                    self.send_message();
+(B[m[32m+                    if self.input != "Preserve this draft"
+(B[m[32m+                        || self.messages.len() != messages
+(B[m[32m+                        || !Vault::open_frontend(root)?.settings.manual_chat
+(B[m[32m+                    {
+(B[m[32m+                        return Err("Manual draft guard failed".into());
+(B[m[32m+                    }
+(B[m[32m+                    self.vault.as_mut().unwrap().set_manual_chat(false)?;
+(B[m[32m+                    self.input.clear();
+(B[m[32m+                    self.toast = None;
+(B[m                     Ok(())
+                 })();
+                 self.test_steps.push(serde_json::json!({"step":"manual draft","passed":result.is_ok(),"detail":result.err()}));
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1922:
+             }
+             65 => {
+[31m-                self.view=View::Canvas; self.dialog=None;
+(B[m[32m+                self.view = View::Canvas;
+(B[m[32m+                self.dialog = None;
+(B[m                 self.test_steps.push(serde_json::json!({"step":"canvas real data","passed":self.vault.as_ref().map(|v|v.notes.len()==2).unwrap_or(false)}));
+             }
+             75 | 80 | 85 => {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1928:
+[31m-                let light=self.frames!=80;self.set_appearance(ctx,light);
+(B[m[31m-                let persisted=self.vault.as_ref().and_then(|v|Vault::open_frontend(v.root.clone()).ok()).map(|v|v.settings.light_mode==light).unwrap_or(false);
+(B[m[32m+                let light = self.frames != 80;
+(B[m[32m+                self.set_appearance(ctx, light);
+(B[m[32m+                let persisted = self
+(B[m[32m+                    .vault
+(B[m[32m+                    .as_ref()
+(B[m[32m+                    .and_then(|v| Vault::open_frontend(v.root.clone()).ok())
+(B[m[32m+                    .map(|v| v.settings.light_mode == light)
+(B[m[32m+                    .unwrap_or(false);
+(B[m                 self.test_steps.push(serde_json::json!({"step":format!("appearance {light}"),"passed":self.colors.light==light && ctx.style().visuals.dark_mode!=light && persisted}));
+             }
+             88 => {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1933:
+[31m-                self.open_scene();self.scene.preset.x=0.4;let expected=self.scene.preset.clone();
+(B[m[31m-                let result=self.vault.as_ref().ok_or("Vault unavailable".to_string()).and_then(|v|self.scene.preset.save(&v.root));
+(B[m[31m-                self.scene=Default::default();self.open_scene();
+(B[m[32m+                self.open_scene();
+(B[m[32m+                self.scene.preset.x = 0.4;
+(B[m[32m+                let expected = self.scene.preset.clone();
+(B[m[32m+                let result = self
+(B[m[32m+                    .vault
+(B[m[32m+                    .as_ref()
+(B[m[32m+                    .ok_or("Vault unavailable".to_string())
+(B[m[32m+                    .and_then(|v| self.scene.preset.save(&v.root));
+(B[m[32m+                self.scene = Default::default();
+(B[m[32m+                self.open_scene();
+(B[m                 self.test_steps.push(serde_json::json!({"step":"scene preset","passed":result.is_ok() && self.scene.preset==expected && !self.scene.playing}));
+[31m-                self.dialog=None;
+(B[m[32m+                self.dialog = None;
+(B[m             }
+             90 => {
+[31m-                self.set_appearance(ctx,false);self.view=View::Home;
+(B[m[31m-                self.test_steps.push(serde_json::json!({"step":"hud","passed":self.chat_open&&self.vault.is_some()&&self.messages.is_empty()}));self.test_done=true;
+(B[m[32m+                self.set_appearance(ctx, false);
+(B[m[32m+                self.view = View::Home;
+(B[m[32m+                self.test_steps.push(serde_json::json!({"step":"hud","passed":self.chat_open&&self.vault.is_some()&&self.messages.is_empty()}));
+(B[m[32m+                self.test_done = true;
+(B[m             }
+[31m-            _=>{}
+(B[m[32m+            _ => {}
+(B[m         }
+     }
+[31m-
+(B[m }
+ impl eframe::App for Workbench {
+     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:1975:
+             .frame(Frame::none())
+             .show(ctx, |ui| {
+                 let r = ui.max_rect();
+[31m-                if self.dialog.is_some() { ui.disable(); }
+(B[m[32m+                if self.dialog.is_some() {
+(B[m[32m+                    ui.disable();
+(B[m[32m+                }
+(B[m                 if self.view == View::Home {
+                     self.home(ui, r);
+                 } else {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:2005:
+             if at.elapsed().as_secs() < 7 {
+                 Area::new(Id::new("feedback"))
+                     .order(Order::Tooltip)
+[31m-                    .anchor(Align2::CENTER_BOTTOM, vec2(0., if self.view == View::Home { -128. } else { -18. }))
+(B[m[32m+                    .anchor(
+(B[m[32m+                        Align2::CENTER_BOTTOM,
+(B[m[32m+                        vec2(0., if self.view == View::Home { -128. } else { -18. }),
+(B[m[32m+                    )
+(B[m                     .show(ctx, |ui| {
+                         Frame::none()
+                             .fill(self.colors.surface(Color32::from_rgb(27, 31, 49)))
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:2012:
+                             .rounding(control_radius())
+[31m-                            .stroke(Stroke::new(1_f32,
+(B[m[32m+                            .stroke(Stroke::new(
+(B[m[32m+                                1_f32,
+(B[m                                 if *error {
+                                     self.colors.red.gamma_multiply(0.5)
+                                 } else {
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:2070:
+         }
+         if self.screenshot.is_some() || self.self_test.is_some() {
+             ctx.request_repaint_after(Duration::from_millis(10));
+[31m-        } else if !self.vault.as_ref().map(|v| v.settings.reduced_motion).unwrap_or(true) {
+(B[m[32m+        } else if !self
+(B[m[32m+            .vault
+(B[m[32m+            .as_ref()
+(B[m[32m+            .map(|v| v.settings.reduced_motion)
+(B[m[32m+            .unwrap_or(true)
+(B[m[32m+        {
+(B[m             ctx.request_repaint_after(Duration::from_millis(mechanics::REPAINT_MS));
+         } else {
+             // Static illumination still needs a redraw when temporary feedback expires.
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:2077:
+             let remaining = self.processing_until - self.started.elapsed().as_secs_f64();
+[31m-            if remaining > 0.0 { ctx.request_repaint_after(Duration::from_secs_f64(remaining)); }
+(B[m[32m+            if remaining > 0.0 {
+(B[m[32m+                ctx.request_repaint_after(Duration::from_secs_f64(remaining));
+(B[m[32m+            }
+(B[m             let remaining = self.completed_until - self.started.elapsed().as_secs_f64();
+[31m-            if remaining > 0.0 { ctx.request_repaint_after(Duration::from_secs_f64(remaining)); }
+(B[m[32m+            if remaining > 0.0 {
+(B[m[32m+                ctx.request_repaint_after(Duration::from_secs_f64(remaining));
+(B[m[32m+            }
+(B[m             if let Some((_, at, _)) = &self.toast {
+                 for expiry in [6.0, 7.0] {
+                     let remaining = expiry - at.elapsed().as_secs_f64();
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:2084:
+[31m-                    if remaining > 0.0 { ctx.request_repaint_after(Duration::from_secs_f64(remaining)); }
+(B[m[32m+                    if remaining > 0.0 {
+(B[m[32m+                        ctx.request_repaint_after(Duration::from_secs_f64(remaining));
+(B[m[32m+                    }
+(B[m                 }
+             }
+         }
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:2136:
+         _ => View::Home,
+     };
+     let unattended = screenshot.is_some() || self_test.is_some();
+[31m-    let navigation_instance = if unattended { None } else {
+(B[m[32m+    let navigation_instance = if unattended {
+(B[m[32m+        None
+(B[m[32m+    } else {
+(B[m         match navigation::Instance::claim(navigation::WORKBENCH) {
+             Ok(Some(instance)) => Some(instance),
+             Ok(None) => return Ok(()),
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:2143:
+[31m-            Err(error) => return Err(eframe::Error::AppCreation(Box::new(std::io::Error::other(error)))),
+(B[m[32m+            Err(error) => {
+(B[m[32m+                return Err(eframe::Error::AppCreation(Box::new(std::io::Error::other(
+(B[m[32m+                    error,
+(B[m[32m+                ))))
+(B[m[32m+            }
+(B[m         }
+     };
+     let mut viewport = ViewportBuilder::default()
+Diff in /home/ed/loom-ide-tauri/native-app/src/main.rs:2175:
+                 });
+             }
+             let mut app = Workbench::new(cc, root, screenshot, self_test, view);
+[31m-            if args.iter().any(|arg| arg == "--scene-preview") { app.open_scene(); }
+(B[m[32m+            if args.iter().any(|arg| arg == "--scene-preview") {
+(B[m[32m+                app.open_scene();
+(B[m[32m+            }
+(B[m             Ok(Box::new(app))
+         }),
+     )
+Diff in /home/ed/loom-ide-tauri/native-app/src/mechanics.rs:163:
+         assert_eq!(prepare_chat("  draft  ", true), Err(MANUAL_NOTICE));
+         assert_eq!(prepare_chat("  draft  ", false), Ok(Some("draft".into())));
+         let legacy: crate::knowledge::Settings = serde_json::from_str(
+[31m-            r#"{"intent":"Existing workspace","reduced_motion":true,"light_mode":true}"#
+(B[m[31m-        ).unwrap();
+(B[m[32m+            r#"{"intent":"Existing workspace","reduced_motion":true,"light_mode":true}"#,
+(B[m[32m+        )
+(B[m[32m+        .unwrap();
+(B[m         assert!(!legacy.manual_chat);
+         assert!(legacy.reduced_motion && legacy.light_mode);
+     }
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:13:
+ }
+ impl Default for Preset {
+     fn default() -> Self {
+[31m-        Self { x: 0., y: 0., scale: 1., speed: 1. }
+(B[m[32m+        Self {
+(B[m[32m+            x: 0.,
+(B[m[32m+            y: 0.,
+(B[m[32m+            scale: 1.,
+(B[m[32m+            speed: 1.,
+(B[m[32m+        }
+(B[m     }
+ }
+ impl Preset {
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:20:
+     fn validate(&self) -> Result<(), String> {
+[31m-        if !(-1.0..=1.0).contains(&self.x) || !(-1.0..=1.0).contains(&self.y)
+(B[m[31m-            || !(0.5..=1.5).contains(&self.scale) || !(0.25..=2.0).contains(&self.speed)
+(B[m[32m+        if !(-1.0..=1.0).contains(&self.x)
+(B[m[32m+            || !(-1.0..=1.0).contains(&self.y)
+(B[m[32m+            || !(0.5..=1.5).contains(&self.scale)
+(B[m[32m+            || !(0.25..=2.0).contains(&self.speed)
+(B[m         {
+             return Err("Scene preset contains unsupported values".into());
+         }
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:45:
+         let bytes = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+         let result = std::fs::write(&temp, bytes)
+             .and_then(|_| std::fs::rename(&temp, directory.join("scene-preview.json")));
+[31m-        if result.is_err() { let _ = std::fs::remove_file(&temp); }
+(B[m[32m+        if result.is_err() {
+(B[m[32m+            let _ = std::fs::remove_file(&temp);
+(B[m[32m+        }
+(B[m         result.map_err(|e| e.to_string())
+     }
+ }
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:63:
+         }
+     }
+     /// Returns whether the user requested saving. All edits stay in this preview.
+[31m-    pub fn show(&mut self, ui: &mut Ui, orb: TextureId, colors: crate::visual::Palette,
+(B[m[31m-        reduced_motion: bool) -> bool
+(B[m[31m-    {
+(B[m[32m+    pub fn show(
+(B[m[32m+        &mut self,
+(B[m[32m+        ui: &mut Ui,
+(B[m[32m+        orb: TextureId,
+(B[m[32m+        colors: crate::visual::Palette,
+(B[m[32m+        reduced_motion: bool,
+(B[m[32m+    ) -> bool {
+(B[m         ui.label(RichText::new("Unity-inspired scene controls").size(19.));
+[31m-        ui.label(RichText::new("A local visual prototype. Unity is not connected.").color(colors.second));
+(B[m[32m+        ui.label(
+(B[m[32m+            RichText::new("A local visual prototype. Unity is not connected.").color(colors.second),
+(B[m[32m+        );
+(B[m         ui.add_space(12.);
+         ui.horizontal_wrapped(|ui| {
+[31m-            if ui.button(if self.playing { "Pause preview" } else { "Play preview" }).clicked() {
+(B[m[32m+            if ui
+(B[m[32m+                .button(if self.playing {
+(B[m[32m+                    "Pause preview"
+(B[m[32m+                } else {
+(B[m[32m+                    "Play preview"
+(B[m[32m+                })
+(B[m[32m+                .clicked()
+(B[m[32m+            {
+(B[m                 self.playing = !self.playing;
+             }
+[31m-            if ui.button("Stop").clicked() { self.playing = false; self.time = 0.; }
+(B[m[31m-            if ui.button("Reset scene").clicked() { *self = Self::default(); }
+(B[m[31m-            ui.label(RichText::new(if reduced_motion { "Reduced motion · static preview" }
+(B[m[31m-                else if self.playing { "Playing" } else { "Paused" }).size(12.).color(colors.muted));
+(B[m[32m+            if ui.button("Stop").clicked() {
+(B[m[32m+                self.playing = false;
+(B[m[32m+                self.time = 0.;
+(B[m[32m+            }
+(B[m[32m+            if ui.button("Reset scene").clicked() {
+(B[m[32m+                *self = Self::default();
+(B[m[32m+            }
+(B[m[32m+            ui.label(
+(B[m[32m+                RichText::new(if reduced_motion {
+(B[m[32m+                    "Reduced motion · static preview"
+(B[m[32m+                } else if self.playing {
+(B[m[32m+                    "Playing"
+(B[m[32m+                } else {
+(B[m[32m+                    "Paused"
+(B[m[32m+                })
+(B[m[32m+                .size(12.)
+(B[m[32m+                .color(colors.muted),
+(B[m[32m+            );
+(B[m         });
+         self.advance(ui.input(|i| i.stable_dt), reduced_motion);
+[31m-        if self.playing && !reduced_motion { ui.ctx().request_repaint_after(std::time::Duration::from_millis(33)); }
+(B[m[32m+        if self.playing && !reduced_motion {
+(B[m[32m+            ui.ctx()
+(B[m[32m+                .request_repaint_after(std::time::Duration::from_millis(33));
+(B[m[32m+        }
+(B[m         ui.add_space(10.);
+         let height = 200_f32.min((ui.ctx().screen_rect().height() - 400.).max(100.));
+[31m-        let (canvas, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
+(B[m[32m+        let (canvas, _) =
+(B[m[32m+            ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
+(B[m         let p = ui.painter().with_clip_rect(canvas);
+         p.rect_filled(canvas, 16., colors.overlay(6));
+         p.rect_stroke(canvas, 16., Stroke::new(1_f32, colors.overlay(20)));
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:89:
+         for i in 1..8 {
+             let x = canvas.left() + canvas.width() * i as f32 / 8.;
+[31m-            p.line_segment([pos2(x, canvas.top()), pos2(x, canvas.bottom())], Stroke::new(1_f32, colors.overlay(7)));
+(B[m[32m+            p.line_segment(
+(B[m[32m+                [pos2(x, canvas.top()), pos2(x, canvas.bottom())],
+(B[m[32m+                Stroke::new(1_f32, colors.overlay(7)),
+(B[m[32m+            );
+(B[m         }
+         for i in 1..4 {
+             let y = canvas.top() + canvas.height() * i as f32 / 4.;
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:95:
+[31m-            p.line_segment([pos2(canvas.left(), y), pos2(canvas.right(), y)], Stroke::new(1_f32, colors.overlay(7)));
+(B[m[32m+            p.line_segment(
+(B[m[32m+                [pos2(canvas.left(), y), pos2(canvas.right(), y)],
+(B[m[32m+                Stroke::new(1_f32, colors.overlay(7)),
+(B[m[32m+            );
+(B[m         }
+         let diameter = canvas.height() * 0.43 * self.preset.scale;
+         let extent = (canvas.size() - Vec2::splat(diameter / 0.76)) * 0.5;
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:99:
+         let center = canvas.center() + vec2(self.preset.x * extent.x, -self.preset.y * extent.y);
+         let side = diameter / 0.76;
+[31m-        p.image(orb, Rect::from_center_size(center, Vec2::splat(side)),
+(B[m[31m-            Rect::from_min_max(Pos2::ZERO, pos2(1., 1.)), Color32::WHITE);
+(B[m[32m+        p.image(
+(B[m[32m+            orb,
+(B[m[32m+            Rect::from_center_size(center, Vec2::splat(side)),
+(B[m[32m+            Rect::from_min_max(Pos2::ZERO, pos2(1., 1.)),
+(B[m[32m+            Color32::WHITE,
+(B[m[32m+        );
+(B[m         for k in 0..6 {
+[31m-            let points = crate::mechanics::wave_points(diameter * 0.5, self.time, reduced_motion,
+(B[m[31m-                crate::knowledge::State::Idle, k).into_iter().map(|[x, y]| center + vec2(x, y)).collect::<Vec<_>>();
+(B[m[32m+            let points = crate::mechanics::wave_points(
+(B[m[32m+                diameter * 0.5,
+(B[m[32m+                self.time,
+(B[m[32m+                reduced_motion,
+(B[m[32m+                crate::knowledge::State::Idle,
+(B[m[32m+                k,
+(B[m[32m+            )
+(B[m[32m+            .into_iter()
+(B[m[32m+            .map(|[x, y]| center + vec2(x, y))
+(B[m[32m+            .collect::<Vec<_>>();
+(B[m             if points.len() >= crate::mechanics::RIBBON_MIN_POINTS {
+[31m-                p.add(Shape::line(points, Stroke::new(0.8_f32, colors.overlay(40))));
+(B[m[32m+                p.add(Shape::line(
+(B[m[32m+                    points,
+(B[m[32m+                    Stroke::new(0.8_f32, colors.overlay(40)),
+(B[m[32m+                ));
+(B[m             }
+         }
+         ui.add_space(12.);
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:111:
+         ui.label(RichText::new("Scene  /  Luminous sphere").color(colors.purple));
+[31m-        ui.label(RichText::new("Inspector · position, size and animation").size(12.).color(colors.muted));
+(B[m[32m+        ui.label(
+(B[m[32m+            RichText::new("Inspector · position, size and animation")
+(B[m[32m+                .size(12.)
+(B[m[32m+                .color(colors.muted),
+(B[m[32m+        );
+(B[m         ui.add(Slider::new(&mut self.preset.x, -1.0..=1.0).text("Position X"));
+         ui.add(Slider::new(&mut self.preset.y, -1.0..=1.0).text("Position Y"));
+         ui.add(Slider::new(&mut self.preset.scale, 0.5..=1.5).text("Scale"));
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:116:
+         ui.add(Slider::new(&mut self.preset.speed, 0.25..=2.0).text("Animation speed"));
+         ui.add_space(8.);
+         let save = ui.button("Save scene preset").clicked();
+[31m-        ui.label(RichText::new("Saved locally for your next visit. The home sphere keeps its original settings.")
+(B[m[31m-            .size(12.).color(colors.muted));
+(B[m[32m+        ui.label(
+(B[m[32m+            RichText::new(
+(B[m[32m+                "Saved locally for your next visit. The home sphere keeps its original settings.",
+(B[m[32m+            )
+(B[m[32m+            .size(12.)
+(B[m[32m+            .color(colors.muted),
+(B[m[32m+        );
+(B[m         save
+     }
+ }
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:144:
+     #[test]
+     fn preset_round_trip_and_invalid_values_preserve_saved_scene() {
+         let root = std::env::temp_dir().join(crate::knowledge::new_id());
+[31m-        let mut preset = Preset { x: 0.6, y: -0.3, scale: 1.4, speed: 0.5 };
+(B[m[32m+        let mut preset = Preset {
+(B[m[32m+            x: 0.6,
+(B[m[32m+            y: -0.3,
+(B[m[32m+            scale: 1.4,
+(B[m[32m+            speed: 0.5,
+(B[m[32m+        };
+(B[m         assert_eq!(Preset::load(&root).unwrap(), Preset::default());
+         preset.save(&root).unwrap();
+         assert_eq!(Preset::load(&root).unwrap(), preset);
+Diff in /home/ed/loom-ide-tauri/native-app/src/scene.rs:151:
+         preset.scale = f32::NAN;
+         assert!(preset.save(&root).is_err());
+         assert_eq!(Preset::load(&root).unwrap().scale, 1.4);
+[31m-        std::fs::write(root.join(".loom/scene-preview.json"), br#"{"x":0,"y":0,"scale":100,"speed":1}"#).unwrap();
+(B[m[32m+        std::fs::write(
+(B[m[32m+            root.join(".loom/scene-preview.json"),
+(B[m[32m+            br#"{"x":0,"y":0,"scale":100,"speed":1}"#,
+(B[m[32m+        )
+(B[m[32m+        .unwrap();
+(B[m         assert!(Preset::load(&root).is_err());
+         std::fs::remove_dir_all(root).unwrap();
+     }
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:2:
+ pub const DEEP: Color32 = Color32::from_rgb(29, 27, 26);
+ fn shared_theme() -> &'static serde_json::Value {
+     static THEME: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
+[31m-    THEME.get_or_init(|| serde_json::from_str(include_str!("../../design-tokens.json")).expect("Valid shared design tokens"))
+(B[m[32m+    THEME.get_or_init(|| {
+(B[m[32m+        serde_json::from_str(include_str!("../../design-tokens.json"))
+(B[m[32m+            .expect("Valid shared design tokens")
+(B[m[32m+    })
+(B[m }
+ fn token_color(values: &serde_json::Value, name: &str) -> Color32 {
+     let rgb = &values[name];
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:9:
+[31m-    Color32::from_rgb(rgb[0].as_u64().unwrap() as u8, rgb[1].as_u64().unwrap() as u8, rgb[2].as_u64().unwrap() as u8)
+(B[m[32m+    Color32::from_rgb(
+(B[m[32m+        rgb[0].as_u64().unwrap() as u8,
+(B[m[32m+        rgb[1].as_u64().unwrap() as u8,
+(B[m[32m+        rgb[2].as_u64().unwrap() as u8,
+(B[m[32m+    )
+(B[m }
+[31m-pub fn control_radius() -> f32 { shared_theme()["radius"]["control"].as_f64().unwrap() as f32 }
+(B[m[31m-pub fn panel_radius() -> f32 { shared_theme()["radius"]["panel"].as_f64().unwrap() as f32 }
+(B[m[32m+pub fn control_radius() -> f32 {
+(B[m[32m+    shared_theme()["radius"]["control"].as_f64().unwrap() as f32
+(B[m[32m+}
+(B[m[32m+pub fn panel_radius() -> f32 {
+(B[m[32m+    shared_theme()["radius"]["panel"].as_f64().unwrap() as f32
+(B[m[32m+}
+(B[m /// Semantic colors shared by native widgets and the custom painted workspace.
+ #[derive(Clone, Copy)]
+ pub struct Palette {
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:29:
+         let theme = shared_theme();
+         let values = &theme[if light { "white" } else { "dark" }];
+         let color = |name: &str| token_color(values, name);
+[31m-        Self { light, text: color("text"), second: color("second"), muted: color("muted"),
+(B[m[31m-            purple: color("second"), blue: color("activity-ink"), green: color("success-ink"),
+(B[m[31m-            amber: color("attention-ink"), red: color("error-ink"), deep: color("deep") }
+(B[m[32m+        Self {
+(B[m[32m+            light,
+(B[m[32m+            text: color("text"),
+(B[m[32m+            second: color("second"),
+(B[m[32m+            muted: color("muted"),
+(B[m[32m+            purple: color("second"),
+(B[m[32m+            blue: color("activity-ink"),
+(B[m[32m+            green: color("success-ink"),
+(B[m[32m+            amber: color("attention-ink"),
+(B[m[32m+            red: color("error-ink"),
+(B[m[32m+            deep: color("deep"),
+(B[m[32m+        }
+(B[m     }
+ 
+     pub fn overlay(self, alpha: u8) -> Color32 {
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:38:
+[31m-        let color = token_color(&shared_theme()[if self.light { "white" } else { "dark" }], "overlay");
+(B[m[32m+        let color = token_color(
+(B[m[32m+            &shared_theme()[if self.light { "white" } else { "dark" }],
+(B[m[32m+            "overlay",
+(B[m[32m+        );
+(B[m         Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), alpha)
+     }
+     pub fn surface(self, _dark: Color32) -> Color32 {
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:42:
+[31m-        token_color(&shared_theme()[if self.light { "white" } else { "dark" }], "surface")
+(B[m[32m+        token_color(
+(B[m[32m+            &shared_theme()[if self.light { "white" } else { "dark" }],
+(B[m[32m+            "surface",
+(B[m[32m+        )
+(B[m     }
+     pub fn accent(self, alpha: u8) -> Color32 {
+         Color32::from_rgba_unmultiplied(self.purple.r(), self.purple.g(), self.purple.b(), alpha)
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:46:
+     }
+ }
+ fn palette(ctx: &Context) -> Palette {
+[31m-    ctx.data(|d| d.get_temp::<Palette>(Id::new("appearance"))).unwrap_or(Palette::new(false))
+(B[m[32m+    ctx.data(|d| d.get_temp::<Palette>(Id::new("appearance")))
+(B[m[32m+        .unwrap_or(Palette::new(false))
+(B[m }
+ pub fn apply_appearance(ctx: &Context, colors: Palette) {
+     ctx.data_mut(|d| d.insert_temp(Id::new("appearance"), colors));
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:53:
+     let values = &shared_theme()[if colors.light { "white" } else { "dark" }];
+     let mut style = Style::default();
+[31m-    style.visuals = if colors.light { Visuals::light() } else { Visuals::dark() };
+(B[m[32m+    style.visuals = if colors.light {
+(B[m[32m+        Visuals::light()
+(B[m[32m+    } else {
+(B[m[32m+        Visuals::dark()
+(B[m[32m+    };
+(B[m     style.visuals.override_text_color = Some(colors.text);
+     style.visuals.panel_fill = colors.deep;
+     style.visuals.error_fg_color = colors.red;
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:60:
+     style.visuals.window_fill = colors.surface(Color32::from_rgb(25, 29, 48));
+     style.visuals.window_rounding = Rounding::same(panel_radius());
+     style.visuals.window_stroke = Stroke::new(1_f32, colors.overlay(33));
+[31m-    style.visuals.window_shadow = Shadow { offset: vec2(0., 18.), blur: 48., spread: 0.,
+(B[m[31m-        color: Color32::from_rgba_unmultiplied(65, 48, 38, if colors.light { 26 } else { 45 }) };
+(B[m[32m+    style.visuals.window_shadow = Shadow {
+(B[m[32m+        offset: vec2(0., 18.),
+(B[m[32m+        blur: 48.,
+(B[m[32m+        spread: 0.,
+(B[m[32m+        color: Color32::from_rgba_unmultiplied(65, 48, 38, if colors.light { 26 } else { 45 }),
+(B[m[32m+    };
+(B[m     style.visuals.selection.bg_fill = token_color(values, "selection");
+     style.visuals.selection.stroke = Stroke::new(1_f32, colors.text);
+     style.visuals.widgets.inactive.bg_fill = token_color(values, "control");
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:69:
+     style.visuals.widgets.inactive.rounding = Rounding::same(control_radius());
+     style.visuals.widgets.hovered.bg_fill = token_color(values, "hover");
+     style.visuals.widgets.hovered.rounding = Rounding::same(control_radius());
+[31m-    for widget in [&mut style.visuals.widgets.noninteractive, &mut style.visuals.widgets.inactive,
+(B[m[31m-        &mut style.visuals.widgets.hovered, &mut style.visuals.widgets.active, &mut style.visuals.widgets.open] {
+(B[m[32m+    for widget in [
+(B[m[32m+        &mut style.visuals.widgets.noninteractive,
+(B[m[32m+        &mut style.visuals.widgets.inactive,
+(B[m[32m+        &mut style.visuals.widgets.hovered,
+(B[m[32m+        &mut style.visuals.widgets.active,
+(B[m[32m+        &mut style.visuals.widgets.open,
+(B[m[32m+    ] {
+(B[m         widget.rounding = Rounding::same(control_radius());
+         widget.fg_stroke.color = colors.text;
+     }
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:84:
+     style.visuals.extreme_bg_color = token_color(values, "reading");
+     style.spacing.item_spacing = vec2(10., 10.);
+     style.spacing.button_padding = vec2(14., 8.);
+[31m-    for (kind, size) in [(TextStyle::Body, 14.), (TextStyle::Button, 14.), (TextStyle::Small, 12.)] {
+(B[m[32m+    for (kind, size) in [
+(B[m[32m+        (TextStyle::Body, 14.),
+(B[m[32m+        (TextStyle::Button, 14.),
+(B[m[32m+        (TextStyle::Small, 12.),
+(B[m[32m+    ] {
+(B[m         style.text_styles.insert(kind, FontId::proportional(size));
+     }
+     style.animation_time = 0.15;
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:122:
+             Color32::from_rgba_unmultiplied(65, 48, 38, 1),
+         );
+     }
+[31m-    p.rect_filled(r, radius, { let c = colors.surface(DEEP); Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), 242) });
+(B[m[32m+    p.rect_filled(r, radius, {
+(B[m[32m+        let c = colors.surface(DEEP);
+(B[m[32m+        Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), 242)
+(B[m[32m+    });
+(B[m     p.rect_stroke(r, radius, Stroke::new(1.0_f32, colors.overlay(33)));
+     p.line_segment(
+         [
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:148:
+     };
+     ui.painter().rect_filled(r, control_radius(), col);
+     if active {
+[31m-        ui.painter().rect_stroke(
+(B[m[31m-            r,
+(B[m[31m-            control_radius(),
+(B[m[31m-            Stroke::new(1.0_f32, colors.accent(60)),
+(B[m[31m-        );
+(B[m[32m+        ui.painter()
+(B[m[32m+            .rect_stroke(r, control_radius(), Stroke::new(1.0_f32, colors.accent(60)));
+(B[m     }
+     ui.painter().text(
+         r.center(),
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:354:
+     let colors = palette(ui.ctx());
+     let res = ui.interact(r, ui.id().with(label), Sense::click());
+     if res.hovered() || res.has_focus() {
+[31m-        ui.painter()
+(B[m[31m-            .rect_filled(r, 12., colors.overlay(12));
+(B[m[32m+        ui.painter().rect_filled(r, 12., colors.overlay(12));
+(B[m     }
+     icon(ui.painter(), name, r.center(), 20., colors.second);
+     res.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, label));
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:381:
+             let glow = (-((fx - 0.39) / 0.39).powi(2) - ((fy - 0.56) / 0.37).powi(2)).exp();
+             let lift = fy * 0.25 + glow * 0.25;
+             let mut c = [0.; 3];
+[31m-            for i in 0..3 { c[i] = base[i] as f32 + (surface[i] as f32 - base[i] as f32) * lift; }
+(B[m[32m+            for i in 0..3 {
+(B[m[32m+                c[i] = base[i] as f32 + (surface[i] as f32 - base[i] as f32) * lift;
+(B[m[32m+            }
+(B[m             if fy > 0.655 {
+                 let d = (fy - 0.655) / 0.345;
+                 let streak = (d * 155. + (fx * 12.).sin() * 2.).sin() * 0.5
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:389:
+                 let reflection =
+                     (-((fx - 0.39375) / (0.06 + 0.07 * d)).powi(2)).exp() * (1. - d).powf(1.4);
+                 let ripples = (d * 195. + (fx * 65.).sin() * 0.8).sin();
+[31m-                let reflected_light = reflection * (-((d - 0.23) / 0.24).powi(2)).exp()
+(B[m[32m+                let reflected_light = reflection
+(B[m[32m+                    * (-((d - 0.23) / 0.24).powi(2)).exp()
+(B[m                     * (0.6 + 0.4 * (d * 260. + fx * 8.).sin());
+                 let water_light = (-((fx - 0.39375) / 0.32).powi(2)).exp();
+                 for (i, v) in c.iter_mut().enumerate() {
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:420:
+             }
+             if r > 1. {
+                 let glow = (-((r - 1.) / 0.14).powi(2)).exp() * 0.065;
+[31m-                img.pixels[y * size + x] =
+(B[m[31m-                    Color32::from_rgba_unmultiplied(pearl.r(), pearl.g(), pearl.b(), (glow * 180.) as u8);
+(B[m[32m+                img.pixels[y * size + x] = Color32::from_rgba_unmultiplied(
+(B[m[32m+                    pearl.r(),
+(B[m[32m+                    pearl.g(),
+(B[m[32m+                    pearl.b(),
+(B[m[32m+                    (glow * 180.) as u8,
+(B[m[32m+                );
+(B[m                 continue;
+             }
+             let z = (1. - r * r).max(0.).sqrt();
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:441:
+             for i in 0..3 {
+                 c[i] = pearl[i] as f32 + (highlight[i] as f32 - pearl[i] as f32) * light
+                     - (pearl[i] as f32 - thread[i] as f32) * fres * 0.5
+[31m-                    + wave * 0.25 + (violet + right + cyan) * 1.5;
+(B[m[32m+                    + wave * 0.25
+(B[m[32m+                    + (violet + right + cyan) * 1.5;
+(B[m             }
+             let edge = if r > 0.998 { (1. - r) / 0.002 } else { 1. };
+             let al = (235. + 20. * fres) * edge;
+Diff in /home/ed/loom-ide-tauri/native-app/src/visual.rs:462:
+     use super::*;
+     #[test]
+     fn appearances_read_the_shared_palette_and_geometry() {
+[31m-        for light in [false,true] {
+(B[m[31m-            let colors=Palette::new(light);
+(B[m[31m-            let tokens=&shared_theme()[if light {"white"}else{"dark"}];
+(B[m[31m-            assert_eq!(colors.text,token_color(tokens,"text"));
+(B[m[31m-            assert_eq!(colors.deep,token_color(tokens,"deep"));
+(B[m[31m-            assert_ne!(colors.text,colors.deep);
+(B[m[32m+        for light in [false, true] {
+(B[m[32m+            let colors = Palette::new(light);
+(B[m[32m+            let tokens = &shared_theme()[if light { "white" } else { "dark" }];
+(B[m[32m+            assert_eq!(colors.text, token_color(tokens, "text"));
+(B[m[32m+            assert_eq!(colors.deep, token_color(tokens, "deep"));
+(B[m[32m+            assert_ne!(colors.text, colors.deep);
+(B[m         }
+[31m-        assert_eq!(control_radius(),10.);
+(B[m[31m-        assert_eq!(panel_radius(),22.);
+(B[m[32m+        assert_eq!(control_radius(), 10.);
+(B[m[32m+        assert_eq!(panel_radius(), 22.);
+(B[m     }
+ }
+ 
+EXIT=1

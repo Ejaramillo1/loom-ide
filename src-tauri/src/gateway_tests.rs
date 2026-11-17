@@ -217,6 +217,26 @@ fn artifact_content_decodes_both_layers_and_handles_empty_content() {
 }
 
 #[test]
+fn providers_mark_only_the_active_provider() {
+    let resp: ProviderListResponse = serde_json::from_value(json!({
+        "providers": [
+            {"name": "openai", "config": {"provider": "openai", "model": "gpt-5"}},
+            {"name": "deepseek", "config": {"provider": "deepseek", "model": "deepseek-chat"}}
+        ],
+        "activeProvider": "deepseek"
+    }))
+    .unwrap();
+    let entries = resp.into_entries();
+    assert_eq!(entries.len(), 2);
+    assert!(!entries[0].active);
+    assert!(entries[1].active);
+    assert_eq!(entries[1].config.model, "deepseek-chat");
+    let unconfigured: ProviderListResponse =
+        serde_json::from_value(json!({"providers": []})).unwrap();
+    assert!(unconfigured.into_entries().is_empty());
+}
+
+#[test]
 #[ignore = "requires a live Loom gateway on localhost:5006"]
 fn live_gateway_responses_parse() {
     let config: ServerConfig =

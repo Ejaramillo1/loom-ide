@@ -1,0 +1,685 @@
+[
+  {
+    "feature": "Chat \u2014 unary fallback",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:5274](/home/ed/loom-ide-tauri/src/main.ts:5274) `async function sendChatUnary(`",
+    "bridge": "api.askLoom \u2192 lib.rs::ask_loom \u2192 POST /v1/weave",
+    "loom": "LoomService.Weave \u2192 multi_agent.go::Weave \u2192 agent.Chat \u2192 provider/tool loop",
+    "contract": "WeaveRequest query/sessionId/agentId/context; WeaveResponse text/sessionId/traceId.",
+    "state": "Caches text by originating work, links returned session ID; sessions persisted by Loom; trace metadata is not retained in local cache.",
+    "error": "HTTP/parse failures visible; unsent text restored. Link save is best-effort and errors swallowed.",
+    "proof": "Request/response source traced; Rust live read smoke does not call Weave. No real turn executed.",
+    "gap": "Context unused by backend; autonomy advisory; no current end-to-end success proof.",
+    "issues": [
+      1,
+      9,
+      14
+    ],
+    "acceptance": "Real bounded two-turn model/tool run from work, trace lookup, reload and exact owner/session readback."
+  },
+  {
+    "feature": "Chat \u2014 normal streaming path",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:5346](/home/ed/loom-ide-tauri/src/main.ts:5346) `async function sendChat(text:`",
+    "bridge": "api.askLoomStream \u2192 loom_stream.rs::ask_loom_stream/run_stream \u2192 custom POST /v1/weave:stream \u2192 loom-stream events",
+    "loom": "HTTPServer.handleStreamWeaveSSE \u2192 MultiAgentServer.StreamWeave \u2192 agent.ChatWithProgress.",
+    "contract": "Custom encoding/json expects session_id/agent_id; UI receives snake_case WeaveProgress. Rust sends camelCase identity.",
+    "state": "Request state/partial tool lines in Map; completion guesses session if missing; cache contains only text.",
+    "error": "Failed-stage payload is treated as progress; EOF creates done; asynchronous rejection bypasses unary fallback.",
+    "proof": "Go decoder probe, safe live empty-query failure, extracted current UI handler reproduction.",
+    "gap": "Chosen agent/session discarded; failure can show completed; origin/trace untrustworthy.",
+    "issues": [
+      3,
+      4,
+      14
+    ],
+    "acceptance": "Choose non-default agent/session, send twice, inject execution failure/disconnect and prove actual UI/result IDs."
+  },
+  {
+    "feature": "Stop / interruption",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:5029](/home/ed/loom-ide-tauri/src/main.ts:5029) `function renderChatControls(`",
+    "bridge": "api.cancelLoomStream \u2192 loom_stream.rs::cancel_loom_stream \u2192 atomic flag/read wake/socket close.",
+    "loom": "Loom request context cancellation; no universal arbitrary-tool pause endpoint.",
+    "contract": "Frontend requestId is a local stream handle, not a durable server execution ID.",
+    "state": "Active stream state cleared locally; no server acknowledgement/history reconciliation is persisted.",
+    "error": "Unknown handle errors; read timeout approximately 20 s; cancelled label distinct from partial reply.",
+    "proof": "Rust cancellation validation test passes. Actual running model/tool interruption was not executed.",
+    "gap": "Cannot establish stopped side effects from a set flag or closed socket.",
+    "issues": [
+      1,
+      4
+    ],
+    "acceptance": "Stop a harmless long-running counted tool, inspect backend cancellation and any subsequent side effects."
+  },
+  {
+    "feature": "Legacy clarification cards",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:5104](/home/ed/loom-ide-tauri/src/main.ts:5104) `function renderHitlCard(`",
+    "bridge": "answerClarification \u2192 loom_stream.rs::answer_clarification \u2192 /v1/clarifications/{session}/answer.",
+    "loom": "multi_agent.go::AnswerClarificationQuestion \u2192 pendingQuestions answer channel.",
+    "contract": "Request questionId/answer; response success/accepted/error, no status.",
+    "state": "Transient card; guesses newest session if unknown; accepted server question may already be consumed.",
+    "error": "Always rejects a missing status, including a genuine accepted response.",
+    "proof": "Go response fixture and safe nonexistent-question HTTP-200 application rejection.",
+    "gap": "Delivery acknowledgement invalid; legacy question_id versus stored request_id not separated.",
+    "issues": [
+      6,
+      7
+    ],
+    "acceptance": "Ask/answer a real contained pending legacy question, duplicate/expire it and show exact server acknowledgement."
+  },
+  {
+    "feature": "Stored approvals / parked human requests",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:5110](/home/ed/loom-ide-tauri/src/main.ts:5110) `const isApproval = hitl.kind === \"approval\"`",
+    "bridge": "Approve/Deny strings reuse clarification command.",
+    "loom": "HumanRequestStore.RespondToRequest / held-call admission; HTTP answer adapter not found.",
+    "contract": "HITLRequestInfo request_id/kind/summary/context_json; store uses approved/rejected/responded states.",
+    "state": "Actual hold is backend-owned; UI card is transient and does not reconcile stored decisions.",
+    "error": "Legacy map returns unknown question for a store-owned ID; approval context incomplete.",
+    "proof": "Independent store and RPC implementations inspected; real pending approvals untouched.",
+    "gap": "Missing answer exposure is distinct from unsupported runtime holds.",
+    "issues": [
+      7
+    ],
+    "acceptance": "Harmless held tool: inspect reasons/args; approve once, deny once, expire and restart with authoritative state."
+  },
+  {
+    "feature": "Work items and manual planning",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:1424](/home/ed/loom-ide-tauri/src/main.ts:1424) `function renderWorkDetail(`",
+    "bridge": "get/add/set_work_* in lib.rs \u2192 WorkStore; session/artifact APIs for references.",
+    "loom": "No Loom WorkItem RPC; optional Loom sessions/artifacts and separate task boards.",
+    "contract": "Local WorkItem active/paused, intent_id, session_id, artifact_ids and criteria.",
+    "state": "work.json atomic persistence; execution/experiment relations remain frontend Maps.",
+    "error": "Local persistence errors shown on mutation; some remote lists retain stale rows.",
+    "proof": "Passing Rust store/inheritance/restart tests, not a live UI run.",
+    "gap": "Pause is local; no runtime policy/run provenance.",
+    "issues": [
+      1,
+      13,
+      14
+    ],
+    "acceptance": "Create local work offline, attach real session/run/artifact online, restart and recover all links."
+  },
+  {
+    "feature": "Intent and acceptance criteria",
+    "status": "UI ONLY",
+    "ui": "[src/main.ts:1014](/home/ed/loom-ide-tauri/src/main.ts:1014) `function buildIntentEditor(`",
+    "bridge": "create/update_intent, set_intent_acceptance/active \u2192 IntentStore.",
+    "loom": "No matching persistent IDE Intent API; Loom task decomposition/Weaver can consume goals separately.",
+    "contract": "Local statement/why/acceptance/version/history/autonomy; context pack forwards only selected strings.",
+    "state": "intents.json persists versions/history; no authoritative intent ID attached to runtime executions.",
+    "error": "Validation and justification errors visible; context delivery not enforced.",
+    "proof": "Local intent tests pass; no goal-to-runtime round trip.",
+    "gap": "UI ONLY refers to Loom authority, not a fake local object; consequential chat need not start from intent.",
+    "issues": [
+      1,
+      9,
+      14
+    ],
+    "acceptance": "Persist intent, run against it, prove runtime context and durable evidence of that objective after restart."
+  },
+  {
+    "feature": "Autonomy and work pause",
+    "status": "UI ONLY",
+    "ui": "[src/main.ts:839](/home/ed/loom-ide-tauri/src/main.ts:839) `function buildAutonomyDial(`",
+    "bridge": "set_work_autonomy/update_intent and set_work_status \u2192 local stores.",
+    "loom": "Runtime hooks/held requests exist; no four-level Weave policy binding or universal pause.",
+    "contract": "Four shipped levels with rank/justification/inheritance; not five implemented privilege bands.",
+    "state": "Local state/history persistent; in-flight runtime authority unchanged.",
+    "error": "Invalid rank/raise rejected locally; no denied-execution acknowledgement.",
+    "proof": "Local policy-record tests pass; executing commands do not consult policy.",
+    "gap": "P0 control gap; record semantics honestly and enforce at runtime.",
+    "issues": [
+      1
+    ],
+    "acceptance": "Manual/paused and tightened in-flight work cannot execute forbidden operations through any entry point."
+  },
+  {
+    "feature": "Agents \u2014 list and detail",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:3676](/home/ed/loom-ide-tauri/src/main.ts:3676) `function renderAgents(`",
+    "bridge": "listAgents/getAgent \u2192 lib.rs::list_agents/get_agent \u2192 /v1/agents[/{id}].",
+    "loom": "ListAgents/GetAgent \u2192 runtime registry and AgentInfo.",
+    "contract": "AgentInfo immutable id, name, status, counters; serde aliases/int64 conversion.",
+    "state": "Refetched into frontend; registry persistence controlled by Loom configuration.",
+    "error": "Listing clears on error; detail shows failure; source chooses name for chat selector although GUID is canonical.",
+    "proof": "Safe live /v1/agents returns 200; actual UI identity selection not exercised.",
+    "gap": "Read path real, source routing must be verified with non-default/renamed agents.",
+    "issues": [
+      3
+    ],
+    "acceptance": "Rename/select a contained non-default agent; verify exact GUID and real status across restart."
+  },
+  {
+    "feature": "Agents \u2014 create from reviewed JSON / description",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:4214](/home/ed/loom-ide-tauri/src/main.ts:4214) `async function submitAgentCreate(`",
+    "bridge": "createAgent \u2192 loom_http.rs::agent_create \u2192 POST /v1/agents; describeAgent \u2192 unary askLoom.",
+    "loom": "CreateAgentFromConfig; default-agent prompt is not independent evidence of Weaver routing.",
+    "contract": "CreateAgentRequest requires config/configPath; Rust sends bare editor object.",
+    "state": "Dialog holds proposal; registry should persist created config according to server.",
+    "error": "Server validation surfaced; normal bare request rejected.",
+    "proof": "Go protojson fixture demonstrates invalid envelope; real agent not created.",
+    "gap": "Creation and generated config schema do not match reviewed AgentConfig contract.",
+    "issues": [
+      8
+    ],
+    "acceptance": "Review valid nested config, create one actual agent, list/read/start/stop/restart it."
+  },
+  {
+    "feature": "Agents \u2014 start/stop/reload/delete",
+    "status": "NOT VERIFIED",
+    "ui": "[src/main.ts:3974](/home/ed/loom-ide-tauri/src/main.ts:3974) `async function openAgentDetail(`",
+    "bridge": "agentStart/Stop/Reload/Delete \u2192 loom_http lifecycle wrappers.",
+    "loom": "LoomService lifecycle \u2192 pkg/server/agent_lifecycle.go.",
+    "contract": "Encoded immutable agent ID in path; returned AgentInfo or lifecycle response.",
+    "state": "Refreshes agents after actions; persistence/runtime effects depend on registry.",
+    "error": "Action failures show notices; no live mutation/recovery test.",
+    "proof": "Call chain and server implementation inspected; no real agents changed.",
+    "gap": "Source wiring exists; verified lifecycle semantics cannot be inferred from list success.",
+    "issues": [],
+    "acceptance": "Contained create/start/stop/reload/delete and failure cases, with observed process/runtime state."
+  },
+  {
+    "feature": "Sessions \u2014 select/create/history/resume/delete/resolve-gap",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:4328](/home/ed/loom-ide-tauri/src/main.ts:4328) `function renderSessionDetail(`",
+    "bridge": "lib.rs session/history commands; loom_http.rs resume/delete/resolve-gap.",
+    "loom": "Session RPCs and pkg/server/session_resume.go; resume can execute tools/models.",
+    "contract": "Session/history JSON; ResumeSessionResponse and ResolveExecutionGapResponse require exact readback.",
+    "state": "Selected ID/local cache; backend session store persists history; work session link is local JSON.",
+    "error": "Errors shown; resume/resolve can report requested/resolved without proving effective resulting state.",
+    "proof": "Real session detail parser passes; lifecycle and interrupted recovery not run.",
+    "gap": "Authority/identity and restart/cancellation evidence incomplete.",
+    "issues": [
+      1,
+      3,
+      14
+    ],
+    "acceptance": "Create contained session, two turns, interrupt/resume, resolve real gap only when valid, reopen history after restart."
+  },
+  {
+    "feature": "Session live subscription",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:1984](/home/ed/loom-ide-tauri/src/main.ts:1984) `async function ensureSessionSubscription(`",
+    "bridge": "sessionSubscribe \u2192 loom_stream.rs::session_subscribe \u2192 GET /v1/sessions/{id}:subscribe.",
+    "loom": "SubscribeToSession gateway stream.",
+    "contract": "Gateway newline JSON result with SessionUpdate, not SSE data lines.",
+    "state": "On progress refreshes selected detail; old subscriptions not cancelled on selection change.",
+    "error": "Start/error can be silent; old events are ignored but resources remain.",
+    "proof": "Source transport/ownership traced; no live subscription UI test.",
+    "gap": "Wrong transport plus lifecycle cleanup.",
+    "issues": [
+      5,
+      17
+    ],
+    "acceptance": "External contained session change reaches selected UI; A\u2192B\u2192none leaves no subscriptions."
+  },
+  {
+    "feature": "Models/providers \u2014 availability",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:2964](/home/ed/loom-ide-tauri/src/main.ts:2964) `function renderInspectorModels(`",
+    "bridge": "listModels/listProviders \u2192 typed lib.rs response parsers.",
+    "loom": "ListAvailableModels/ListProviders \u2192 model/provider configuration.",
+    "contract": "ModelInfo and ProviderEntry.config; activeProvider drives active marker.",
+    "state": "Refetched in memory; backend config authoritative.",
+    "error": "Errors clear unavailable detail; discovery not an effective-model execution test.",
+    "proof": "Live Rust parser smoke passes model/provider responses.",
+    "gap": "No provider-switch execution proof; preserve accurate unavailable/empty distinction.",
+    "issues": [],
+    "acceptance": "Display actual configured providers/models and verify their effective runtime selection with a contained turn."
+  },
+  {
+    "feature": "Models \u2014 switch from session detail",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:4420](/home/ed/loom-ide-tauri/src/main.ts:4420) `await switchModel(detail.id, undefined, modelSel.value)`",
+    "bridge": "switchModel \u2192 lib.rs::switch_model \u2192 /v1/sessions/{id}:switch-model.",
+    "loom": "MultiAgentServer.SwitchModel \u2192 provider factory / agent role provider.",
+    "contract": "Legacy request requires session_id/provider/model; agent_id defaults to default agent in implementation.",
+    "state": "UI requests model only; underlying setting is agent-scoped, not independent per-session state.",
+    "error": "Normal request returns missing-provider error before mutation.",
+    "proof": "Live validation probe returns 400; source confirms absent provider and owner.",
+    "gap": "Wrong request/target/scope; use effective model response and explicit owner.",
+    "issues": [
+      21
+    ],
+    "acceptance": "Switch a contained non-default session owner; read effective provider/model and prove other agents unchanged."
+  },
+  {
+    "feature": "Tools \u2014 definitions and registration",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:3927](/home/ed/loom-ide-tauri/src/main.ts:3927) `async function submitRegisterTool(`",
+    "bridge": "listTools plus loom_http.rs::tools_register; MCP per-server tool drawer.",
+    "loom": "LoomService ListTools/RegisterTool subset; separate ToolRegistryService not fully exposed.",
+    "contract": "RegisterToolRequest.tool; ToolDefinition schema strings; RegisterToolResponse success/message.",
+    "state": "Definitions from server; register should refresh authoritative registry; not a tool implementation editor.",
+    "error": "JSON/HTTP errors visible; application-success booleans require explicit validation.",
+    "proof": "Live tools parser passes; no tool was registered or run.",
+    "gap": "Cannot claim execution/permission integration from schemas or HTTP acceptance.",
+    "issues": [
+      1,
+      7
+    ],
+    "acceptance": "Register a harmless actual tool in isolation; inspect schema/result and denied/failed execution, not just metadata."
+  },
+  {
+    "feature": "MCP servers and tools",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:4124](/home/ed/loom-ide-tauri/src/main.ts:4124) `async function testMcpConfig(`",
+    "bridge": "loom_http.rs MCP add/update/get/list/test/restart/delete/health/tools.",
+    "loom": "MCP management RPCs \u2192 pkg/server/mcp_management.go \u2192 manager/transport.",
+    "contract": "Add.server envelope; Test.success/error; Health.servers map; tool schemas from Tools response.",
+    "state": "Backend config/manager authoritative; UI health action can replace rows with empty list.",
+    "error": "Exact Test request rejects name; latent 200 failure is parsed as server and shown passed.",
+    "proof": "Safe test validation, live empty health shape and source contracts inspected.",
+    "gap": "Fix each distinct envelope; do not share a server parser for test/health.",
+    "issues": [
+      12
+    ],
+    "acceptance": "Contained harmless MCP config test/add/list/tools/restart/delete; preserve errors and identities."
+  },
+  {
+    "feature": "Memory \u2014 local notes / versions / archive",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/knowledge.ts:37](/home/ed/loom-ide-tauri/src/knowledge.ts:37) `export function installKnowledge(`",
+    "bridge": "vaultInvoke \u2192 knowledge.rs CRUD/history/archive/restore; shared draft-safe editor.",
+    "loom": "No Loom runtime memory API; one-way mirror exists separately.",
+    "contract": "Markdown JSON frontmatter, Note/Meta, revision and original-body guards.",
+    "state": "Repository-path vault; atomic journal/history preserves previous content; archive preserves files.",
+    "error": "Invalid/symlink/oversize/stale writes rejected; vault errors visible.",
+    "proof": "Extensive passing knowledge/store tests; no real-vault smoke performed.",
+    "gap": "Local by design; does not imply model retrieval. Portable path and watcher incomplete.",
+    "issues": [
+      9,
+      16,
+      18
+    ],
+    "acceptance": "Contained local create/edit/history/archive/restore; prove only explicitly selected context reaches a real model."
+  },
+  {
+    "feature": "Memory \u2014 Graph and Canvas",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/knowledge.ts:346](/home/ed/loom-ide-tauri/src/knowledge.ts:346) `function renderGraph(`",
+    "bridge": "KnowledgeListing/edges; canvas layout load/save/export \u2192 knowledge.rs.",
+    "loom": "No GraphMemory RPC; graph is local typed relations.",
+    "contract": "Nine relation types; note IDs and local positions; Obsidian JSON Canvas export.",
+    "state": "Notes/edges durable; layout JSON direct write with silent catch; shared bench renderers.",
+    "error": "Vault failures honest; layout failure hidden; external ledger changes missed.",
+    "proof": "Graph/layout/interaction tests pass; no actual canvas screen interaction observed.",
+    "gap": "Local graph useful but not runtime memory; durable layout/external signal gaps.",
+    "issues": [
+      18,
+      19
+    ],
+    "acceptance": "Relate/drag/export/reopen actual contained notes; external edge changes refresh both surfaces."
+  },
+  {
+    "feature": "Memory garden / review and Activity",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/knowledge.ts:125](/home/ed/loom-ide-tauri/src/knowledge.ts:125) `function auditRows(`",
+    "bridge": "knowledge_review / listing ledger and pending count.",
+    "loom": "No Loom approval inbox; local author/proposed/evidence-link policy.",
+    "contract": "Human review requires evidence edge/reason/current revision; local audit entries.",
+    "state": "Vault journal and versions persist; bell derived from local listing.",
+    "error": "Invalid agent overwrite/review rejected; errors visible; remote HITL not synchronized here.",
+    "proof": "Passing proposal/evidence/stale-write/recovery tests.",
+    "gap": "Maintain local review distinction; do not claim remote held execution approval.",
+    "issues": [
+      7,
+      18
+    ],
+    "acceptance": "Propose/review/reject with actual linked evidence, restart, and prove it does not answer unrelated runtime holds."
+  },
+  {
+    "feature": "Memory \u2014 manual Sync from Loom",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src-tauri/src/knowledge.rs:1064](/home/ed/loom-ide-tauri/src-tauri/src/knowledge.rs:1064) `pub async fn knowledge_sync_from_loom(`",
+    "bridge": "GET sessions?limit=500, agents, artifacts?limit=200 \u2192 Vault.mirror.",
+    "loom": "Loom metadata list RPCs; no model-memory write/export RPC used.",
+    "contract": "Exact import markers; metadata only; existing imported IDs skipped.",
+    "state": "New snapshots persisted as local notes; not updates/deletes/two-way sync; partial count reported on failure.",
+    "error": "Stops with count on failure; no all-or-nothing transaction across three remote lists.",
+    "proof": "Idempotent marker/content-exclusion tests pass; actual user vault not synced.",
+    "gap": "Snapshots are not current runtime memory; pagination and changed/deleted remote objects not reconciled.",
+    "issues": [
+      9,
+      16
+    ],
+    "acceptance": "Contained import twice, inspect original metadata and limitation labels, fail midway without duplicate notes."
+  },
+  {
+    "feature": "Remote GraphMemory and MemoryLayer",
+    "status": "UNSUPPORTED",
+    "ui": "[src/knowledge.ts:346](/home/ed/loom-ide-tauri/src/knowledge.ts:346) `function renderGraph(`",
+    "bridge": "No corresponding Tauri transport call; local graph is a different store.",
+    "loom": "GraphMemoryService/MemoryLayerService gRPC contracts; configured bootstrap in Loom.",
+    "contract": "Remote entity/edge/recall/remember/context/stats versus local Note/Edge.",
+    "state": "Remote persistence belongs to configured Loom memory stores; no IDE synchronization.",
+    "error": "No remote operation exists to return an error through this UI.",
+    "proof": "Schemas/store/runtime sources inspected; remote calls not executed.",
+    "gap": "UNSUPPORTED by current IDE transport, not absent from Loom. Follow existing transport decision.",
+    "issues": [],
+    "acceptance": "After scope/transport choice: real remember/recall/relate/context and restart with visible returned evidence."
+  },
+  {
+    "feature": "Code \u2014 files, editor and manual save",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:5999](/home/ed/loom-ide-tauri/src/main.ts:5999) `async function openFile(`",
+    "bridge": "workspace commands \u2192 workspace.rs containment/read_text/write_text; Monaco editor.",
+    "loom": "Local filesystem, not an agent filesystem tool API; Ask Loom sends query/context.",
+    "contract": "Selected canonical root; path/content/original; UTF-8\u22641 MB; explicit-save compare.",
+    "state": "Files and workspace selection persist; manual dirty draft guards; no automatic agent apply/execute.",
+    "error": "Outside-root/binary/read-only/external-change errors preserve draft.",
+    "proof": "Passing workspace tests and frontend build; actual desktop editing not clicked.",
+    "gap": "Context claims fail QC-09; no terminal/test runner promised from this local editor.",
+    "issues": [
+      9
+    ],
+    "acceptance": "Open/edit/save/reload contained file, detect external edit, then prove selected contextual assistance without automatic writes."
+  },
+  {
+    "feature": "Experiments \u2014 arms and recorded decisions",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:6520](/home/ed/loom-ide-tauri/src/main.ts:6520) `async function runExperimentArm(`",
+    "bridge": "ExperimentStore status/result plus unary askLoom; selection/decision persistence.",
+    "loom": "Weave agent query, not a dedicated controlled-experiment/evaluator contract.",
+    "contract": "Arm config becomes prompt prose; response text saved as result; chosen arm is a human record.",
+    "state": "experiments.json durable; running arms reset on client load; work relationship in Map.",
+    "error": "Failure reported, local status reset handling exists; no actual tool cancellation/control enforcement.",
+    "proof": "Store tests pass; no contained actual arm/evaluation run executed.",
+    "gap": "Do not imply config was enforced or text independently measured; context/evidence gaps.",
+    "issues": [
+      1,
+      9,
+      14
+    ],
+    "acceptance": "Run two genuinely different supported configs, inspect tool/evaluation evidence and retain origin/decision after restart."
+  },
+  {
+    "feature": "Provider A/B comparison",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:2009](/home/ed/loom-ide-tauri/src/main.ts:2009) `function handleAbtestEvent(`",
+    "bridge": "providerAbtest \u2192 loom_stream.rs::provider_abtest \u2192 /v1/providers:abtest.",
+    "loom": "LoomService.ABTest / provider evaluation implementation.",
+    "contract": "ABTestRequest mode/providerNames; gateway result with camelCase ABTestEvent fields and int64 latency.",
+    "state": "In-memory comparison table/winner; no durable work/evaluation relationship.",
+    "error": "Wrong stream format discards results; empty validation error observed safely.",
+    "proof": "HTTP 400 JSON envelope and source stream contracts inspected; no paid provider calls.",
+    "gap": "Actual fields are flat, not oneofs; decode envelope/casing and distinguish scores from evidence.",
+    "issues": [
+      5,
+      14
+    ],
+    "acceptance": "Compare two real contained providers, verify actual output/latency/cost/score/winner and retain evidence."
+  },
+  {
+    "feature": "Workflow catalogue, execute and execution results",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:1834](/home/ed/loom-ide-tauri/src/main.ts:1834) `async function runWorkflow(name:`",
+    "bridge": "list/execute/get/list-executions in lib.rs; normal workflow stream in loom_stream.rs.",
+    "loom": "Workflow orchestration via MultiAgentServer \u2192 workflow engine/agents/checkpoints.",
+    "contract": "ExecuteWorkflowRequest workflowRef; WorkflowProgress executionId; WorkflowExecution result/status.",
+    "state": "Runtime execution authoritative; frontend polling/maps; source-work changes during run misattribute output.",
+    "error": "Wrong protocol; EOF can show completed without ID; unary fallback only on command start rejection.",
+    "proof": "Safe empty-request rejection; extracted origin test; no real workflow executed.",
+    "gap": "Run lifecycle/error/origin/evidence not complete.",
+    "issues": [
+      4,
+      5,
+      13,
+      14
+    ],
+    "acceptance": "Contained workflow success/failure/checkpoint, navigate during run, inspect real artifacts/status and restart recovery."
+  },
+  {
+    "feature": "Workflow schedules and scheduled cancellation",
+    "status": "NOT VERIFIED",
+    "ui": "[src/main.ts:2278](/home/ed/loom-ide-tauri/src/main.ts:2278) `async function submitSchedule(`",
+    "bridge": "loom_http schedule create/update/list/get/pause/resume/trigger/delete/history/cancel.",
+    "loom": "MultiAgentServer schedule methods \u2192 workflow scheduler.",
+    "contract": "ScheduleWorkflowRequest workflowName+schedule cron/timezone/enabled; cancellation is a signal, not rollback.",
+    "state": "Configured backend owns schedule/history; frontend refreshes arrays.",
+    "error": "HTTP errors visible; cooperative cancelled boolean/message needs effective-state readback.",
+    "proof": "Live empty schedule list returns 200; no schedules created/triggered/altered.",
+    "gap": "Read result does not verify cron timezone, persistence, pause/resume or interrupted execution.",
+    "issues": [
+      1,
+      14
+    ],
+    "acceptance": "Contained schedule with explicit timezone; create/read/pause/resume/trigger/history/cancel and restart; no real-user schedule touched."
+  },
+  {
+    "feature": "Artifacts \u2014 list, View content, search and attachments",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:4630](/home/ed/loom-ide-tauri/src/main.ts:4630) `function renderArtifacts(`",
+    "bridge": "list/search/get_content \u2192 lib.rs typed metadata/content decoder; work artifact IDs saved locally.",
+    "loom": "Loom artifact store APIs, actual content bytes/encoding.",
+    "contract": "Artifact metadata; GetArtifactContent bytes/base64/encoding; query search; size cap.",
+    "state": "Server owns artifact content; client local work attachments durable; preview/search rows transient.",
+    "error": "View failures visible; list can retain stale rows; search response ordering unsafe.",
+    "proof": "Decoder vectors/schema tests pass; current View/search UI existence confirmed; no private artifact contents read.",
+    "gap": "Real content UI exists; need live content/provenance verification and stale-search fix.",
+    "issues": [
+      14,
+      15
+    ],
+    "acceptance": "Produce actual contained artifact, search/open exact bytes, attach, fail content read, restart/reopen with producer evidence."
+  },
+  {
+    "feature": "Evidence feed / provenance labels",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:2826](/home/ed/loom-ide-tauri/src/main.ts:2826) `function buildEvidenceSection(`",
+    "bridge": "Local experiments + Loom executions; work-filter Maps; Knowledge evidence shelf reuses it.",
+    "loom": "Workflow outputs and experiment records; no independent judge invocation.",
+    "contract": "Observed/recorded/inferred/unknown type exists; replies do not consistently attach source/trace metadata.",
+    "state": "Underlying records persist, work filter links and cached trace handles do not.",
+    "error": "Unavailable lists may retain stale data; success labels depend on transport truth.",
+    "proof": "Source flow traced; local result tests pass; no complete claim\u2192evidence click chain executed.",
+    "gap": "Generated narration must not be promoted to observed proof.",
+    "issues": [
+      4,
+      14
+    ],
+    "acceptance": "Click every claim to its actual tool/test/trace/artifact, including after restart and disconnected/recovered backend."
+  },
+  {
+    "feature": "Observability \u2014 trace detail",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:4241](/home/ed/loom-ide-tauri/src/main.ts:4241) `async function openTraceDialog(`",
+    "bridge": "getTrace \u2192 lib.rs::get_trace \u2192 /v1/traces/{id}.",
+    "loom": "observability_rpc.go::GetTrace and runtime trace recording; process-local lookup/optional exporter.",
+    "contract": "Trace/rootSpan/spans; camelCase/int64 aliases.",
+    "state": "Unary reply can expose traceId; cache drops it; streaming progress does not supply authoritative trace handle.",
+    "error": "Lookup errors shown in dialog; absence is not an empty verified trace.",
+    "proof": "Trace parser unit tests pass; no actual execution trace inspected.",
+    "gap": "Handle discovery/retention and backend retention limits need completion.",
+    "issues": [
+      14
+    ],
+    "acceptance": "Execute contained run, open its true span/tool context from reply/work, restart and describe available retention honestly."
+  },
+  {
+    "feature": "Unity / spatial navigation and synchronization",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/spatial.ts:3](/home/ed/loom-ide-tauri/src/spatial.ts:3) `export function installSpatialWorkbench(`",
+    "bridge": "iframe player \u2194 LoomVault.jslib / MemoryPalaceController \u2192 host callback.",
+    "loom": "No direct Loom service; host supplies real record counts/state and routes domains.",
+    "contract": "Same-origin/source-checked ready/error/select; theme/state/count/size messages.",
+    "state": "Queues pre-ready state/theme/count; no backend object ID selection; selected portal is local scene state.",
+    "error": "Loader/Unity errors visible with Retry; Q2 fallback deferred.",
+    "proof": "Bridge tests and Unity recompile pass; 4/4 asset copies match; actual WebGL/Tauri click NOT VERIFIED.",
+    "gap": "Meaningful host bridge exists; no proof of current packaged navigation/render or remote memory.",
+    "issues": [
+      18
+    ],
+    "acceptance": "Actual Tauri six-portal selection plus real data changes, theme/motion/resize/error/retry; preserve keyboard HTML navigation."
+  },
+  {
+    "feature": "Sphere and connection/state pill",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/loom-state.ts:4](/home/ed/loom-ide-tauri/src/loom-state.ts:4) `export function loomState(`",
+    "bridge": "Frontend reachability/attention/activity \u2192 notifySpatialState \u2192 ApplyLoomState.",
+    "loom": "lib.rs health probe uses /v1/health; no all-server-jobs telemetry.",
+    "contract": "Error/attention overrides local processing/busy/input/completed; fixed palette.",
+    "state": "Transient local state; not durable execution status or remote multi-client activity.",
+    "error": "False stream completion can turn it completed; error explanation belongs in text.",
+    "proof": "State-priority tests pass; live semantic/UI/model comparison not executed.",
+    "gap": "Keep defined meaning; distinguish observed connection from unverified whole-runtime state.",
+    "issues": [
+      4
+    ],
+    "acceptance": "Compare actual contained success/failure/hold/Stop/offline events against text and sphere; no fabricated activity."
+  },
+  {
+    "feature": "Attention \u2014 decisions/proposal bell",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:3122](/home/ed/loom-ide-tauri/src/main.ts:3122) `function renderAttention(`",
+    "bridge": "get_attention derives experiment decisions; knowledge listing supplies proposed-note count.",
+    "loom": "Not a complete Loom pending-request feed; runtime cards arrive only on an active stream.",
+    "contract": "AttentionItem decision; finding type reserved. Local proposal count.",
+    "state": "Decision records/notes persist; remote outstanding requests not enumerated/reconciled here.",
+    "error": "Errors must remain distinct from zero pending; stale-signal gaps apply.",
+    "proof": "Local decision/proposal tests; no remote attention inbox acceptance.",
+    "gap": "Name local decisions and remote holds distinctly; preserve only actionable events.",
+    "issues": [
+      7,
+      18
+    ],
+    "acceptance": "Real local undecided experiment and proposal plus runtime approval/error each require the right contextual action."
+  },
+  {
+    "feature": "Settings \u2014 appearance, motion, quality and connection",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/theme.ts:35](/home/ed/loom-ide-tauri/src/theme.ts:35) `export function setAppearance(`",
+    "bridge": "Theme localStorage/CSS/Monaco/player; OS motion; Unity quality; LOOM_ADDR env.",
+    "loom": "No remote appearance API; server config/TLS/storage are separate settings.",
+    "contract": "dark/white; High/Balanced/Low; source/origin messages; numeric socket address.",
+    "state": "Appearance stored locally; quality startup queuing incomplete; connection URL display still hardcoded default.",
+    "error": "Local appearance persistence failure tolerated; invalid LOOM_ADDR parse unchecked; no TLS/auth remote profile.",
+    "proof": "Theme/player tests pass; actual live theme/quality pixels and remote config not verified.",
+    "gap": "Keep local settings; contain connection boundary; test during-load quality and effective state.",
+    "issues": [
+      2
+    ],
+    "acceptance": "Toggle before/during/after player readiness; restart; invalid address surfaces an error; nonlocal profiles remain explicitly unsupported."
+  },
+  {
+    "feature": "Patterns shelf/detail/create/load",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/knowledge.ts:191](/home/ed/loom-ide-tauri/src/knowledge.ts:191) `async function renderPatterns(`",
+    "bridge": "loom_http pattern list/get/create/load; loom_stream pattern_updates_stream.",
+    "loom": "LoomService pattern RPCs \u2192 pattern library/hot reload.",
+    "contract": "Patterns/detail JSON and load/create responses; gateway stream update event.",
+    "state": "Backend files/library authoritative; shelf refreshes in memory.",
+    "error": "List/detail errors shown; realtime update format wrong.",
+    "proof": "Safe live patterns list 200; mutations not run.",
+    "gap": "Shelf real; automatic updates and contextual use/evidence need live verification.",
+    "issues": [
+      5
+    ],
+    "acceptance": "Contained actual pattern create/load/read and external update reflected in shelf; prove a run uses chosen pattern where supported."
+  },
+  {
+    "feature": "Skills add/classify/bulk import",
+    "status": "BROKEN",
+    "ui": "[src/knowledge.ts:275](/home/ed/loom-ide-tauri/src/knowledge.ts:275) `function renderSkills(`",
+    "bridge": "loom_http skills_add/classify/bulk_import \u2192 skills paths.",
+    "loom": "SkillsImportService \u2192 skills importer/router rebuild, separate service registration.",
+    "contract": "InlineSkill SKILL.md/references; BulkImportSkillsRequest srcDir/outDir; progress/routerReloaded.",
+    "state": "Backend generated skill tree durable; no list RPC promised; progress UI local.",
+    "error": "Unavailable service can reject routes; gateway stream wrong; per-skill failure must not become finished-success.",
+    "proof": "Schemas/handler inspected; no private skills imported or dependencies added.",
+    "gap": "HTTP annotation is not exposure; actual model-loaded skill must be proven.",
+    "issues": [
+      5,
+      10
+    ],
+    "acceptance": "Contained genuine skill import/classify, router reload/read/use in run, partial-failure and restart behavior."
+  },
+  {
+    "feature": "Tasks/boards/dependencies/decomposition/context",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:2375](/home/ed/loom-ide-tauri/src/main.ts:2375) `function buildLoomBoardsSection(`",
+    "bridge": "loom_tasks.rs 19-style command surface; task_updates_stream; JSON dialogs/actions.",
+    "loom": "TaskService \u2192 task.Manager/taskctx/bus; HTTP service not registered.",
+    "contract": "Nested task/update/dependency envelopes; readyTasks/blockedTasks; status enums and limits.",
+    "state": "Remote task store distinct from local WorkStore; no migration implied.",
+    "error": "Current live routes 404; latent update/list-shape defects; generic Value can fabricate response-object row.",
+    "proof": "Live board/task 404; inspected task methods/proto; no real board mutated.",
+    "gap": "Existing backend capability not exposed through this gateway, then caller contracts need correction.",
+    "issues": [
+      5,
+      10,
+      11
+    ],
+    "acceptance": "Contained board/task create/update/claim/release/transition/dependency/decompose; conflict tests and exact readback after restart."
+  },
+  {
+    "feature": "Apps list/open/delete and creation",
+    "status": "BROKEN",
+    "ui": "[src/main.ts:3957](/home/ed/loom-ide-tauri/src/main.ts:3957) `async function submitAppCreate(`",
+    "bridge": "apps list/get/create/update/delete/components \u2192 loom_http.rs; open backend app route.",
+    "loom": "LoomService apps \u2192 pkg/server/apps_rpc.go / optional compiler/HTML provider.",
+    "contract": "CreateUIAppRequest.spec, metadata/content response; UI instead posts name/html.",
+    "state": "Server app provider controls persistence; list refreshed after mutations.",
+    "error": "Normal create rejected unknown html; rendered app path/runtime compiler not exercised.",
+    "proof": "Safe live create validation rejects before any write; actual apps not created/opened/deleted.",
+    "gap": "Read/list path exists; create model fundamentally mismatched.",
+    "issues": [
+      22
+    ],
+    "acceptance": "Review real UIAppSpec, create/list/get/open/update in containment; verify actual content and invalid-component/duplicate errors."
+  },
+  {
+    "feature": "Server configuration, TLS and storage administration",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/main.ts:3047](/home/ed/loom-ide-tauri/src/main.ts:3047) `function renderInspectorServerConfig(`",
+    "bridge": "lib.rs get_server_config/storage; loom_http tls status/renew/run_migration.",
+    "loom": "LoomService server/storage methods \u2192 backend/TLS manager.",
+    "contract": "Nested ServerConfig/StorageStatus; lifecycle responses have their own result/error semantics.",
+    "state": "Backend configuration authoritative; IDE only shows/refetches it.",
+    "error": "Read errors visible; destructive/consequential administration not exercised.",
+    "proof": "Real Rust config/storage parser smoke passes; sanitized network evidence retained.",
+    "gap": "No claim of successful migration/certificate issuance; protect broad administration behind actual boundary.",
+    "issues": [
+      2
+    ],
+    "acceptance": "Read actual configuration; in an isolated deployment verify denied/failed/successful administration and readback, never test on user stores."
+  },
+  {
+    "feature": "Menus, search, drawers and keyboard paths",
+    "status": "NOT VERIFIED",
+    "ui": "[src/main.ts:4780](/home/ed/loom-ide-tauri/src/main.ts:4780) `function openGlobalSearch(`",
+    "bridge": "installAppMenu, existing workspace/knowledge actions and scoped searches.",
+    "loom": "Local shell/navigation; remote search limited to artifact API.",
+    "contract": "Focus/ARIA/menu action IDs; filters use actual work/note rows.",
+    "state": "Local selections/drawers and theme preferences; no account system behind avatar.",
+    "error": "Source focus/draft guards; actual accessibility stack and dynamic focus not observed.",
+    "proof": "63 frontend tests include shell/knowledge/player cases; CUA visual timed out.",
+    "gap": "Automated structure is not real-window keyboard/screen-reader evidence; no redesign required.",
+    "issues": [
+      15,
+      20
+    ],
+    "acceptance": "Actual keyboard-only menu/search/drawer/dialog/manual editing path, screen reader/zoom and both themes."
+  },
+  {
+    "feature": "Plain browser preview and retired native window",
+    "status": "PARTIALLY INTEGRATED",
+    "ui": "[src/api.ts:8](/home/ed/loom-ide-tauri/src/api.ts:8) `import { invoke }`",
+    "bridge": "api.ts fallbacks for local work/chat health; filesystem/most APIs require Tauri; native-app retained.",
+    "loom": "Vite development proxy only for limited Loom calls; release preview is not full Tauri.",
+    "contract": "Browser-local records differ from app-data/vault; no fabricated server data.",
+    "state": "Separate localStorage; retired native executable is not launched by active shell.",
+    "error": "Unsupported commands should fail honestly; offline draft preservation must be tested in actual shell.",
+    "proof": "Frontend build/native tests pass; no preview page was observed due CUA timeout.",
+    "gap": "Do not use preview success or native unit tests to certify active desktop integration.",
+    "issues": [
+      20
+    ],
+    "acceptance": "Actual Tauri test plus browser capability-limit check; docs identify one active shell and intentional local-only behavior."
+  }
+]

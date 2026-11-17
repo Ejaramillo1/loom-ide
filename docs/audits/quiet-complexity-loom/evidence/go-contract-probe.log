@@ -1,0 +1,3 @@
+PASS: exact custom SSE decoder drops IDE camelCase sessionId, agentId, enableTrace; snake_case preserves all three
+PASS: CreateAgentRequest rejects bare config and accepts nested config
+PASS: accepted clarification has success/accepted and no status field

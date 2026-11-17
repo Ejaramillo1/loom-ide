@@ -1,0 +1,14 @@
+    Checking loom-ide v0.1.0 (/home/ed/loom-ide-tauri/src-tauri)
+warning: field `completed` is never read
+   --> src/loom_stream.rs:903:5
+    |
+902 | struct StreamRead {
+    |        ---------- field in this struct
+903 |     completed: bool,
+    |     ^^^^^^^^^
+    |
+    = note: `StreamRead` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `loom-ide` (lib) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.09s

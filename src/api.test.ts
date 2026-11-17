@@ -25,9 +25,13 @@ import {
   createIntent,
   deleteIntent,
   evidenceKindLabel,
+  getArtifactContent,
   getIntents,
   getLoomStatus,
+  getTrace,
   getWorkItems,
+  searchArtifacts,
+  switchModel,
   setActiveIntent,
   setIntentAcceptance,
   setWorkAutonomy,
@@ -395,11 +399,12 @@ describe("browser Loom response contract", () => {
       text: "A server reply", sessionId: "session-returned",
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    const reply = await askLoom("Question", "session-existing", "agent-1");
+    const reply = await askLoom("Question", "session-existing", "agent-1", undefined, undefined, undefined, null, null);
     const [url, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/loom/v1/weave");
     expect(JSON.parse(request.body as string)).toEqual({
       query: "Question", sessionId: "session-existing", agentId: "agent-1",
+      backendConfig: { autonomy: "collaborative" },
     });
     expect(reply).toEqual({ text: "A server reply", source: "live", card: null, session_id: "session-returned" });
     expect(reply.evidenceKind).toBeUndefined();
@@ -410,6 +415,72 @@ describe("browser Loom response contract", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(askLoom(" ")).rejects.toThrow(/Enter a message/);
     expect(fetchMock).not.toHaveBeenCalled();
-    await expect(askLoom("Question")).rejects.toThrow(/empty response/);
+    await expect(askLoom("Question", undefined, undefined, undefined, undefined, undefined, null, null)).rejects.toThrow(/empty response/);
+  });
+
+  it("re-reads browser work policy before a fallback dispatch", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: "ok" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const work = await addWorkItem("Original work");
+    const send = () => askLoom("Question", undefined, undefined, undefined, undefined, undefined, work.id, work.intent_id);
+    await send();
+    await setWorkAutonomy(work.id, "manual");
+    await expect(send()).rejects.toThrow(/Manual autonomy/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("honors a stored session owner and its intent ceiling", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const intent = await createIntent({ statement: "Manual ceiling", autonomy: "manual" });
+    const work = await addWorkItem("Linked session", intent.id);
+    storage.setItem(WORK_KEY, JSON.stringify([{ ...work, autonomy: "delegated", session_id: "session-owned" }]));
+    await expect(askLoom("Question", "session-owned")).rejects.toThrow(/Manual autonomy/);
+    await expect(askLoom("Question", "session-owned", undefined, undefined, undefined, undefined, null, null)).rejects.toThrow(/belongs to a work item/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects omitted owners, missing references, invalid policy and corrupt stores before fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(askLoom("Question")).rejects.toThrow(/governing work or intent/);
+    await expect(askLoom("Question", undefined, undefined, undefined, undefined, undefined, "ghost", null)).rejects.toThrow(/work item no longer exists/);
+    const work = await addWorkItem("Policy owner");
+    const send = (workId: string | null, intentId: string | null) => askLoom("Question", undefined, undefined, undefined, undefined, undefined, workId, intentId);
+    await expect(send(null, null)).rejects.toThrow(/governing work or intent/);
+    await expect(send(work.id, "ghost")).rejects.toThrow(/intent does not belong/);
+    await expect(send("", null)).rejects.toThrow(/cannot be empty/);
+    storage.setItem(WORK_KEY, JSON.stringify([{ ...work, autonomy: "unknown" }]));
+    await expect(send(work.id, work.intent_id!)).rejects.toThrow(/stored autonomy level is invalid/);
+    storage.setItem(INTENTS_KEY, "{corrupt");
+    await expect(send(work.id, work.intent_id!)).rejects.toThrow(/Cannot read stored execution policy/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("trace / model / artifact content / artifact search (Tauri-only wrappers)", () => {
+  // In vitest there is no Tauri runtime, so invokeCmd throws before
+  // reaching the mocked invoke. The command name in the error proves
+  // each wrapper is wired to the backend command of the same name.
+  it("getTrace calls the get_trace command", async () => {
+    await expect(getTrace("trace-1")).rejects.toThrow(/"get_trace" needs the Tauri app/);
+  });
+
+  it("switchModel calls the switch_model command", async () => {
+    await expect(switchModel("session-1", "deepseek", "deepseek-v4-pro")).rejects.toThrow(
+      /"switch_model" needs the Tauri app/,
+    );
+  });
+
+  it("getArtifactContent calls the get_artifact_content command", async () => {
+    await expect(getArtifactContent("artifact-1")).rejects.toThrow(
+      /"get_artifact_content" needs the Tauri app/,
+    );
+  });
+
+  it("searchArtifacts calls the search_artifacts command", async () => {
+    await expect(searchArtifacts("memory")).rejects.toThrow(
+      /"search_artifacts" needs the Tauri app/,
+    );
   });
 });

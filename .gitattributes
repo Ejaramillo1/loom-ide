@@ -1,0 +1,5 @@
+# Unity serializes empty YAML values with a trailing space; preserve its output.
+unity-memory-palace/**/*.asset whitespace=-blank-at-eol
+unity-memory-palace/**/*.mat whitespace=-blank-at-eol
+unity-memory-palace/**/*.meta whitespace=-blank-at-eol
+unity-memory-palace/**/*.unity whitespace=-blank-at-eol

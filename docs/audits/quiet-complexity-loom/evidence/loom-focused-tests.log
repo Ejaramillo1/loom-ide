@@ -1,0 +1,5 @@
+go: downloading github.com/stretchr/testify v1.12.1
+# github.com/teradata-labs/loom/pkg/server
+pkg/server/admin_server_test.go:20:2: module lookup disabled by GOPROXY=off
+FAIL	github.com/teradata-labs/loom/pkg/server [setup failed]
+FAIL

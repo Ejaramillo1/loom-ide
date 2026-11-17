@@ -306,7 +306,7 @@ impl Workbench {
                 let t = ring as f32 / 24.;
                 let radius = d * 0.5 + (outer - d * 0.5) * t;
                 let alpha = (mechanics::glow_alpha(elapsed, reduced) as f32
-                    * 1.5 * (1. - t).powi(2)) as u8;
+                    * 0.55 * (1. - t).powi(2)) as u8;
                 let channel = |c: u8| (c as u16 * alpha as u16 / 255) as u8;
                 let color = Color32::from_rgba_premultiplied(
                     channel(tint.r()), channel(tint.g()), channel(tint.b()), alpha);
@@ -335,7 +335,7 @@ impl Workbench {
                     .into_iter().map(|[x,y]| c + vec2(x,y)).collect::<Vec<_>>();
                 if points.len() >= mechanics::RIBBON_MIN_POINTS {
                     p.add(Shape::line(points, Stroke::new(mechanics::RIBBON_WIDTH,
-                        Color32::from_rgba_premultiplied(16, 15, 24, 24))));
+                        Color32::from_rgba_premultiplied(20, 16, 14, 24))));
                 }
             }
         }
@@ -494,7 +494,7 @@ impl Workbench {
         let navw = 660_f32.min(w - 40.);
         let navcx = if narrow { w * 0.5 } else { cx + 20. };
         let nav = rect(navcx - navw * 0.5, h - 110., navw, 78.);
-        glass(&p, nav, 40.);
+        glass(&p, nav, 28.);
         let labels = [
             ("nodes", "Knowledge"),
             ("layers", "Canvas"),
@@ -564,7 +564,7 @@ impl Workbench {
     }
     fn conversation(&mut self, ui: &mut Ui, r: Rect) {
         let p = ui.painter().clone();
-        glass(&p, r, 20.);
+        glass(&p, r, panel_radius());
         icon(&p, "chat", r.min + vec2(30., 32.), 20., self.colors.text);
         txt(&p, r.left() + 51., r.top() + 21., "Conversation", 16., self.colors.text);
         if icon_button(
@@ -1341,10 +1341,10 @@ impl Workbench {
                         let (rr, res) =
                             ui.allocate_exact_size(vec2(list.width() - 12., 100.), Sense::click());
                         ui.painter()
-                            .rect_filled(rr, 16., self.colors.surface(Color32::from_rgb(25, 28, 44)));
+                            .rect_filled(rr, 12., self.colors.surface(Color32::from_rgb(25, 28, 44)));
                         ui.painter().rect_stroke(
                             rr,
-                            16.,
+                            12.,
                             Stroke::new(1_f32,
                                 self.colors.overlay(if res.hovered() { 45 } else { 18 }),
                             ),
@@ -1982,7 +1982,7 @@ impl eframe::App for Workbench {
                     self.workspace(ui, r);
                 }
                 if !self.startup_error.is_empty() {
-                    glass(ui.painter(), rect(48., 230., 620., 150.), 20.);
+                    glass(ui.painter(), rect(48., 230., 620., 150.), panel_radius());
                     txt(
                         ui.painter(),
                         70.,

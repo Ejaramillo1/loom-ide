@@ -1,0 +1,8 @@
+{
+  "network": {
+    "grpcAddress": "0.0.0.0:60051",
+    "httpAddress": "0.0.0.0:5006",
+    "httpEnabled": true
+  },
+  "tls_enabled": false
+}
