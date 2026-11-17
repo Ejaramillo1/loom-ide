@@ -3759,6 +3759,68 @@ let rightWasDrawer = isRightDrawer();
 let spatialPane: { tab: RightTab; open: boolean } = { tab: rightTab, open: rightOpen };
 let otherPane: { tab: RightTab; open: boolean } = { tab: "context", open: window.matchMedia("(min-width: 1440px)").matches };
 
+// ---------------------------------------------------------------------------
+// Right-column width. The conversation panel widens into the center/bench
+// while an agent reply is streaming, and can be resized by hand with a drag
+// handle on its inner edge. The width is reset on close, so reopening always
+// starts from the default.
+// ---------------------------------------------------------------------------
+
+const RIGHT_COL_MIN = 260;
+let rightColWidth: number | null = null;
+
+function rightColDefault(): number {
+  return window.matchMedia("(min-width: 1600px)").matches ? 320 : 304;
+}
+
+function clampRightCol(width: number): number {
+  const vw = typeof window.innerWidth === "number" ? window.innerWidth : 1280;
+  const max = Math.max(RIGHT_COL_MIN, Math.round(vw * 0.6));
+  return Math.min(max, Math.max(RIGHT_COL_MIN, Math.round(width)));
+}
+
+function rightColExpanded(): number {
+  const vw = typeof window.innerWidth === "number" ? window.innerWidth : 1280;
+  return clampRightCol(Math.max(480, Math.round(vw * 0.42)));
+}
+
+function currentRightColWidth(): number {
+  const col = document.getElementById("right-col") as HTMLElement | null;
+  if (col && typeof col.getBoundingClientRect === "function") {
+    return Math.round(col.getBoundingClientRect().width);
+  }
+  return rightColWidth ?? rightColDefault();
+}
+
+function applyRightColWidth() {
+  const scene = document.querySelector<HTMLElement>(".scene");
+  if (!scene || !scene.style) return;
+  if (rightColWidth === null) {
+    scene.style.removeProperty("--right-w");
+    scene.style.removeProperty("--spatial-chat-w");
+  } else {
+    const width = `${rightColWidth}px`;
+    scene.style.setProperty("--right-w", width);
+    scene.style.setProperty("--spatial-chat-w", width);
+  }
+}
+
+function resetRightColWidth() {
+  rightColWidth = null;
+  applyRightColWidth();
+}
+
+/** Widen the chat into the center/bench when a reply begins. Only acts when
+    the conversation tab is open in the desktop column and no manual width is
+    set; returns true when it actually expanded. */
+function expandChatOnReply(): boolean {
+  if (rightTab !== "conversation" || !rightOpen || isRightDrawer()) return false;
+  if (rightColWidth !== null) return false;
+  rightColWidth = rightColExpanded();
+  applyRightColWidth();
+  return true;
+}
+
 function isRightDrawer(): boolean {
   return !window.matchMedia(mode === "spatial" ? "(min-width: 1100px)" : "(min-width: 1440px)").matches;
 }
@@ -3821,6 +3883,7 @@ function openRight(tab: RightTab, opener?: HTMLElement) {
 
 function closeRight(returnFocus = true) {
   rightOpen = false;
+  resetRightColWidth();
   applyRightPane();
   if (returnFocus && isRightDrawer() && lastFocus) {
     lastFocus.focus();
@@ -3872,6 +3935,51 @@ function closeDrawers() {
     return;
   }
   if (isRightDrawer() && rightOpen) closeRight();
+}
+
+/** Drag + keyboard resize of the right column. The handle lives on the inner
+    edge: the left edge of the right-hand panel, or the right edge when
+    Spatial puts the conversation on the left. Hidden in drawer mode, so the
+    fixed-width drawer is untouched. */
+function installRightResize() {
+  const handle = $("#right-resize");
+  if (!handle) return;
+  let dragging = false;
+  let startX = 0;
+  let startWidth = 0;
+
+  // Spatial places the conversation on the left; widening there means a
+  // larger positive delta (drag right). Everywhere else the panel is on the
+  // right and widening means a negative delta (drag left).
+  const sign = () => (mode === "spatial" && !isRightDrawer() ? 1 : -1);
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (isRightDrawer()) return;
+    dragging = true;
+    startX = event.clientX;
+    startWidth = currentRightColWidth();
+    handle.setPointerCapture?.(event.pointerId);
+    document.body.classList.add("resizing");
+  });
+  handle.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
+    rightColWidth = clampRightCol(startWidth + (event.clientX - startX) * sign());
+    applyRightColWidth();
+  });
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("resizing");
+  };
+  handle.addEventListener("pointerup", endDrag);
+  handle.addEventListener("pointercancel", endDrag);
+  handle.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    if (rightColWidth === null) rightColWidth = currentRightColWidth();
+    rightColWidth = clampRightCol(rightColWidth + (event.key === "ArrowLeft" ? -1 : 1) * sign() * 20);
+    applyRightColWidth();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -5535,6 +5643,8 @@ interface StreamReplyState {
   /** The turn's cost from the completion event (USD); null = unknown. */
   costUsd: number | null;
   finished: boolean;
+  /** True once this stream has triggered the chat-panel expansion. */
+  expanded: boolean;
   cancellationRequested?: boolean;
 }
 
@@ -5555,6 +5665,13 @@ function renderChatControls() {
 function handleStreamEvent(p: LoomStreamEvent) {
   const st = activeStreams.get(p.requestId);
   if (!st || st.finished) return;
+
+  // The first event of a stream proves the agent is answering: widen the
+  // chat panel into the center/bench once, if the conversation is open.
+  if (!st.expanded) {
+    st.expanded = true;
+    expandChatOnReply();
+  }
 
   if (p.kind === "progress" && p.event) {
     const e = p.event;
@@ -6186,6 +6303,7 @@ async function sendChat(text: string) {
     runId,
     costUsd: null,
     finished: false,
+    expanded: false,
   };
   activeStreams.set(requestId, state);
   activeStreamId = requestId;
@@ -7610,6 +7728,10 @@ const ALL_VIEWS: Mode[] = [
   "knowledge",
 ];
 
+// The workspace destinations offered from the View menu. Spatial leads so
+// the home view is reachable now that the footer is gone.
+const VIEW_MENU_MODES = ["spatial", "code", "experiment", "work", "agents", "knowledge"] as const;
+
 let appMenu: ReturnType<typeof installAppMenu> | null = null;
 
 function initAppMenu() {
@@ -7643,7 +7765,7 @@ function initAppMenu() {
     {
       label: "View",
       items: [
-        ...(["code", "experiment", "work", "agents", "knowledge"] as const).map((view) => ({
+        ...VIEW_MENU_MODES.map((view) => ({
           label: view[0].toUpperCase() + view.slice(1),
           radio: true,
           checked: () => mode === view,
@@ -7795,17 +7917,11 @@ function setMode(next: Mode) {
   mode = next;
   rightTab = pane.tab;
   rightOpen = isRightDrawer() && !previousDrawer ? false : pane.open;
+  if (!rightOpen) resetRightColWidth();
   rightWasDrawer = isRightDrawer();
   const search = document.querySelector<HTMLElement>(".search-wrap");
   if (search) $(next === "knowledge" ? "#knowledge-search-slot" : "#work-search-slot").append(search);
   if (next === "knowledge" || next === "spatial") { void knowledge?.refresh(); }
-  // Keep the footer destination and its accessible state synchronized.
-  for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
-    const active = btn.dataset.mode === next;
-    btn.classList.toggle("active", active);
-    if (active) btn.setAttribute("aria-current", "page");
-    else btn.removeAttribute("aria-current");
-  }
   for (const id of ALL_VIEWS) {
     const el = document.getElementById(`view-${id}`);
     if (el) el.hidden = id !== next;
@@ -7816,10 +7932,6 @@ function setMode(next: Mode) {
   // The scene follows the mode: water + full atmosphere only in Experiment.
   document.querySelector(".scene")?.setAttribute("data-mode", next);
   applyRightPane();
-  const active = document.activeElement as HTMLElement | null;
-  if (active?.closest("[hidden]") || (active?.closest("#right-col") && !rightOpen)) {
-    document.querySelector<HTMLElement>(`.mode-btn[data-mode="${next}"]`)?.focus();
-  }
   closeMenus();
 }
 
@@ -8007,10 +8119,6 @@ async function init() {
       default: break;
     }
   }, () => ({ work: workItems.length, experiments: experiments.length }), currentLoomState, () => backgroundId);
-  // The footer provides the primary mode navigation.
-  for (const btn of document.querySelectorAll<HTMLButtonElement>(".mode-btn")) {
-    btn.addEventListener("click", () => setMode(btn.dataset.mode as Mode));
-  }
   // Right pane tabs.
   $("#tab-context").addEventListener("click", () => {
     selectRightTab("context");
@@ -8103,6 +8211,7 @@ async function init() {
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
   $("#right-close").addEventListener("click", () => closeRight());
   $("#scrim").addEventListener("click", () => closeDrawers());
+  installRightResize();
   window.addEventListener("resize", () => {
     if (!isLeftDrawer()) {
       document.body.classList.remove("left-open");
@@ -8114,6 +8223,7 @@ async function init() {
       // default state is open.
       rightOpen = !nowDrawer;
       rightWasDrawer = nowDrawer;
+      if (!rightOpen) resetRightColWidth();
       if (!rightOpen && document.querySelector("#right-col")?.contains(document.activeElement)) {
         (document.activeElement as HTMLElement).blur();
       }

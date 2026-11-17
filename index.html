@@ -221,6 +221,7 @@
           <!-- Right pane: one contextual surface with two tabs. The chat
                lives here so opening it never squeezes the work surface. -->
           <aside class="right-col" id="right-col" aria-label="Context">
+            <div class="right-resize" id="right-resize" role="separator" aria-orientation="vertical" aria-label="Resize context panel" tabindex="0"></div>
             <div class="pane-head right-head">
               <div class="inspector-tabs" role="tablist" aria-label="Context panel">
                 <button class="inspector-tab active" id="tab-context" type="button" role="tab" aria-selected="true" aria-controls="inspector-context" title="Details of the selected session or agent">Context</button>
@@ -318,30 +319,6 @@
                shares that stacking context, sits above it. -->
           <div class="scrim" id="scrim" hidden></div>
         </div>
-
-        <!-- ======================= Footer (row 3) ======================= -->
-        <footer class="app-footer">
-          <nav class="mode-nav" aria-label="Workspace mode">
-            <button class="mode-btn active" data-mode="spatial" type="button" aria-current="page">Spatial</button>
-            <button class="mode-btn" data-mode="work" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /></svg>
-              <span class="mode-label">Work</span>
-            </button>
-            <button class="mode-btn" data-mode="experiment" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6" /><path d="M10 3v5.5L4.5 18a2.4 2.4 0 0 0 2.1 3.5h10.8a2.4 2.4 0 0 0 2.1-3.5L14 8.5V3" /><path d="M7.5 14h9" /></svg>
-              <span class="mode-label">Experiment</span>
-            </button>
-            <button class="mode-btn" data-mode="code" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6L3 12l5 6" /><path d="M16 6l5 6-5 6" /></svg>
-              <span class="mode-label">Code</span>
-            </button>
-            <button class="mode-btn" data-mode="agents" type="button">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l9 5v10l-9 5-9-5V7l9-5z" /><path d="M12 12l9-5" /><path d="M12 12v10" /></svg>
-              <span class="mode-label">Agents</span>
-            </button>
-            <button class="mode-btn" data-mode="knowledge" type="button">Knowledge</button>
-            </nav>
-        </footer>
 
         <!-- Water reflection band: atmosphere for the Experiment overview only -->
         <div class="water" aria-hidden="true"></div>

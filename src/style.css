@@ -35,12 +35,12 @@
   --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "DejaVu Sans Mono", monospace;
-  /* Shell geometry. The three rows are explicit: every pane starts and
-     ends inside the main row, so the footer never floats over content. */
+  /* Shell geometry. Two explicit rows (header and main); every pane starts
+     and ends inside the main row. */
   --header-h: 56px;
-  --footer-h: 58px;
   --left-w: 300px;
   --right-w: 304px;
+  --spatial-chat-w: clamp(250px, 22vw, 320px);
   --shell-pad: 18px;
   --shell-gap: 12px;
 
@@ -157,7 +157,7 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   position: relative;
   height: 100dvh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) var(--footer-h);
+  grid-template-rows: auto minmax(0, 1fr);
   /* One explicit column, clamped to the viewport: without this the
      implicit column sizes to max-content, and a long nowrap objective
      title widens the whole shell and pushes the inspector off-screen. */
@@ -233,7 +233,6 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 .scene.no-glass .att-item,
 .scene.no-glass .chat-input,
 .scene.no-glass .status-pill,
-.scene.no-glass .mode-btn.active,
 .scene.no-glass .code-tab.active,
 .scene.no-glass .tab.active {
   background: var(--surface);
@@ -597,8 +596,8 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 }
 
 /* Ways into the work are only present in the modes that show work:
-   the catalogue itself in Work and Experiment, plus the footer
-   destinations. Other views get the reading room. */
+   the catalogue itself in Work and Experiment. Other views get the
+   reading room. */
 .scene[data-mode="code"] .main,
 .scene[data-mode="agents"] .main,
 .scene[data-mode="artifacts"] .main,
@@ -1614,6 +1613,7 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 /* ---------- Right pane: Context and Conversation in one surface ---------- */
 
 .right-col {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1625,6 +1625,49 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(5px);
   -webkit-backdrop-filter: blur(5px);
+}
+
+/* Resize handle on the inner edge (the edge facing the center/bench):
+   on the left for the right-hand panel, on the right when Spatial puts the
+   conversation on the left. Hidden whenever the pane is a drawer. */
+.right-resize {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 7px;
+  z-index: 6;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.right-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: transparent;
+}
+
+.right-resize:hover,
+.right-resize:active,
+.right-resize:focus-visible {
+  background: rgb(var(--theme-purple-rgb) / 0.16);
+}
+
+.right-resize:hover::after,
+.right-resize:active::after,
+.right-resize:focus-visible::after {
+  background: rgb(var(--theme-purple-rgb) / 0.55);
+}
+
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .right-head {
@@ -2148,66 +2191,13 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   background: var(--surface);
 }
 
-/* ---------- Footer (row 3, mode switcher) ---------- */
-
-.app-footer {
-  position: relative;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px var(--shell-pad) 10px;
-  height: var(--footer-h);
-  min-width: 0;
-  border-top: 1px solid transparent;
-}
-
-.mode-nav {
-  display: flex;
-  gap: 2px;
-  padding: 4px;
-  border-radius: var(--radius-nav);
-  background: rgb(var(--theme-surface-rgb) / 0.9);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-panel);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-}
-
-.mode-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 16px;
-  border-radius: var(--radius-control);
-  font-size: 13.5px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.mode-btn:hover {
-  color: var(--ink);
-}
-
-.mode-btn.active {
-  background: var(--reading);
-  color: var(--ink);
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgb(65 48 38 / 0.04);
-}
-
-.mode-btn svg {
-  opacity: 0.8;
-}
-
 /* ---------- Scrim + drawers ---------- */
 
 .scrim {
   position: fixed;
-  /* The header and footer stay interactive: the drawers themselves begin
-     below the header, and those controls are how a pane is reopened or
-     swapped. */
-  inset: var(--header-offset, var(--header-h)) 0 var(--footer-h) 0;
+  /* The header stays interactive: the drawers themselves begin below it,
+     and those controls are how a pane is reopened or swapped. */
+  inset: var(--header-offset, var(--header-h)) 0 0 0;
   z-index: 30;
   background: rgba(41, 39, 37, 0.28);
   border: none;
@@ -2242,6 +2232,10 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   body.right-hidden .right-col {
     display: none;
   }
+
+  .right-resize {
+    display: block;
+  }
 }
 
 /* ---------- Responsive: inspector becomes a drawer first ---------- */
@@ -2265,7 +2259,7 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
     position: fixed;
     top: var(--header-offset, var(--header-h));
     right: 0;
-    bottom: var(--footer-h);
+    bottom: 0;
     z-index: 40;
     width: min(348px, 92vw);
     border-radius: var(--radius-panel) 0 0 var(--radius-panel);
@@ -2314,7 +2308,7 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
     position: fixed;
     top: var(--header-offset, var(--header-h));
     left: 0;
-    bottom: var(--footer-h);
+    bottom: 0;
     z-index: 40;
     width: min(326px, 88vw);
     border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
@@ -3839,9 +3833,6 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 /* Quiet Complexity: shared treatments preserve existing component geometry. */
 .topbar { background: var(--bg); }
 .panel, .left-col { background: var(--reading); backdrop-filter: none; -webkit-backdrop-filter: none; }
-.mode-nav { box-shadow: var(--shadow-overlay); }
-.mode-btn { border-radius: var(--radius-nav); transition: background-color 0.18s ease-in-out, color 0.18s ease-in-out; }
-.mode-btn.active { background: var(--warm); }
 :is(input, textarea, select):not([type="checkbox"]):not([type="range"]), .chat-input { border-radius: var(--radius-input); }
 :is(.msg-card, .att-item, .flat-row, .work-row) { border-radius: var(--radius-card); }
 :is(.app-menu-panel, .chat-menu) { border-radius: var(--radius-secondary); }
@@ -3909,11 +3900,13 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
 .knowledge-canvas-card[data-kind="blue"] { border-top: 3px solid var(--theme-blue); }
 .knowledge-canvas-card[data-kind="amber"] { border-top: 3px solid var(--theme-amber); }
 @media (min-width: 1100px) {
-  .scene[data-mode="spatial"] .main { grid-template-columns: clamp(250px, 22vw, 320px) minmax(0, 1fr); }
+  .scene[data-mode="spatial"] .main { grid-template-columns: var(--spatial-chat-w) minmax(0, 1fr); }
   body.right-hidden .scene[data-mode="spatial"] .main { grid-template-columns: minmax(0, 1fr); }
-  .scene[data-mode="spatial"] .right-col { order: -1; position: static; width: auto; transform: none; visibility: visible; border: 1px solid var(--line); border-radius: var(--radius-panel); box-shadow: var(--shadow-panel); transition: none; }
+  .scene[data-mode="spatial"] .right-col { order: -1; position: relative; width: auto; transform: none; visibility: visible; border: 1px solid var(--line); border-radius: var(--radius-panel); box-shadow: var(--shadow-panel); transition: none; }
   body.right-hidden .scene[data-mode="spatial"] .right-col { display: none; }
   .scene[data-mode="spatial"] .right-col .drawer-close { display: none; }
+  .scene[data-mode="spatial"] .right-resize { display: block; left: auto; right: 0; }
+  .scene[data-mode="spatial"] .right-resize::after { left: auto; right: 3px; }
 }
 @media (max-width: 1099px) {
   .scene[data-mode="spatial"] .main { grid-template-columns: minmax(0, 1fr); }
