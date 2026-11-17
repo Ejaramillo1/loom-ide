@@ -2,6 +2,19 @@
 
 - **Title:** The autonomy dial does not govern Loom execution permissions
 - **Severity:** P1 — the flagship control concept is UI-only
+- **Status (2026-11-17):** **PARTIALLY FIXED — Manual is now enforced at
+  the IDE boundary.** Every agent-execution entry point (chat unary +
+  stream, workflow unary + stream, experiment arms via chat, schedule
+  trigger, session resume) rejects **Manual** before any request leaves
+  the app (`execution_admission`, `lib.rs`), and lowering the dial
+  mid-run cancels the affected work's in-flight runs. The governing
+  level rides the wire (`backendConfig.autonomy` / `backend_config.
+  autonomy`). **Remaining:** per-tool-call approval for Assisted/
+  Collaborative and runtime mid-run acknowledgment need the Loom patch —
+  prepared contract + tests in `17-autonomy-enforcement.md` and
+  `evidence/qc1-autonomy-runtime-tests.go.txt` (not applied). Until it
+  lands, levels above Manual run with server-default tool permissions,
+  and the dial's scope note says so.
 
 ## Problem statement
 

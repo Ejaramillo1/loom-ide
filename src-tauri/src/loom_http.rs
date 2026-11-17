@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{loom_request, percent_encode};
+use super::{execution_admission, loom_request, percent_encode};
 
 async fn loom_get(path: String) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
@@ -628,10 +628,14 @@ pub async fn workflow_schedule_delete(schedule_id: String) -> Result<String, Str
 }
 
 #[tauri::command]
-pub async fn workflow_schedule_trigger(schedule_id: String) -> Result<Value, String> {
+pub async fn workflow_schedule_trigger(
+    schedule_id: String,
+    autonomy: Option<String>,
+) -> Result<Value, String> {
     if schedule_id.trim().is_empty() {
         return Err("No schedule selected.".into());
     }
+    execution_admission(autonomy.as_deref(), "triggering a scheduled workflow")?;
     loom_send(
         "POST",
         format!(
@@ -924,10 +928,11 @@ pub async fn session_delete(session_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn session_resume(session_id: String) -> Result<Value, String> {
+pub async fn session_resume(session_id: String, autonomy: Option<String>) -> Result<Value, String> {
     if session_id.trim().is_empty() {
         return Err("No session selected.".into());
     }
+    execution_admission(autonomy.as_deref(), "resuming an agent session")?;
     loom_send(
         "POST",
         format!("/v1/sessions/{}:resume", percent_encode(&session_id)),

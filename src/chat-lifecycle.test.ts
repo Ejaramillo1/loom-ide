@@ -74,6 +74,7 @@ type ChatStubs = {
   getLoomStatus: ReturnType<typeof vi.fn>;
   answerClarification: ReturnType<typeof vi.fn>;
   buildChatContext: ReturnType<typeof vi.fn>;
+  governingAutonomy: ReturnType<typeof vi.fn>;
   activeIntent: ReturnType<typeof vi.fn>;
   askLoomStream: ReturnType<typeof vi.fn>;
   askLoom: ReturnType<typeof vi.fn>;
@@ -101,6 +102,7 @@ function defaultStubs(): ChatStubs {
     getLoomStatus: vi.fn(async () => ({ online: true })),
     answerClarification: vi.fn(async () => "accepted"),
     buildChatContext: vi.fn(() => ({ active_work: "w1" })),
+    governingAutonomy: vi.fn(() => "collaborative"),
     activeIntent: vi.fn(() => null),
     askLoomStream: vi.fn(() => new Promise<void>(() => {})),
     askLoom: vi.fn(async () => ({ text: "unary reply" })),
@@ -154,7 +156,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     "addChatError", "addChatMessage", "cacheChatMessage",
     "refreshSessions", "refreshAgents", "setWorkSession",
     "renderWorkList", "renderSessionBar", "loadWorkArtifacts",
-    "getLoomStatus", "answerClarification", "buildChatContext", "activeIntent",
+    "getLoomStatus", "answerClarification", "buildChatContext", "governingAutonomy", "activeIntent",
     "askLoomStream", "askLoom", "recordRunStart", "recordRunSettle",
     code + "\nreturn install();",
   )(
@@ -167,7 +169,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     stubs.addChatError, stubs.addChatMessage, stubs.cacheChatMessage,
     stubs.refreshSessions, stubs.refreshAgents, stubs.setWorkSession,
     stubs.renderWorkList, stubs.renderSessionBar, stubs.loadWorkArtifacts,
-    stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext, stubs.activeIntent,
+    stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext, stubs.governingAutonomy, stubs.activeIntent,
     stubs.askLoomStream, stubs.askLoom, stubs.recordRunStart, stubs.recordRunSettle,
   );
   return { api, stubs, node, window, localStorage };
@@ -254,7 +256,7 @@ it("captures work, session and agent at send time and never adopts the newest se
   void api.sendChat("hello");
   expect(stubs.askLoomStream).toHaveBeenCalledWith(
     expect.any(String), "hello", "sess-1", "agent-2", expect.anything(),
-    undefined, undefined,
+    undefined, undefined, "collaborative",
   );
 
   // The human switches work and session while the reply is in flight.
@@ -488,7 +490,7 @@ it("passes the active intent's budget to the unary fallback path (W-1)", async (
   void api.sendChat("hello");
   await tick();
   expect(stubs.askLoom).toHaveBeenCalledWith(
-    "hello", undefined, undefined, expect.anything(), 3, 90,
+    "hello", undefined, undefined, expect.anything(), 3, 90, "collaborative",
   );
 });
 
@@ -505,4 +507,32 @@ it("cancelled turns keep their partial output marked partial (review #10)", asyn
   api.handleStreamEvent({ requestId: sends[0], kind: "progress", event: { partial_content: "partial value" } });
   api.handleStreamEvent({ requestId: sends[0], kind: "cancelled" });
   expect(stubs.cacheChatMessage).toHaveBeenCalledWith("__unassigned", "loom", "partial value", true);
+});
+
+it("sends the governing autonomy on the stream path (QC-01/W-2)", async () => {
+  const stubs = defaultStubs();
+  stubs.governingAutonomy.mockReturnValue("assisted");
+  const { api } = await shell(stubs);
+
+  void api.sendChat("hello");
+  await tick();
+  const args = stubs.askLoomStream.mock.calls.at(-1);
+  expect(args?.[7]).toBe("assisted");
+});
+
+it("a Manual-autonomy send is rejected at the boundary and settles", async () => {
+  const stubs = defaultStubs();
+  stubs.governingAutonomy.mockReturnValue("manual");
+  const admission = new Error(
+    "Manual autonomy forbids agent chat. Raise the work item's autonomy to Assisted or higher to let the agent act — or do it by hand.",
+  );
+  stubs.askLoomStream = vi.fn(() => Promise.reject(admission));
+  stubs.askLoom = vi.fn(() => Promise.reject(admission));
+  const { api } = await shell(stubs);
+
+  await api.sendChat("do a thing");
+  expect(api.getChatInFlight()).toBe(0);
+  expect(stubs.addChatError).toHaveBeenCalled();
+  const msg = String(stubs.addChatError.mock.calls.at(-1)?.[0] ?? "");
+  expect(msg).toContain("Manual autonomy forbids agent chat");
 });

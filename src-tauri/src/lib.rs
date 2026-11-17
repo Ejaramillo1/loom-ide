@@ -355,6 +355,25 @@ fn autonomy_admission(
     Ok(())
 }
 
+/// Autonomy admission for agent-execution requests (Rule 4, QC-01/W-2):
+/// enforced at the Rust boundary before anything is sent. Manual (rank 0)
+/// forbids agent execution entirely — chat turns, experiment arms,
+/// workflow runs, schedule triggers and session resume are all rejected
+/// here, because with tools attached any of them can act. Higher levels
+/// pass through; per-tool-call approval for Assisted/Collaborative is the
+/// Loom runtime contract in `17-autonomy-enforcement.md` (prepared patch,
+/// not yet applied — the wire carries `backend_config.autonomy` so a
+/// patched Loom can enforce it).
+pub(crate) fn execution_admission(autonomy: Option<&str>, action: &str) -> Result<(), String> {
+    let level = autonomy.unwrap_or("collaborative");
+    if autonomy_rank(level) == Some(0) {
+        return Err(format!(
+            "Manual autonomy forbids {action}. Raise the work item's autonomy to Assisted or higher to let the agent act — or do it by hand."
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn set_work_autonomy(
     id: String,
@@ -1610,10 +1629,14 @@ async fn list_workflows() -> Result<Vec<Workflow>, String> {
 }
 
 #[tauri::command]
-async fn execute_workflow(workflow_ref: String) -> Result<ExecuteWorkflowResponse, String> {
+async fn execute_workflow(
+    workflow_ref: String,
+    autonomy: Option<String>,
+) -> Result<ExecuteWorkflowResponse, String> {
     if workflow_ref.trim().is_empty() {
         return Err("No workflow selected.".to_string());
     }
+    execution_admission(autonomy.as_deref(), "workflow runs")?;
     let body = serde_json::json!({ "workflowRef": workflow_ref }).to_string();
     let value = tauri::async_runtime::spawn_blocking(move || {
         loom_request("POST", "/v1/workflows:execute", Some(body))
@@ -1927,6 +1950,7 @@ fn weave_unary_body(
     context: Option<&HashMap<String, String>>,
     max_rounds: Option<i32>,
     timeout_seconds: Option<i32>,
+    autonomy: Option<&str>,
 ) -> serde_json::Map<String, serde_json::Value> {
     let mut obj = serde_json::Map::new();
     obj.insert("query".into(), message.into());
@@ -1947,6 +1971,12 @@ fn weave_unary_body(
             obj.insert("context".into(), serde_json::json!(c));
         }
     }
+    // The governing autonomy level rides in backend_config so a patched
+    // Loom runtime can hold or refuse tool calls per level (QC-01/W-2,
+    // 17-autonomy-enforcement.md). protojson camelCases the map field.
+    if let Some(a) = autonomy {
+        obj.insert("backendConfig".into(), serde_json::json!({ "autonomy": a }));
+    }
     obj.insert("enableTrace".into(), serde_json::Value::Bool(true));
     obj
 }
@@ -1959,10 +1989,12 @@ async fn ask_loom(
     context: Option<HashMap<String, String>>,
     max_rounds: Option<i32>,
     timeout_seconds: Option<i32>,
+    autonomy: Option<String>,
 ) -> Result<ChatReply, String> {
     if message.trim().is_empty() {
         return Err("Enter a message first.".into());
     }
+    execution_admission(autonomy.as_deref(), "agent chat")?;
     let body = serde_json::Value::Object(weave_unary_body(
         &message,
         session_id.as_deref(),
@@ -1970,6 +2002,7 @@ async fn ask_loom(
         context.as_ref(),
         max_rounds,
         timeout_seconds,
+        autonomy.as_deref(),
     ))
     .to_string();
     tauri::async_runtime::spawn_blocking(move || {
@@ -2423,7 +2456,7 @@ mod tests {
 
     #[test]
     fn weave_unary_body_carries_budget_as_camel_case_when_positive() {
-        let body = weave_unary_body("hi", None, None, None, Some(4), Some(120));
+        let body = weave_unary_body("hi", None, None, None, Some(4), Some(120), None);
         assert_eq!(body.get("maxRounds"), Some(&serde_json::json!(4)));
         assert_eq!(body.get("timeoutSeconds"), Some(&serde_json::json!(120)));
         // protojson ignores snake_case budget keys.
@@ -2433,9 +2466,60 @@ mod tests {
 
     #[test]
     fn weave_unary_body_omits_non_positive_budget() {
-        let body = weave_unary_body("hi", None, None, None, Some(0), Some(-3));
+        let body = weave_unary_body("hi", None, None, None, Some(0), Some(-3), None);
         assert!(body.get("maxRounds").is_none());
         assert!(body.get("timeoutSeconds").is_none());
+    }
+
+    // ------------------------------------------------------------------
+    // Autonomy on the wire (QC-01/W-2): the governing level rides in
+    // backend_config — camelCase on the protojson unary path
+    // (`backendConfig`), snake_case on the SSE stream path.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn weave_unary_body_carries_autonomy_in_camel_case_backend_config() {
+        let body = weave_unary_body("hi", None, None, None, None, None, Some("manual"));
+        assert_eq!(
+            body.get("backendConfig"),
+            Some(&serde_json::json!({ "autonomy": "manual" }))
+        );
+        let without = weave_unary_body("hi", None, None, None, None, None, None);
+        assert!(without.get("backendConfig").is_none());
+    }
+
+    // ------------------------------------------------------------------
+    // execution_admission (QC-01/W-2 Rule 4): Manual forbids agent
+    // execution at the boundary; higher levels and the default pass.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn execution_admission_rejects_manual_for_every_execution_class() {
+        for action in [
+            "agent chat",
+            "workflow runs",
+            "triggering a scheduled workflow",
+            "resuming an agent session",
+        ] {
+            assert!(
+                execution_admission(Some("manual"), action).is_err(),
+                "manual must be rejected for {action}"
+            );
+        }
+    }
+
+    #[test]
+    fn execution_admission_passes_assisted_and_higher() {
+        for level in ["assisted", "collaborative", "delegated"] {
+            for action in ["agent chat", "workflow runs"] {
+                assert!(
+                    execution_admission(Some(level), action).is_ok(),
+                    "{level} must pass for {action}"
+                );
+            }
+        }
+        // No governing object: default collaborative passes.
+        assert!(execution_admission(None, "agent chat").is_ok());
     }
 
     // ------------------------------------------------------------------

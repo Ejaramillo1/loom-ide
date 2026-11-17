@@ -36,8 +36,9 @@ durable run records (QC-14), the HITL approval route (QC-07), the
 task/skills HTTP registration (001/002), server-side context consumption
 (QC-09) and TraceId population (004) are all fixed with tests and, where
 possible, live verification. The verdict is still NO because human
-control remains advisory (QC-01/issue 005 — honestly labeled, not
-enforced), the traversed-UI proof on the current binary is not yet
+control: Manual is now enforced at the IDE boundary (QC-01/issue 005 —
+every agent-execution entry point rejects it; per-tool approval for
+Assisted/Collaborative is the prepared Loom contract, not yet applied), the traversed-UI proof on the current binary is not yet
 executed, the documentation tail (issue 015, NG-1/NG-2) is unfixed, and
 one gateway residual remains (QC-02/issue 011): the server is now
 **loopback-bound with restricted origins** (contained 2026-11-17,
@@ -75,7 +76,7 @@ and `14-report-evaluation.md` (truth table of every prior claim).
 | issue 002 skills disconnected | QC-10 | **FIXED** (server-side) — live `/v1/skills:bulkImport` 400-validation instead of 404 |
 | issue 003 stream framing mismatch | QC-05 | **FIXED** (`bdb92bb`) — NDJSON `{"result":…}` unwrapped; fixtures |
 | issue 004 trace ids unreachable | — (unique to this pass) | **FIXED** (Loom `8082078` + IDE) — TraceId populated; "View trace ›" renders |
-| issue 005 autonomy not enforced | QC-01 | **STILL OPEN** (by design) — copy now honest (`a02ad52`); no server enforcement |
+| issue 005 autonomy not enforced | QC-01 | **PARTIALLY FIXED (2026-11-17)** — Manual rejected at every entry point (`execution_admission`); wire carries the level; mid-run lowering cancels affected runs. Per-tool approval = prepared Loom contract (`17-autonomy-enforcement.md`) |
 | issue 006 workflow attribution/name | QC-13, QC-14 | **FIXED** — `workflowStreamOrigin` + persisted ownership maps + tests |
 | issue 007 newest-session race | QC-03 (root cause) | **FIXED** (`58cce7b`) — no newest/current-session adoption; honest identity note; tests |
 | issue 008 chat evidence kind | — | **FIXED** (`a714b20`) — live replies default to Observed |

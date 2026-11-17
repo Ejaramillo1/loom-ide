@@ -925,6 +925,7 @@ export async function askLoom(
   context?: Record<string, string>,
   maxRounds?: number,
   timeoutSeconds?: number,
+  autonomy?: string,
 ): Promise<ChatReply> {
   if (IN_TAURI) {
     return invoke<ChatReply>("ask_loom", {
@@ -934,6 +935,7 @@ export async function askLoom(
       context,
       maxRounds,
       timeoutSeconds,
+      autonomy,
     });
   }
   if (!message.trim()) throw new Error("Enter a message first.");
@@ -943,6 +945,7 @@ export async function askLoom(
   if (context && Object.keys(context).length > 0) body.context = context;
   if (maxRounds && maxRounds > 0) body.maxRounds = maxRounds;
   if (timeoutSeconds && timeoutSeconds > 0) body.timeoutSeconds = timeoutSeconds;
+  if (autonomy) body.backendConfig = { autonomy };
   const value = await loomRequest("/v1/weave", body as object);
   const text = [value.text, value.response, value.content, value.reply, value.message]
     .find(value => typeof value === "string" && value.trim());
@@ -1085,8 +1088,9 @@ export async function listWorkflows(): Promise<Workflow[]> {
 
 export async function executeWorkflow(
   workflowRef: string,
+  autonomy?: string,
 ): Promise<ExecuteWorkflowResponse> {
-  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef });
+  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef, autonomy });
 }
 
 export async function getWorkflowExecution(
@@ -1251,6 +1255,7 @@ export async function askLoomStream(
   context?: Record<string, string>,
   maxRounds?: number,
   timeoutSeconds?: number,
+  autonomy?: string,
 ): Promise<void> {
   return invokeCmd<void>("ask_loom_stream", {
     requestId,
@@ -1260,6 +1265,7 @@ export async function askLoomStream(
     context,
     maxRounds,
     timeoutSeconds,
+    autonomy,
   });
 }
 
@@ -1338,8 +1344,8 @@ export const listApps = () => invokeCmd<unknown[]>("apps_list");
 
 export const deleteSession = (sessionId: string) =>
   invokeCmd<string>("session_delete", { sessionId });
-export const resumeSession = (sessionId: string) =>
-  invokeCmd<unknown>("session_resume", { sessionId });
+export const resumeSession = (sessionId: string, autonomy?: string) =>
+  invokeCmd<unknown>("session_resume", { sessionId, autonomy });
 export const resolveSessionGap = (sessionId: string) =>
   invokeCmd<unknown>("session_resolve_gap", { sessionId });
 
@@ -1374,8 +1380,8 @@ export interface StreamEnvelope<T> {
   error?: string | null;
 }
 
-export const executeWorkflowStream = (requestId: string, workflowRef: string) =>
-  invokeCmd<void>("execute_workflow_stream", { requestId, workflowRef });
+export const executeWorkflowStream = (requestId: string, workflowRef: string, autonomy?: string) =>
+  invokeCmd<void>("execute_workflow_stream", { requestId, workflowRef, autonomy });
 export const sessionSubscribe = (requestId: string, sessionId: string) =>
   invokeCmd<void>("session_subscribe", { requestId, sessionId });
 export const providerAbtest = (
@@ -1395,8 +1401,8 @@ export const updateWorkflowSchedule = (
 ) => invokeCmd<unknown>("workflow_schedule_update", { scheduleId, cron, timezone, enabled });
 export const deleteWorkflowSchedule = (scheduleId: string) =>
   invokeCmd<string>("workflow_schedule_delete", { scheduleId });
-export const triggerWorkflowSchedule = (scheduleId: string) =>
-  invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId });
+export const triggerWorkflowSchedule = (scheduleId: string, autonomy?: string) =>
+  invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId, autonomy });
 export const cancelScheduleExecution = (executionId: string) =>
   invokeCmd<unknown>("workflow_schedule_cancel_execution", { executionId });
 

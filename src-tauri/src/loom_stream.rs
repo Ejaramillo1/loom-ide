@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
-use super::{loom_request, percent_encode};
+use super::{execution_admission, loom_request, percent_encode};
 
 /// Per-request cancel flags, keyed by the frontend's request id. Dropping a
 /// stream (server close, error, completion) also drops its entry.
@@ -92,8 +92,10 @@ pub fn ask_loom_stream(
     context: Option<std::collections::HashMap<String, String>>,
     max_rounds: Option<i32>,
     timeout_seconds: Option<i32>,
+    autonomy: Option<String>,
 ) -> Result<(), String> {
     validate_stream_inputs(&request_id, &message)?;
+    execution_admission(autonomy.as_deref(), "agent chat")?;
     let body = weave_stream_body(
         message.trim(),
         session_id.as_deref(),
@@ -101,6 +103,7 @@ pub fn ask_loom_stream(
         context.as_ref(),
         max_rounds,
         timeout_seconds,
+        autonomy.as_deref(),
     );
     start_loom_stream(
         app,
@@ -125,6 +128,7 @@ fn weave_stream_body(
     context: Option<&std::collections::HashMap<String, String>>,
     max_rounds: Option<i32>,
     timeout_seconds: Option<i32>,
+    autonomy: Option<&str>,
 ) -> serde_json::Map<String, Value> {
     let mut obj = serde_json::Map::new();
     obj.insert("query".into(), Value::String(message.to_string()));
@@ -147,6 +151,14 @@ fn weave_stream_body(
         if !c.is_empty() {
             obj.insert("context".into(), serde_json::json!(c));
         }
+    }
+    // Governing autonomy for the runtime permission contract (QC-01/W-2):
+    // snake_case here because the SSE handler decodes with encoding/json.
+    if let Some(a) = autonomy {
+        obj.insert(
+            "backend_config".into(),
+            serde_json::json!({ "autonomy": a }),
+        );
     }
     // Tracing on so the completed turn has an observability record.
     obj.insert("enable_trace".into(), Value::Bool(true));
@@ -184,10 +196,12 @@ pub fn execute_workflow_stream(
     app: AppHandle,
     request_id: String,
     workflow_ref: String,
+    autonomy: Option<String>,
 ) -> Result<(), String> {
     if workflow_ref.trim().is_empty() {
         return Err("No workflow selected.".into());
     }
+    execution_admission(autonomy.as_deref(), "workflow runs")?;
     start_loom_stream(
         app,
         request_id,
@@ -1124,7 +1138,15 @@ mod tests {
 
     #[test]
     fn weave_stream_body_uses_the_sse_snake_case_contract() {
-        let body = weave_stream_body("hi", Some("sess-1"), Some("agent-2"), None, None, None);
+        let body = weave_stream_body(
+            "hi",
+            Some("sess-1"),
+            Some("agent-2"),
+            None,
+            None,
+            None,
+            None,
+        );
         assert_eq!(body.get("query"), Some(&Value::String("hi".into())));
         assert_eq!(
             body.get("session_id"),
@@ -1141,7 +1163,7 @@ mod tests {
 
     #[test]
     fn weave_stream_body_omits_blank_optional_fields() {
-        let body = weave_stream_body("hi", Some("  "), Some(""), None, None, None);
+        let body = weave_stream_body("hi", Some("  "), Some(""), None, None, None, None);
         assert!(body.get("session_id").is_none());
         assert!(body.get("agent_id").is_none());
         assert!(body.get("context").is_none());
@@ -1151,7 +1173,7 @@ mod tests {
     fn weave_stream_body_carries_the_context_pack_when_present() {
         let mut ctx = std::collections::HashMap::new();
         ctx.insert("active_work".into(), "w1".into());
-        let body = weave_stream_body("hi", None, None, Some(&ctx), None, None);
+        let body = weave_stream_body("hi", None, None, Some(&ctx), None, None, None);
         assert_eq!(
             body.get("context").and_then(|v| v.get("active_work")),
             Some(&Value::String("w1".into()))
@@ -1160,7 +1182,7 @@ mod tests {
 
     #[test]
     fn weave_stream_body_carries_budget_as_snake_case_when_positive() {
-        let body = weave_stream_body("hi", None, None, None, Some(4), Some(120));
+        let body = weave_stream_body("hi", None, None, None, Some(4), Some(120), None);
         assert_eq!(body.get("max_rounds"), Some(&Value::from(4)));
         assert_eq!(body.get("timeout_seconds"), Some(&Value::from(120)));
         // The snake_case SSE handler ignores protojson camelCase keys.
@@ -1170,9 +1192,23 @@ mod tests {
 
     #[test]
     fn weave_stream_body_omits_non_positive_budget() {
-        let body = weave_stream_body("hi", None, None, None, Some(0), Some(-3));
+        let body = weave_stream_body("hi", None, None, None, Some(0), Some(-3), None);
         assert!(body.get("max_rounds").is_none());
         assert!(body.get("timeout_seconds").is_none());
+    }
+
+    #[test]
+    fn weave_stream_body_carries_autonomy_in_snake_case_backend_config() {
+        let body = weave_stream_body("hi", None, None, None, None, None, Some("manual"));
+        assert_eq!(
+            body.get("backend_config"),
+            Some(&serde_json::json!({ "autonomy": "manual" }))
+        );
+        let without = weave_stream_body("hi", None, None, None, None, None, None);
+        assert!(without.get("backend_config").is_none());
+        // The SSE handler decodes with encoding/json: protojson camelCase
+        // keys would be silently dropped (QC-03's lesson applied here).
+        assert!(without.get("backendConfig").is_none());
     }
 
     // --- Transport fixtures (issue 017 / QC-05 / QC-04 residue) ---------

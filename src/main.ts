@@ -941,13 +941,12 @@ function buildAutonomyDial(
   }
   root.append(levels);
 
-  // Honest scope (QC-01): this level is local metadata policy — the
-  // intent ceiling and the justification rule — not server-side tool
-  // authorization. Loom's runtime does not read it.
+  // Honest scope (QC-01/W-2): the boundary that is enforced, and the
+  // runtime part that is still pending the Loom contract.
   const scope = document.createElement("p");
   scope.className = "autonomy-scope-note";
   scope.textContent =
-    "Autonomy governs local work metadata (intent ceilings, justification). Loom's runtime does not read this level yet — it does not constrain execution on the server.";
+    "Manual blocks all agent actions at the IDE boundary — chat, experiment arms, workflows, schedule triggers and session resume are rejected before they reach Loom; lowering the level mid-run stops the affected run (completed actions are not undone). Per-tool approval for Assisted and Collaborative is pending the Loom runtime contract: until it lands, every level above Manual runs with the server's default tool permissions.";
   root.append(scope);
 
   // Autonomy history.
@@ -1187,6 +1186,7 @@ function buildIntentEditor(
       target.autonomy_history ?? [],
       async (next, justification) => {
         try {
+          const wasRank = AUTONOMY_LEVELS[target.autonomy].level;
           await updateIntent({
             id: target.id,
             statement: statementInput.value.trim() || target.statement,
@@ -1198,6 +1198,15 @@ function buildIntentEditor(
           // Re-render with updated history.
           intentEditor = { mode: "edit", id: target.id };
           renderIntentHeader();
+          // Lowering the intent's level stops in-flight runs of every work
+          // item under it (QC-01/W-2 v1; the Rust side also tightens the
+          // stored levels). Completed actions are not undone.
+          if (AUTONOMY_LEVELS[next].level < wasRank) {
+            const affected = workItems
+              .filter((w) => w.intent_id === target.id)
+              .map((w) => w.id);
+            cancelInFlightForAutonomyLower(affected);
+          }
         } catch (err) {
           showFieldError(error, err instanceof Error ? err.message : String(err));
         }
@@ -1455,6 +1464,7 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
   ) => {
     clearFieldError(error);
     try {
+      const wasRank = AUTONOMY_LEVELS[item.autonomy].level;
       const updated = await setWorkAutonomy(
         item.id,
         next as WorkItem["autonomy"],
@@ -1463,6 +1473,11 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
       workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
       renderWorkList();
       renderWorkDetail();
+      // Lowering the level mid-run stops this work's in-flight agent runs
+      // (QC-01/W-2 v1). Completed actions are not undone.
+      if (AUTONOMY_LEVELS[next].level < wasRank) {
+        cancelInFlightForAutonomyLower([item.id]);
+      }
     } catch (err) {
       showFieldError(
         error,
@@ -1962,7 +1977,7 @@ async function runWorkflow(name: string) {
   workflowStreamActive = requestId;
   renderWorkDetail();
   try {
-    await executeWorkflowStream(requestId, name);
+    await executeWorkflowStream(requestId, name, governingAutonomy());
   } catch {
     // Only the pre-spawn rejection falls back to unary. If a terminal
     // already raced the rejection, the run was settled — fall back only
@@ -2056,7 +2071,7 @@ async function runWorkflowUnary(name: string, token: number, startedFromWork: st
   try {
     // execute_workflow returns the run's own result, so the UI can show
     // the run's actual output instead of only re-listing executions.
-    const res = await executeWorkflow(name);
+    const res = await executeWorkflow(name, governingAutonomy());
     if (token !== currentRunSeq) return;
     if (cancelWorkflow) {
       runningWorkflow = null;
@@ -2326,7 +2341,7 @@ function renderSchedules() {
     trigger.textContent = "Run now";
     trigger.addEventListener("click", async () => {
       try {
-        await triggerWorkflowSchedule(s.id);
+        await triggerWorkflowSchedule(s.id, governingAutonomy());
         await refreshExecutionsList();
         agentsNotice(`Triggered ${s.workflow}.`, false);
       } catch (err) {
@@ -4506,7 +4521,15 @@ async function describeAgent() {
       "",
       `Description: ${describe}`,
     ].join("\n");
-    const reply = await askLoom(prompt);
+    const reply = await askLoom(
+      prompt,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      governingAutonomy(),
+    );
     const match = reply.text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("The Weaver's reply had no JSON config to prefill.");
     ($("#agent-config") as HTMLTextAreaElement).value = JSON.stringify(JSON.parse(match[0]), null, 2);
@@ -4618,7 +4641,7 @@ async function resumeSelectedSession() {
   const id = selectedSessionId;
   if (!id) return showSessionNote("No session selected.");
   try {
-    await resumeSession(id);
+    await resumeSession(id, governingAutonomy());
     showSessionNote("Resume requested — check the session state.");
     await refreshSessions();
   } catch (err) {
@@ -5218,8 +5241,33 @@ function handleSkillImportEvent(p: StreamEnvelope<unknown>) {
 /** The vault context pack (§2.4): active work, intent and the open file
     travel with every query so the model answers with the real context
     instead of only the typed message. */
-function buildChatContext(): Record<string, string> | undefined {
-  const context: Record<string, string> = {};
+/** The autonomy that governs agent execution right now: the selected work
+    item's level, else the active intent's, else the default
+    "collaborative". The Rust boundary enforces it (Manual forbids agent
+    execution) and the wire carries it for the Loom runtime contract. */
+function governingAutonomy(): string {
+  const work = workItems.find((w) => w.id === selectedWorkId);
+  if (work) return work.autonomy;
+  const intent = intents.find((i) => i.id === activeIntentId);
+  return intent?.autonomy ?? "collaborative";
+}
+
+/** After an autonomy lowering, stop any in-flight run that belongs to the
+    affected work items so no further forbidden action executes (QC-01/W-2
+    v1: cooperative cancel). Completed actions are never undone; the
+    terminal `cancelled` event marks the reply as partial. */
+function cancelInFlightForAutonomyLower(workIds: Iterable<string> | null) {
+  for (const [requestId, st] of activeStreams) {
+    if (st.finished) continue;
+    if (workIds === null || Array.from(workIds).includes(st.workId ?? "")) {
+      void cancelLoomStream(requestId).catch(() => {
+        /* the stream may have just ended on its own */
+      });
+    }
+  }
+}
+
+function buildChatContext(): Record<string, string> | undefined {  const context: Record<string, string> = {};
   const work = workItems.find((w) => w.id === selectedWorkId);
   if (work) {
     context.active_work = work.title;
@@ -5853,6 +5901,7 @@ async function sendChatUnary(
     runId: string;
     maxRounds?: number;
     timeoutSeconds?: number;
+    autonomy?: string;
   },
 ) {
   try {
@@ -5863,6 +5912,7 @@ async function sendChatUnary(
       captured.context,
       captured.maxRounds,
       captured.timeoutSeconds,
+      captured.autonomy,
     );
     typing.remove();
     loomVerified = true;
@@ -5960,9 +6010,13 @@ async function sendChat(text: string) {
   const intentId = activeIntentId;
   // Per-turn budget from the active intent (W-1). Undefined means the
   // server default; only positive values travel on the wire.
-  const activeIntentNow = activeIntent();
+    const activeIntentNow = activeIntent();
   const maxRounds = activeIntentNow?.max_rounds ?? undefined;
   const timeoutSeconds = activeIntentNow?.timeout_seconds ?? undefined;
+  // Governing autonomy, captured at send time like everything else: the
+  // Rust boundary enforces it (Manual forbids agent execution) and the
+  // wire carries it for the Loom runtime contract (QC-01/W-2).
+  const autonomy = governingAutonomy();
   // The context map rides both request paths; Loom consumes it into the
   // prompt as a bounded labeled section (server-side), so the IDE sends
   // the plain query — no double injection (QC-09).
@@ -6026,6 +6080,7 @@ async function sendChat(text: string) {
       context,
       maxRounds,
       timeoutSeconds,
+      autonomy,
     );
   } catch {
     typing.remove();
@@ -6047,6 +6102,7 @@ async function sendChat(text: string) {
       runId,
       maxRounds,
       timeoutSeconds,
+      autonomy,
     });
     return;
   }
@@ -7345,6 +7401,9 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
       selectedSessionId ?? undefined,
       selectedAgentId ?? undefined,
       buildChatContext(),
+      undefined,
+      undefined,
+      governingAutonomy(),
     );
     typing.remove();
     loomVerified = true;

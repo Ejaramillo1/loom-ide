@@ -2,6 +2,21 @@
 
 Severity: **P0**. Confidence: **Confirmed**. Audit baseline: IDE `c46aa644`, Loom `ab46f76f`, 15 November 2026.
 
+## Status (2026-11-17)
+
+**PARTIALLY FIXED — Manual enforced at the IDE boundary; runtime holds
+prepared.** `execution_admission` (`lib.rs`) rejects Manual on every
+agent-execution entry point before any request is sent (chat,
+workflows, experiment arms, schedule triggers, session resume); the
+level travels in `backend_config` on both wire formats; lowering the
+dial mid-run cancels the affected runs (completed actions never
+undone); the dial's copy states the exact scope. Per-tool approval for
+Assisted/Collaborative and the runtime acknowledgment contract are
+prepared in `17-autonomy-enforcement.md` +
+`evidence/qc1-autonomy-runtime-tests.go.txt` and require Loom-side
+execution scope (the permission checker's hold mechanism is currently
+the "not yet implemented" error path, `permission_checker.go:164-177`).
+
 ## Problem and current behavior
 
 A work item can be Manual or Paused while chat, experiment arms, workflows and session resume still invoke Loom. Lowering autonomy updates local records, not the permissions of an in-flight run.
