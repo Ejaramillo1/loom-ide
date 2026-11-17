@@ -37,9 +37,13 @@ task/skills HTTP registration (001/002), server-side context consumption
 (QC-09) and TraceId population (004) are all fixed with tests and, where
 possible, live verification. The verdict is still NO because human
 control remains advisory (QC-01/issue 005 — honestly labeled, not
-enforced), the gateway trust boundary is still exceeded (QC-02/issue
-011), the traversed-UI proof on the current binary is not yet executed,
-and the documentation tail (issue 015, NG-1/NG-2) is unfixed. See
+enforced), the traversed-UI proof on the current binary is not yet
+executed, the documentation tail (issue 015, NG-1/NG-2) is unfixed, and
+one gateway residual remains (QC-02/issue 011): the server is now
+**loopback-bound with restricted origins** (contained 2026-11-17,
+`16-gateway-containment.md`), but the prepared reject-before-dispatch
+middleware patch for unlisted browser origins is not yet applied
+(Loom-side scope). See
 `00-final-assessment.md` (verdict, 10 questions, completion criteria)
 and `14-report-evaluation.md` (truth table of every prior claim).
 
@@ -77,7 +81,7 @@ and `14-report-evaluation.md` (truth table of every prior claim).
 | issue 008 chat evidence kind | — | **FIXED** (`a714b20`) — live replies default to Observed |
 | issue 009 MCP edit re-enables | — | **FIXED** (`b6c612f`) — edit preserves enabled state |
 | issue 010 missing CSP | — | **FIXED** (`1c6efb8`) — webview CSP in `tauri.conf.json`; inline file:// guard in main.ts |
-| issue 011 Loom LAN exposure | QC-02 (adds wildcard CORS) | **STILL OPEN** — unchanged bind/CORS posture at `8082078`; P0 decision |
+| issue 011 Loom LAN exposure | QC-02 (adds wildcard CORS) | **CONTAINED 2026-11-17** — loopback binds + restricted origins (observed sockets; survives restart); unlisted-origin action path = prepared Loom-side patch (`16-gateway-containment.md`) |
 | issue 012 unused bridges | — | **FIXED** (`1c6efb8`) — schedule cancel + tool permission dialogs wired; apps open detached |
 | issue 013 slot origin | — | **FIXED** (`7f93a2f`) — `X-Loom-Slot-Origin: interactive` on chat paths |
 | issue 014 error caption | — | **FIXED** (`1c6efb8`) — rejection vs disconnection split + test |

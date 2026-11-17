@@ -11,6 +11,18 @@ audit checks the code against this document, not the other way around.
 - Auth: none. Loom's auth is server-side; the IDE talks to localhost
   unauthenticated — fine locally, not portable. **Decision registered: no
   client auth until a non-local deployment names it.**
+- **Deployment containment (2026-11-17, enforced):** the gateway config
+  (`/home/ed/.loom/looms.yaml`) sets `server.host: 127.0.0.1` (both
+  HTTP and gRPC listeners are loopback-only) and
+  `server.cors.allowed_origins` to exactly
+  `http://localhost:5006` and `http://127.0.0.1:5006` (no wildcard).
+  Observed: `ss` shows only `127.0.0.1:5006` / `127.0.0.1:60051`, and
+  the setting survives restarts. Known residual: an unlisted browser
+  Origin still reaches handlers (its response is unreadable) — a
+  reject-before-dispatch middleware patch is prepared in
+  `docs/audits/quiet-complexity-loom/16-gateway-containment.md`
+  (Loom-side scope). Remote deployment remains out of scope and would
+  require authenticated transport.
 
 ## Timeouts (per operation)
 

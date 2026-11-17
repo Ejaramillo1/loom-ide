@@ -1,0 +1,26 @@
+--- /home/ed/work/loom/pkg/server/http.go	2026-11-15 18:56:11.841348702 -0800
++++ /tmp/opencode/qc2-cors/http.go.patched	2026-11-17 10:40:00.465852270 -0800
+@@ -199,6 +199,23 @@
+ 
+ 		// Check if origin is allowed
+ 		allowedOrigin := h.getAllowedOrigin(origin)
++
++		// Browser-origin requests outside the allowlist are refused
++		// before dispatch. Omitting Access-Control-Allow-Origin only
++		// hides the response from the browser; it does not stop a
++		// "simple" request (no preflight) from executing an action —
++		// proven by the isolated matrix (session created via a
++		// text/plain POST with an unlisted Origin, no ACAO).
++		// Requests without an Origin header (native clients, curl,
++		// the IDE's Rust client) are not cross-origin browser
++		// requests and pass through unchanged.
++		if origin != "" && allowedOrigin == "" {
++			w.Header().Set("Content-Type", "application/json")
++			w.WriteHeader(http.StatusForbidden)
++			_, _ = w.Write([]byte(`{"error":{"code":7,"message":"origin not allowed"}}`))
++			return
++		}
++
+ 		if allowedOrigin != "" {
+ 			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+ 		}

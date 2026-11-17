@@ -2,6 +2,21 @@
 
 Severity: **P0**. Confidence: **Confirmed**. Audit baseline: IDE `c46aa644`, Loom `ab46f76f`, 15 November 2026.
 
+## Status (2026-11-17)
+
+**CONTAINED by configuration; middleware residual prepared.** The
+gateway now binds `127.0.0.1` only (both ports, observed sockets,
+restart-surviving) and serves an exact-origin CORS allowlist (no
+wildcard). Verified after the change: native IDE requests, dev proxy,
+hosted apps, Swagger, a disposable streamed chat turn (incremental SSE),
+session listing, and trace access (200). **Not yet closed:** unlisted
+browser origins are still dispatched (action path proven live — an
+unlisted-origin "simple" POST created a session); a
+reject-before-dispatch middleware patch and its regression tests are
+prepared in `16-gateway-containment.md` + `evidence/` and require
+Loom-side execution scope. No credentials were added (local
+unauthenticated model preserved).
+
 ## Problem and current behavior
 
 The running gateway listens on all interfaces without TLS, accepts unauthenticated API reads, and returns Access-Control-Allow-Origin: * to an unrelated Origin. Localhost-only client documentation does not restrict the server.

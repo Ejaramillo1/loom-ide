@@ -2,6 +2,18 @@
 
 - **Title:** Loom is exposed on 0.0.0.0 without authentication
 - **Severity:** P1 — environmental security risk (not an IDE code defect)
+- **Status (2026-11-17):** **CONTAINED (config), residual prepared.**
+  `/home/ed/.loom/looms.yaml` now sets `server.host: 127.0.0.1` (both
+  listeners loopback-only — observed via `ss`, survives restart) and a
+  restricted CORS allowlist (exact origins only, no wildcard). Native
+  IDE traffic, the dev proxy, hosted apps, Swagger, a streamed chat turn
+  and trace access all verified working after the change. **Residual:**
+  an unlisted browser Origin is still *dispatched* (its response is
+  unreadable) — proven live by a session-creating "simple" POST. The
+  reject-before-dispatch middleware patch + tests are prepared in
+  `16-gateway-containment.md` and `evidence/` (Loom-side scope, not yet
+  applied). Full record: `docs/audits/quiet-complexity-loom/
+  16-gateway-containment.md`.
 
 ## Problem statement
 

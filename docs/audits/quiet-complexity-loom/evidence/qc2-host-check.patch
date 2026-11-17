@@ -1,0 +1,40 @@
+--- /tmp/opencode/qc2-cors/http.go.patched	2026-11-17 10:40:00.465852270 -0800
++++ /tmp/opencode/qc2-cors/http.go.hostpatched	2026-11-17 10:40:22.480074395 -0800
+@@ -216,6 +216,18 @@
+ 			return
+ 		}
+ 
++		// Reject requests addressed through an unexpected Host
++		// (DNS-rebinding defense for the loopback listener). Legitimate
++		// values are the loopback hostnames on the HTTP port, as sent by
++		// the IDE's Rust client (Host: {LOOM_ADDR}) and the dev proxy
++		// (changeOrigin sets Host to the target).
++		if !isLoopbackHost(r.Host) {
++			w.Header().Set("Content-Type", "application/json")
++			w.WriteHeader(http.StatusForbidden)
++			_, _ = w.Write([]byte(`{"error":{"code":7,"message":"host not allowed"}}`))
++			return
++		}
++
+ 		if allowedOrigin != "" {
+ 			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+ 		}
+@@ -292,6 +304,18 @@
+ 	return ""
+ }
+ 
++// isLoopbackHost reports whether the Host header is a legitimate local
++// value for this gateway: "localhost" or "127.0.0.1", with any port.
++// IPv6 loopback is deliberately excluded until a real caller requires it.
++func isLoopbackHost(hostport string) bool {
++	host := hostport
++	if i := strings.LastIndexByte(hostport, ':'); i > 0 {
++		host = hostport[:i]
++	}
++	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
++	return host == "localhost" || host == "127.0.0.1"
++}
++
+ // handleSwaggerUI serves the Swagger UI interface
+ func (h *HTTPServer) handleSwaggerUI(w http.ResponseWriter, r *http.Request) {
+ 	html := `<!DOCTYPE html>

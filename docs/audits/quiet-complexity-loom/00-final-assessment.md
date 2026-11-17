@@ -35,9 +35,19 @@ still NO:
    dial is honestly labeled now — it states exactly what it governs —
    but Loom's weave path enforces nothing; the permission mapping is a
    Loom-side contract that does not exist yet.
-3. **The trust boundary is still exceeded (QC-02/issue 011).** The live
-   gateway binds `0.0.0.0:5006/60051`, unauthenticated, with wildcard CORS
-   allowed — unchanged at Loom `8082078`.
+3. **The trust boundary is now enforced at the network, with one
+   prepared residual (QC-02/issue 011).** As of 2026-11-17 the live
+   gateway binds **`127.0.0.1:5006/60051` only** (loopback, observed
+   sockets) and serves the exact-origin allowlist
+   `{http://localhost:5006, http://127.0.0.1:5006}` — no wildcard CORS.
+   Native (no-Origin) IDE traffic, the dev proxy, hosted apps and
+   Swagger all verified working. **Residual:** the current middleware
+   omits the CORS grant for unlisted origins but still dispatches them —
+   proven live: a browser "simple" POST with an unlisted Origin created
+   a session. A reject-before-dispatch middleware patch (and optional
+   Host check) is prepared with tests in
+   `16-gateway-containment.md` / `evidence/`; applying it is a Loom-side
+   change, pending separately authorized execution scope.
 4. **Functional and documentation tails remain, kept separate:**
    (a) **NG-2, functional:** `max_rounds`/`timeout_seconds` are still
    never sent by the IDE — every turn runs server defaults, and Loom
@@ -106,18 +116,21 @@ copy** — the unreachable attention sentence and stale citations
 
 **7. Which defects prevent reliable agent execution?**
 None on the shipped HTTP surface. The remaining execution risks are
-Loom-side posture: unauthenticated `0.0.0.0` exposure (QC-02) and the
-absence of an autonomy enforcement contract (QC-01).
+Loom-side posture: the gateway is now **loopback-contained** (see point
+3; the unlisted-origin action path is the prepared-patch residual), and
+the absence of an autonomy enforcement contract (QC-01).
 
 **8. Which gaps compromise human control or understanding?**
-Autonomy is labeled but advisory (005); the gateway exposure (011) is a
-deployment risk until Eduardo decides the bind/auth posture; the stale
-citations erode auditability of the philosophy's Loom hooks (015).
+Autonomy is labeled but advisory (005); the gateway is loopback-bound
+with restricted origins (011, contained 2026-11-17 — the unlisted-origin
+action path is the prepared-patch residual); the stale citations erode
+auditability of the philosophy's Loom hooks (015).
 
 **9. Smallest set of changes for full integration with Loom's supported
 capabilities?**
 1. Loom (decision-gated): autonomy enforcement contract (QC-01) and
-   gateway bind/auth/CORS posture (QC-02).
+   the prepared middleware reject patch for unlisted origins (QC-02
+   residual, `16-gateway-containment.md`).
 2. IDE: send `max_rounds`/`timeout_seconds` from the Intent (NG-2);
    format or scope-exclude `native-app` (NG-1); fix the two stale-copy
    items (issue 015).
@@ -164,8 +177,10 @@ the pattern — honesty instead of pretense, truth instead of removal.
    renders when present; live replies default to the Observed label.
 7. Autonomy is observable in Loom's approval behavior, or its copy states
    exactly what it governs; the deployment respects the trust boundary.
-   — *Half: the copy is honest (done); enforcement is absent and the
-   gateway exposure remains (QC-01/QC-02, decision-gated).*
+   — *Half: the copy is honest (done); enforcement is absent (QC-01);
+   the deployment is loopback-contained with restricted origins
+   (QC-02 contained 2026-11-17; the unlisted-origin reject patch is
+   prepared, Loom-side).*
 
 ## Final principle
 

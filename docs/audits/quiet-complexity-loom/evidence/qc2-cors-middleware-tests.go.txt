@@ -1,0 +1,134 @@
+// Prepared tests for the QC-02 gateway-containment middleware patches.
+//
+// NOT APPLIED. These belong in pkg/server/http_test.go of
+// /home/ed/work/loom when the Loom-side execution scope is authorized.
+// They use only the standard library and the package's own CORSConfig/
+// HTTPServer types, so they compile as-is once appended to http_test.go.
+//
+// Covered (per the owner's acceptance list):
+//  - an allowed origin receives its exact origin in the response
+//  - an unrelated origin receives no access grant AND is rejected
+//    before dispatch (no handler call, no action)
+//  - native requests without an Origin header still work
+//  - preflight requests do not execute application actions
+//  - rejected preflight returns 403 (with the reject patch)
+//  - streaming/approval routes share the same middleware (single
+//    wrapper over the root mux — proven structurally; a route-level
+//    check can be added with the real mux if desired)
+
+package server
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestCORSMiddlewareRejectsUnlistedOriginBeforeDispatch(t *testing.T) {
+	calls := 0
+	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusOK)
+	})
+	h := &HTTPServer{corsConfig: CORSConfig{
+		Enabled:        true,
+		AllowedOrigins: []string{"http://localhost:5006"},
+	}}
+	mw := h.corsMiddleware(stub)
+
+	// Unlisted origin, actual request: rejected before dispatch.
+	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", strings.NewReader(`{"name":"x"}`))
+	req.Header.Set("Origin", "http://evil.example")
+	rec := httptest.NewRecorder()
+	mw.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("unlisted origin: got %d, want 403", rec.Code)
+	}
+	if calls != 0 {
+		t.Fatalf("unlisted origin: handler dispatched (%d calls), action must not execute", calls)
+	}
+
+	// Allowed origin: dispatched, exact-origin echo.
+	req2 := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
+	req2.Header.Set("Origin", "http://localhost:5006")
+	rec2 := httptest.NewRecorder()
+	mw.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("allowed origin: got %d with %d calls, want 200 with 1 call", rec2.Code, calls)
+	}
+	if got := rec2.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5006" {
+		t.Fatalf("allowed origin: ACAO = %q, want exact origin echo", got)
+	}
+
+	// Native request without Origin: dispatched, no CORS grant needed.
+	req3 := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
+	rec3 := httptest.NewRecorder()
+	mw.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK || calls != 2 {
+		t.Fatalf("native request: got %d with %d calls, want 200 with 2 calls", rec3.Code, calls)
+	}
+
+	// Unlisted preflight: rejected, and never dispatches.
+	req4 := httptest.NewRequest(http.MethodOptions, "/v1/weave", nil)
+	req4.Header.Set("Origin", "http://evil.example")
+	req4.Header.Set("Access-Control-Request-Method", "POST")
+	rec4 := httptest.NewRecorder()
+	mw.ServeHTTP(rec4, req4)
+	if rec4.Code != http.StatusForbidden {
+		t.Fatalf("unlisted preflight: got %d, want 403", rec4.Code)
+	}
+	if calls != 2 {
+		t.Fatalf("unlisted preflight: handler dispatched (%d calls)", calls)
+	}
+
+	// Allowed preflight: 204, no dispatch.
+	req5 := httptest.NewRequest(http.MethodOptions, "/v1/weave", nil)
+	req5.Header.Set("Origin", "http://localhost:5006")
+	req5.Header.Set("Access-Control-Request-Method", "POST")
+	rec5 := httptest.NewRecorder()
+	mw.ServeHTTP(rec5, req5)
+	if rec5.Code != http.StatusNoContent || calls != 2 {
+		t.Fatalf("allowed preflight: got %d with %d calls, want 204 with 2 calls", rec5.Code, calls)
+	}
+}
+
+func TestCORSMiddlewareHostCheck(t *testing.T) {
+	calls := 0
+	stub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusOK)
+	})
+	h := &HTTPServer{corsConfig: CORSConfig{
+		Enabled:        true,
+		AllowedOrigins: []string{"http://localhost:5006"},
+	}}
+	mw := h.corsMiddleware(stub)
+
+	cases := []struct {
+		name string
+		host string
+		want int
+	}{
+		{"loopback host with port", "127.0.0.1:5006", http.StatusOK},
+		{"localhost with port", "localhost:5006", http.StatusOK},
+		{"unexpected hostname", "attacker.example:5006", http.StatusForbidden},
+		{"bare loopback", "127.0.0.1", http.StatusOK},
+	}
+	for _, tc := range cases {
+		before := calls
+		req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
+		req.Host = tc.host
+		rec := httptest.NewRecorder()
+		mw.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Fatalf("%s: got %d, want %d", tc.name, rec.Code, tc.want)
+		}
+		if tc.want == http.StatusOK && calls != before+1 {
+			t.Fatalf("%s: handler not dispatched", tc.name)
+		}
+		if tc.want == http.StatusForbidden && calls != before {
+			t.Fatalf("%s: handler dispatched despite rejected Host", tc.name)
+		}
+	}
+}
