@@ -74,6 +74,7 @@ type ChatStubs = {
   getLoomStatus: ReturnType<typeof vi.fn>;
   answerClarification: ReturnType<typeof vi.fn>;
   buildChatContext: ReturnType<typeof vi.fn>;
+  activeIntent: ReturnType<typeof vi.fn>;
   askLoomStream: ReturnType<typeof vi.fn>;
   askLoom: ReturnType<typeof vi.fn>;
   recordRunStart: ReturnType<typeof vi.fn>;
@@ -100,6 +101,7 @@ function defaultStubs(): ChatStubs {
     getLoomStatus: vi.fn(async () => ({ online: true })),
     answerClarification: vi.fn(async () => "accepted"),
     buildChatContext: vi.fn(() => ({ active_work: "w1" })),
+    activeIntent: vi.fn(() => null),
     askLoomStream: vi.fn(() => new Promise<void>(() => {})),
     askLoom: vi.fn(async () => ({ text: "unary reply" })),
     recordRunStart: vi.fn(() => "run-1"),
@@ -152,7 +154,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     "addChatError", "addChatMessage", "cacheChatMessage",
     "refreshSessions", "refreshAgents", "setWorkSession",
     "renderWorkList", "renderSessionBar", "loadWorkArtifacts",
-    "getLoomStatus", "answerClarification", "buildChatContext",
+    "getLoomStatus", "answerClarification", "buildChatContext", "activeIntent",
     "askLoomStream", "askLoom", "recordRunStart", "recordRunSettle",
     code + "\nreturn install();",
   )(
@@ -165,7 +167,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     stubs.addChatError, stubs.addChatMessage, stubs.cacheChatMessage,
     stubs.refreshSessions, stubs.refreshAgents, stubs.setWorkSession,
     stubs.renderWorkList, stubs.renderSessionBar, stubs.loadWorkArtifacts,
-    stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext,
+    stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext, stubs.activeIntent,
     stubs.askLoomStream, stubs.askLoom, stubs.recordRunStart, stubs.recordRunSettle,
   );
   return { api, stubs, node, window, localStorage };
@@ -252,6 +254,7 @@ it("captures work, session and agent at send time and never adopts the newest se
   void api.sendChat("hello");
   expect(stubs.askLoomStream).toHaveBeenCalledWith(
     expect.any(String), "hello", "sess-1", "agent-2", expect.anything(),
+    undefined, undefined,
   );
 
   // The human switches work and session while the reply is in flight.
@@ -458,6 +461,35 @@ it("keeps the Stop control when the finished request was not the only stream (re
   await tick();
   expect(api.getChatInFlight()).toBe(1);
   expect(api.getActiveStreamId()).toBe(sends[0]);
+});
+
+it("passes the active intent's budget to the stream path (W-1)", async () => {
+  const stubs = defaultStubs();
+  stubs.activeIntent = vi.fn(() => ({ max_rounds: 4, timeout_seconds: 120 }));
+  const streamArgs: unknown[][] = [];
+  stubs.askLoomStream = vi.fn((...args: unknown[]) => {
+    streamArgs.push(args);
+    return new Promise<void>(() => {});
+  });
+  const { api } = await shell(stubs);
+  api.setSelectedWorkId("w1");
+  void api.sendChat("hello");
+  // sendChat(...) => askLoomStream(requestId, message, sessionId, agentId, context, maxRounds, timeoutSeconds)
+  expect(streamArgs[0][5]).toBe(4);
+  expect(streamArgs[0][6]).toBe(120);
+});
+
+it("passes the active intent's budget to the unary fallback path (W-1)", async () => {
+  const stubs = defaultStubs();
+  stubs.activeIntent = vi.fn(() => ({ max_rounds: 3, timeout_seconds: 90 }));
+  stubs.askLoomStream = vi.fn(() => Promise.reject(new Error("validation")));
+  const { api } = await shell(stubs);
+  api.setSelectedWorkId("w1");
+  void api.sendChat("hello");
+  await tick();
+  expect(stubs.askLoom).toHaveBeenCalledWith(
+    "hello", undefined, undefined, expect.anything(), 3, 90,
+  );
 });
 
 it("cancelled turns keep their partial output marked partial (review #10)", async () => {

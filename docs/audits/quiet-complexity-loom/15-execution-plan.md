@@ -143,7 +143,7 @@ source):**
 
 | # | Problem | Change | Proof | Status | Evidence |
 |---|---|---|---|---|---|
-| W-1 | Execution limits never sent (NG-2); Intent-budget direction | Wire Intent budget fields → editor → TS API → Rust validation → **both** weave requests (`max_rounds`, `timeout_seconds`); preserve existing saved Intents with documented defaults | Rust wire tests assert both fields; **caveat verified: Loom enforces `timeout_seconds`; `max_rounds` has no server consumer** — record honestly and gate the max_rounds claim on Loom-side work or agent `max_turns` | **open** | `multi_agent.go:4209/4351` (timeout enforced); no `MaxRounds` consumer; docs direction TBD in DECISIONS |
+| W-1 | Execution limits never sent (NG-2); Intent-budget direction | Wire Intent budget fields → editor → TS API → Rust validation → **both** weave requests (`max_rounds`, `timeout_seconds`); preserve existing saved Intents with documented defaults | Rust wire tests assert both fields; **caveat verified: Loom enforces `timeout_seconds`; `max_rounds` has no server consumer** — record honestly and gate the max_rounds claim on Loom-side work or agent `max_turns` | **done (IDE)** | `Intent.max_rounds`/`timeout_seconds` (store.rs, serde default None); editor number inputs; `ask_loom`/`ask_loom_stream` send camelCase `maxRounds`/`timeoutSeconds` and snake_case `max_rounds`/`timeout_seconds`; Rust wire tests (`weave_unary_body_*`, `weave_stream_body_carries_budget_*`) + store round-trip + 2 lifecycle tests (97 frontend, 130 lib). Server enforcement of `max_rounds` remains gated (no consumer in Loom `8082078`) |
 | W-2 | Autonomy unenforced (QC-01) | Define what the 4 existing levels permit; inventory every entry point (chat, experiment arms, workflows, resume, schedules, tools); enforce applicable restrictions at the Rust boundary; specify the runtime contract for lowering during an active run; no invented levels, no prompt-wording-as-permission | Forbidden actions cannot execute via any entry point; UI reports enforcement accurately; full runtime enforcement stays open until Loom-side work exists | **open** | a02ad52 (copy truth) landed; enforcement open |
 | W-3 | Gateway posture (QC-02) | Local test deployment: loopback-only binds, Tauri origin works, foreign origin gets no read, unary + stream same policy; remote deployment = separate authenticated transport (out of scope) | Observed `ss` addresses + origin probes match the documented local deployment | **spec ready; live check blocked on server start** | §1 bind facts |
 | W-4 | Disposable playground | Disposable `XDG_DATA_HOME` app profile + `LOOM_VAULT_DIR` vault + synthetic sessions + temp work; fixtures never demo data; empirically confirm the app-data dir at launch | Launching checks cannot touch personal notes/sessions/approvals | **open** | §1 data-dir facts |
@@ -171,3 +171,13 @@ source):**
   running) — unblock condition: owner starts `looms serve` loopback-bound
   (as in doc 13, pid 297398), or authorizes this agent to start it with
   that exact configuration.
+- 2026-11-16 ~20:35 — **W-8 done** (commit `1165144`): issue-015 citations
+  fixed (`documentation/` → `docs/` in 01-design-philosophy.md +
+  03-interaction-model.md, targets verified), attention provenance copy
+  corrected, native-app fmt scope recorded in DECISIONS.md. Flagged (not
+  fixed) the five-step-dial vs four-level drift.
+- 2026-11-16 ~20:45 — **W-1 done (IDE side)**: `Intent.max_rounds`/
+  `timeout_seconds` wired through store, editor, TS API, and both weave
+  paths; Rust wire tests + store round-trip + 2 lifecycle tests. Frontend
+  97/97, lib 130/2, build exit 0, fmt (src-tauri) exit 0. Server
+  enforcement of `max_rounds` still gated (no Loom consumer).

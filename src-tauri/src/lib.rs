@@ -174,6 +174,8 @@ fn add_work_item(
                     None,
                     Vec::new(),
                     Some("collaborative".to_string()),
+                    None,
+                    None,
                 )?;
                 auto_created = Some(intent.id.clone());
                 if intents.active_id().as_deref() != Some(intent.id.as_str()) {
@@ -464,13 +466,22 @@ fn create_intent(
     why: Option<String>,
     acceptance: Vec<AcceptanceCriterion>,
     autonomy: Option<String>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
     state: State<AppState>,
 ) -> Result<Intent, String> {
     state
         .intents
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .create(statement, why, acceptance, autonomy)
+        .create(
+            statement,
+            why,
+            acceptance,
+            autonomy,
+            max_rounds,
+            timeout_seconds,
+        )
 }
 
 #[tauri::command]
@@ -481,13 +492,24 @@ fn update_intent(
     autonomy: Option<String>,
     status: Option<String>,
     justification: Option<String>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
     state: State<AppState>,
 ) -> Result<Intent, String> {
     let updated = state
         .intents
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .update(&id, statement, why, autonomy.clone(), status, justification)?;
+        .update(
+            &id,
+            statement,
+            why,
+            autonomy.clone(),
+            status,
+            justification,
+            max_rounds,
+            timeout_seconds,
+        )?;
     // If the intent's autonomy was lowered, tighten any work items that
     // now exceed the new ceiling. Moving down is instant — no justification
     // needed, and the system does it automatically to preserve the rule.
@@ -1893,37 +1915,63 @@ async fn get_storage_status() -> Result<StorageStatus, String> {
     Ok(resp.status)
 }
 
-#[tauri::command]
-async fn ask_loom(
-    message: String,
-    session_id: Option<String>,
-    agent_id: Option<String>,
-    context: Option<HashMap<String, String>>,
-) -> Result<ChatReply, String> {
-    if message.trim().is_empty() {
-        return Err("Enter a message first.".into());
-    }
+/// Build the unary weave request body. The grpc-gateway decodes with
+/// protojson, so these keys are camelCase (`sessionId`, `agentId`,
+/// `maxRounds`, `timeoutSeconds`, `enableTrace`) — the mirror of the
+/// snake_case stream body in `loom_stream.rs`. Blank optionals are omitted;
+/// budget values only travel when positive (None/0 = server default).
+fn weave_unary_body(
+    message: &str,
+    session_id: Option<&str>,
+    agent_id: Option<&str>,
+    context: Option<&HashMap<String, String>>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
+) -> serde_json::Map<String, serde_json::Value> {
     let mut obj = serde_json::Map::new();
     obj.insert("query".into(), message.into());
-    if let Some(s) = session_id {
-        if !s.trim().is_empty() {
-            obj.insert("sessionId".into(), s.into());
-        }
+    if let Some(s) = session_id.filter(|s| !s.trim().is_empty()) {
+        obj.insert("sessionId".into(), s.into());
     }
-    if let Some(a) = agent_id {
-        if !a.trim().is_empty() {
-            obj.insert("agentId".into(), a.into());
-        }
+    if let Some(a) = agent_id.filter(|a| !a.trim().is_empty()) {
+        obj.insert("agentId".into(), a.into());
     }
-    // The vault context pack (§2.4): active work, intent and the open file
-    // travel with the query so the model answers with the real context.
+    if let Some(r) = max_rounds.filter(|&v| v > 0) {
+        obj.insert("maxRounds".into(), serde_json::json!(r));
+    }
+    if let Some(t) = timeout_seconds.filter(|&v| v > 0) {
+        obj.insert("timeoutSeconds".into(), serde_json::json!(t));
+    }
     if let Some(c) = context {
         if !c.is_empty() {
             obj.insert("context".into(), serde_json::json!(c));
         }
     }
     obj.insert("enableTrace".into(), serde_json::Value::Bool(true));
-    let body = serde_json::Value::Object(obj).to_string();
+    obj
+}
+
+#[tauri::command]
+async fn ask_loom(
+    message: String,
+    session_id: Option<String>,
+    agent_id: Option<String>,
+    context: Option<HashMap<String, String>>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
+) -> Result<ChatReply, String> {
+    if message.trim().is_empty() {
+        return Err("Enter a message first.".into());
+    }
+    let body = serde_json::Value::Object(weave_unary_body(
+        &message,
+        session_id.as_deref(),
+        agent_id.as_deref(),
+        context.as_ref(),
+        max_rounds,
+        timeout_seconds,
+    ))
+    .to_string();
     tauri::async_runtime::spawn_blocking(move || {
         // Interactive slot origin: a human is waiting on this turn, so it
         // must bypass the batch admission door (issue 013).
@@ -2367,6 +2415,28 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ------------------------------------------------------------------
+    // weave_unary_body: the gateway is protojson (camelCase), so the
+    // budget fields must be `maxRounds`/`timeoutSeconds` (W-1).
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn weave_unary_body_carries_budget_as_camel_case_when_positive() {
+        let body = weave_unary_body("hi", None, None, None, Some(4), Some(120));
+        assert_eq!(body.get("maxRounds"), Some(&serde_json::json!(4)));
+        assert_eq!(body.get("timeoutSeconds"), Some(&serde_json::json!(120)));
+        // protojson ignores snake_case budget keys.
+        assert!(body.get("max_rounds").is_none());
+        assert!(body.get("timeout_seconds").is_none());
+    }
+
+    #[test]
+    fn weave_unary_body_omits_non_positive_budget() {
+        let body = weave_unary_body("hi", None, None, None, Some(0), Some(-3));
+        assert!(body.get("maxRounds").is_none());
+        assert!(body.get("timeoutSeconds").is_none());
+    }
 
     // ------------------------------------------------------------------
     // de_i64: the gateway sends every int64 as a JSON string.

@@ -3743,6 +3743,23 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   gap: 16px;
 }
 
+.intent-budget-row {
+  display: flex;
+  gap: 8px;
+}
+
+.intent-budget-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: rgb(var(--theme-surface-rgb) / 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+  font-family: inherit;
+}
+
 .intent-field.inline {
   flex-direction: row;
   align-items: center;

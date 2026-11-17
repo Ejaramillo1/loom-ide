@@ -1065,6 +1065,15 @@ function buildAutonomyField(
   return field;
 }
 
+/** Parse a budget number input: blank → null (server default), a positive
+ * integer → that value, anything else → null. */
+function parseBudgetInput(raw: string): number | null {
+  const t = raw.trim();
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 function buildIntentEditor(
   editor: { mode: "create" } | { mode: "edit"; id: string },
 ): HTMLElement {
@@ -1101,6 +1110,40 @@ function buildIntentEditor(
   whyInput.setAttribute("aria-label", "Why this intent matters");
   whyField.append(whyLabel, whyInput);
   form.append(whyField);
+
+  const budgetField = document.createElement("div");
+  budgetField.className = "intent-field";
+  const budgetLabel = document.createElement("span");
+  budgetLabel.className = "intent-field-label";
+  budgetLabel.textContent = "Turn limits (optional — blank = server default)";
+  const budgetRow = document.createElement("div");
+  budgetRow.className = "intent-budget-row";
+
+  const roundsInput = document.createElement("input");
+  roundsInput.type = "number";
+  roundsInput.min = "1";
+  roundsInput.step = "1";
+  roundsInput.className = "intent-budget-input";
+  roundsInput.placeholder = "Max rounds";
+  roundsInput.value = existing?.max_rounds != null ? String(existing.max_rounds) : "";
+  roundsInput.setAttribute("aria-label", "Max rounds");
+  roundsInput.title = "Maximum agent rounds per turn (server default 3).";
+
+  const timeoutInput = document.createElement("input");
+  timeoutInput.type = "number";
+  timeoutInput.min = "1";
+  timeoutInput.step = "1";
+  timeoutInput.className = "intent-budget-input";
+  timeoutInput.placeholder = "Timeout (seconds)";
+  timeoutInput.value =
+    existing?.timeout_seconds != null ? String(existing.timeout_seconds) : "";
+  timeoutInput.setAttribute("aria-label", "Timeout seconds");
+  timeoutInput.title =
+    "Per-turn deadline in seconds (server default 300; enforced server-side).";
+
+  budgetRow.append(roundsInput, timeoutInput);
+  budgetField.append(budgetLabel, budgetRow);
+  form.append(budgetField);
 
   const accField = document.createElement("div");
   accField.className = "intent-field";
@@ -1260,6 +1303,8 @@ function buildIntentEditor(
     const criteria = readCriterionRows(accList);
     const why = whyInput.value.trim();
     const status = statusSelect.value as "active" | "done";
+    const maxRounds = parseBudgetInput(roundsInput.value);
+    const timeoutSeconds = parseBudgetInput(timeoutInput.value);
     // For new intents, autonomy defaults to "collaborative" (set by the
     // backend). For edits, autonomy is changed via the dial directly.
     const autonomy = editor.mode === "create" ? "collaborative" : existing!.autonomy;
@@ -1270,7 +1315,14 @@ function buildIntentEditor(
       if (editor.mode === "create") {
         createdId = pendingCreatedIntent?.statement === statement
           ? pendingCreatedIntent.id
-          : (await createIntent({ statement, why, acceptance: criteria, autonomy })).id;
+          : (await createIntent({
+              statement,
+              why,
+              acceptance: criteria,
+              autonomy,
+              max_rounds: maxRounds,
+              timeout_seconds: timeoutSeconds,
+            })).id;
         pendingCreatedIntent = { id: createdId, statement };
         await setActiveIntent(createdId);
         activated = true;
@@ -1286,6 +1338,8 @@ function buildIntentEditor(
           statement,
           why,
           status,
+          max_rounds: maxRounds,
+          timeout_seconds: timeoutSeconds,
         });
         intentSaved = true;
         // Acceptance is a separate call and never bumps the version, and
@@ -5797,6 +5851,8 @@ async function sendChatUnary(
     startedAt: number;
     context: Record<string, string> | undefined;
     runId: string;
+    maxRounds?: number;
+    timeoutSeconds?: number;
   },
 ) {
   try {
@@ -5805,6 +5861,8 @@ async function sendChatUnary(
       captured.sessionId ?? undefined,
       captured.agentId ?? undefined,
       captured.context,
+      captured.maxRounds,
+      captured.timeoutSeconds,
     );
     typing.remove();
     loomVerified = true;
@@ -5900,6 +5958,11 @@ async function sendChat(text: string) {
   const sessionId = selectedSessionId;
   const agentId = selectedAgentId;
   const intentId = activeIntentId;
+  // Per-turn budget from the active intent (W-1). Undefined means the
+  // server default; only positive values travel on the wire.
+  const activeIntentNow = activeIntent();
+  const maxRounds = activeIntentNow?.max_rounds ?? undefined;
+  const timeoutSeconds = activeIntentNow?.timeout_seconds ?? undefined;
   // The context map rides both request paths; Loom consumes it into the
   // prompt as a bounded labeled section (server-side), so the IDE sends
   // the plain query — no double injection (QC-09).
@@ -5955,7 +6018,15 @@ async function sendChat(text: string) {
   log.scrollTop = log.scrollHeight;
 
   try {
-    await askLoomStream(requestId, clean, sessionId ?? undefined, agentId ?? undefined, context);
+    await askLoomStream(
+      requestId,
+      clean,
+      sessionId ?? undefined,
+      agentId ?? undefined,
+      context,
+      maxRounds,
+      timeoutSeconds,
+    );
   } catch {
     typing.remove();
     // ask_loom_stream only rejects before any network work (validation),
@@ -5974,6 +6045,8 @@ async function sendChat(text: string) {
       startedAt,
       context,
       runId,
+      maxRounds,
+      timeoutSeconds,
     });
     return;
   }

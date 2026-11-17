@@ -90,6 +90,8 @@ pub fn ask_loom_stream(
     session_id: Option<String>,
     agent_id: Option<String>,
     context: Option<std::collections::HashMap<String, String>>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
 ) -> Result<(), String> {
     validate_stream_inputs(&request_id, &message)?;
     let body = weave_stream_body(
@@ -97,6 +99,8 @@ pub fn ask_loom_stream(
         session_id.as_deref(),
         agent_id.as_deref(),
         context.as_ref(),
+        max_rounds,
+        timeout_seconds,
     );
     start_loom_stream(
         app,
@@ -119,6 +123,8 @@ fn weave_stream_body(
     session_id: Option<&str>,
     agent_id: Option<&str>,
     context: Option<&std::collections::HashMap<String, String>>,
+    max_rounds: Option<i32>,
+    timeout_seconds: Option<i32>,
 ) -> serde_json::Map<String, Value> {
     let mut obj = serde_json::Map::new();
     obj.insert("query".into(), Value::String(message.to_string()));
@@ -127,6 +133,15 @@ fn weave_stream_body(
     }
     if let Some(a) = agent_id.filter(|a| !a.trim().is_empty()) {
         obj.insert("agent_id".into(), Value::String(a.to_string()));
+    }
+    // Per-turn budget from the intent (W-1). The custom SSE handler decodes
+    // with `encoding/json`, so these are snake_case; only positive values
+    // are sent (None/0 = server default).
+    if let Some(r) = max_rounds.filter(|&v| v > 0) {
+        obj.insert("max_rounds".into(), Value::from(r));
+    }
+    if let Some(t) = timeout_seconds.filter(|&v| v > 0) {
+        obj.insert("timeout_seconds".into(), Value::from(t));
     }
     if let Some(c) = context {
         if !c.is_empty() {
@@ -1109,7 +1124,7 @@ mod tests {
 
     #[test]
     fn weave_stream_body_uses_the_sse_snake_case_contract() {
-        let body = weave_stream_body("hi", Some("sess-1"), Some("agent-2"), None);
+        let body = weave_stream_body("hi", Some("sess-1"), Some("agent-2"), None, None, None);
         assert_eq!(body.get("query"), Some(&Value::String("hi".into())));
         assert_eq!(
             body.get("session_id"),
@@ -1126,7 +1141,7 @@ mod tests {
 
     #[test]
     fn weave_stream_body_omits_blank_optional_fields() {
-        let body = weave_stream_body("hi", Some("  "), Some(""), None);
+        let body = weave_stream_body("hi", Some("  "), Some(""), None, None, None);
         assert!(body.get("session_id").is_none());
         assert!(body.get("agent_id").is_none());
         assert!(body.get("context").is_none());
@@ -1136,11 +1151,28 @@ mod tests {
     fn weave_stream_body_carries_the_context_pack_when_present() {
         let mut ctx = std::collections::HashMap::new();
         ctx.insert("active_work".into(), "w1".into());
-        let body = weave_stream_body("hi", None, None, Some(&ctx));
+        let body = weave_stream_body("hi", None, None, Some(&ctx), None, None);
         assert_eq!(
             body.get("context").and_then(|v| v.get("active_work")),
             Some(&Value::String("w1".into()))
         );
+    }
+
+    #[test]
+    fn weave_stream_body_carries_budget_as_snake_case_when_positive() {
+        let body = weave_stream_body("hi", None, None, None, Some(4), Some(120));
+        assert_eq!(body.get("max_rounds"), Some(&Value::from(4)));
+        assert_eq!(body.get("timeout_seconds"), Some(&Value::from(120)));
+        // The snake_case SSE handler ignores protojson camelCase keys.
+        assert!(body.get("maxRounds").is_none());
+        assert!(body.get("timeoutSeconds").is_none());
+    }
+
+    #[test]
+    fn weave_stream_body_omits_non_positive_budget() {
+        let body = weave_stream_body("hi", None, None, None, Some(0), Some(-3));
+        assert!(body.get("max_rounds").is_none());
+        assert!(body.get("timeout_seconds").is_none());
     }
 
     // --- Transport fixtures (issue 017 / QC-05 / QC-04 residue) ---------

@@ -65,6 +65,8 @@ export interface Intent {
   why?: string | null;
   acceptance: AcceptanceCriterion[];
   autonomy: IntentAutonomy;
+  max_rounds?: number | null;
+  timeout_seconds?: number | null;
   status: "active" | "done";
   version: number;
   history: IntentVersion[];
@@ -442,6 +444,11 @@ function normalizeCriteria(criteria: AcceptanceCriterion[]): AcceptanceCriterion
     .filter((c) => c.text.length > 0);
 }
 
+/** A positive budget value travels; anything else is "server default". */
+function normalizeBudget(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
 /** Create an intent in the browser fallback store. Mirrors the backend:
     the first intent becomes the active one. */
 function createLocalIntent(
@@ -449,6 +456,8 @@ function createLocalIntent(
   why?: string | null,
   acceptance: AcceptanceCriterion[] = [],
   autonomy?: IntentAutonomy | null,
+  max_rounds?: number | null,
+  timeout_seconds?: number | null,
 ): Intent {
   // Mirror the backend: the statement is required and the level must be
   // one of the four.
@@ -465,6 +474,8 @@ function createLocalIntent(
     why: why?.trim() ? why.trim() : null,
     acceptance: normalizeCriteria(acceptance),
     autonomy: autonomy ?? "collaborative",
+    max_rounds: normalizeBudget(max_rounds),
+    timeout_seconds: normalizeBudget(timeout_seconds),
     status: "active",
     version: 1,
     history: [],
@@ -650,9 +661,18 @@ export async function createIntent(args: {
   why?: string | null;
   acceptance?: AcceptanceCriterion[];
   autonomy?: IntentAutonomy | null;
+  max_rounds?: number | null;
+  timeout_seconds?: number | null;
 }): Promise<Intent> {
   if (!IN_TAURI) {
-    return createLocalIntent(args.statement, args.why, args.acceptance ?? [], args.autonomy);
+    return createLocalIntent(
+      args.statement,
+      args.why,
+      args.acceptance ?? [],
+      args.autonomy,
+      args.max_rounds,
+      args.timeout_seconds,
+    );
   }
   // `acceptance` is a required list on the backend: always send the key,
   // empty when there are no criteria yet.
@@ -661,6 +681,8 @@ export async function createIntent(args: {
     why: args.why ?? null,
     acceptance: normalizeCriteria(args.acceptance ?? []),
     autonomy: args.autonomy ?? null,
+    max_rounds: args.max_rounds ?? null,
+    timeout_seconds: args.timeout_seconds ?? null,
   });
 }
 
@@ -671,6 +693,8 @@ export async function updateIntent(args: {
   autonomy?: IntentAutonomy | null;
   status?: "active" | "done" | null;
   justification?: string | null;
+  max_rounds?: number | null;
+  timeout_seconds?: number | null;
 }): Promise<Intent> {
   if (!IN_TAURI) {
     const list = localIntents();
@@ -736,18 +760,35 @@ export async function updateIntent(args: {
       updated.status = args.status;
       updated.updated_at = nowUnix();
     }
+    if (args.max_rounds !== undefined) {
+      updated.max_rounds = normalizeBudget(args.max_rounds);
+      updated.updated_at = nowUnix();
+    }
+    if (args.timeout_seconds !== undefined) {
+      updated.timeout_seconds = normalizeBudget(args.timeout_seconds);
+      updated.updated_at = nowUnix();
+    }
     list.intents[idx] = updated;
     saveLocalIntents(list);
     return updated;
   }
-  return invoke<Intent>("update_intent", {
+  // Budget uses a three-way value: undefined = leave unchanged (omit the
+  // key), null = clear to server default (send 0), positive = set.
+  const payload: Record<string, unknown> = {
     id: args.id,
     statement: args.statement ?? null,
     why: args.why ?? null,
     autonomy: args.autonomy ?? null,
     status: args.status ?? null,
     justification: args.justification ?? null,
-  });
+  };
+  if (args.max_rounds !== undefined) {
+    payload.max_rounds = args.max_rounds === null ? 0 : args.max_rounds;
+  }
+  if (args.timeout_seconds !== undefined) {
+    payload.timeout_seconds = args.timeout_seconds === null ? 0 : args.timeout_seconds;
+  }
+  return invoke<Intent>("update_intent", payload);
 }
 
 export async function setIntentAcceptance(args: {
@@ -882,15 +923,26 @@ export async function askLoom(
   sessionId?: string,
   agentId?: string,
   context?: Record<string, string>,
+  maxRounds?: number,
+  timeoutSeconds?: number,
 ): Promise<ChatReply> {
   if (IN_TAURI) {
-    return invoke<ChatReply>("ask_loom", { message, sessionId, agentId, context });
+    return invoke<ChatReply>("ask_loom", {
+      message,
+      sessionId,
+      agentId,
+      context,
+      maxRounds,
+      timeoutSeconds,
+    });
   }
   if (!message.trim()) throw new Error("Enter a message first.");
   const body: Record<string, unknown> = { query: message };
   if (sessionId?.trim()) body.sessionId = sessionId;
   if (agentId?.trim()) body.agentId = agentId;
   if (context && Object.keys(context).length > 0) body.context = context;
+  if (maxRounds && maxRounds > 0) body.maxRounds = maxRounds;
+  if (timeoutSeconds && timeoutSeconds > 0) body.timeoutSeconds = timeoutSeconds;
   const value = await loomRequest("/v1/weave", body as object);
   const text = [value.text, value.response, value.content, value.reply, value.message]
     .find(value => typeof value === "string" && value.trim());
@@ -1197,8 +1249,18 @@ export async function askLoomStream(
   sessionId?: string,
   agentId?: string,
   context?: Record<string, string>,
+  maxRounds?: number,
+  timeoutSeconds?: number,
 ): Promise<void> {
-  return invokeCmd<void>("ask_loom_stream", { requestId, message, sessionId, agentId, context });
+  return invokeCmd<void>("ask_loom_stream", {
+    requestId,
+    message,
+    sessionId,
+    agentId,
+    context,
+    maxRounds,
+    timeoutSeconds,
+  });
 }
 
 export async function cancelLoomStream(requestId: string): Promise<void> {

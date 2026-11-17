@@ -127,6 +127,14 @@ pub struct Intent {
     /// "manual" | "assisted" | "collaborative" | "delegated"
     #[serde(default = "default_intent_autonomy")]
     pub autonomy: String,
+    /// Optional per-turn budget: maximum agent rounds. `None` means the
+    /// server default (3) applies. Sent on both weave paths (W-1).
+    #[serde(default)]
+    pub max_rounds: Option<i32>,
+    /// Optional per-turn deadline in seconds. `None` means the server
+    /// default (300) applies; the server enforces it via context.WithTimeout.
+    #[serde(default)]
+    pub timeout_seconds: Option<i32>,
     /// "active" | "done"
     #[serde(default = "default_intent_status")]
     pub status: String,
@@ -165,6 +173,30 @@ fn normalize_acceptance(criteria: Vec<AcceptanceCriterion>) -> Vec<AcceptanceCri
         })
         .filter(|c| !c.text.is_empty())
         .collect()
+}
+
+/// Validate an optional budget value on create: `None` means the server
+/// default, a positive integer is kept, anything else is an error.
+fn normalize_budget(value: Option<i32>, name: &str) -> Result<Option<i32>, String> {
+    match value {
+        None => Ok(None),
+        Some(v) if v > 0 => Ok(Some(v)),
+        Some(_) => Err(format!("{name} must be a positive whole number")),
+    }
+}
+
+/// Resolve a budget change on update into the store's `Option` form.
+/// Outer `None` = leave unchanged; `Some(0)` = clear (back to server
+/// default); `Some(v > 0)` = set; `Some(v < 0)` = error.
+fn normalize_budget_update(value: Option<i32>, name: &str) -> Result<Option<Option<i32>>, String> {
+    match value {
+        None => Ok(None),
+        Some(0) => Ok(Some(None)),
+        Some(v) if v > 0 => Ok(Some(Some(v))),
+        Some(_) => Err(format!(
+            "{name} must be a positive whole number, or 0 to clear"
+        )),
+    }
 }
 
 fn new_intent_id() -> String {
@@ -310,6 +342,8 @@ impl IntentStore {
         why: Option<String>,
         acceptance: Vec<AcceptanceCriterion>,
         autonomy: Option<String>,
+        max_rounds: Option<i32>,
+        timeout_seconds: Option<i32>,
     ) -> Result<Intent, String> {
         let statement = statement.trim().to_string();
         if statement.is_empty() {
@@ -327,6 +361,8 @@ impl IntentStore {
         };
         let why = why.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
         let acceptance = normalize_acceptance(acceptance);
+        let max_rounds = normalize_budget(max_rounds, "Max rounds")?;
+        let timeout_seconds = normalize_budget(timeout_seconds, "Timeout seconds")?;
         let now = now_unix_secs();
         let id = new_intent_id();
         let first = self.intents.is_empty();
@@ -336,6 +372,8 @@ impl IntentStore {
             why,
             acceptance,
             autonomy,
+            max_rounds,
+            timeout_seconds,
             status: default_intent_status(),
             version: default_intent_version(),
             history: Vec::new(),
@@ -364,6 +402,8 @@ impl IntentStore {
         autonomy: Option<String>,
         status: Option<String>,
         justification: Option<String>,
+        max_rounds: Option<i32>,
+        timeout_seconds: Option<i32>,
     ) -> Result<Intent, String> {
         // Validate everything before mutating anything.
         let statement = statement.map(|s| s.trim().to_string());
@@ -384,6 +424,9 @@ impl IntentStore {
                 return Err(format!("Unknown intent status: {s}"));
             }
         }
+        // Budget: None = leave unchanged; Some(0) = clear; Some(v>0) = set.
+        let max_rounds = normalize_budget_update(max_rounds, "Max rounds")?;
+        let timeout_seconds = normalize_budget_update(timeout_seconds, "Timeout seconds")?;
         // Outer None = leave unchanged; Some(None) = clear; Some(Some) = set.
         let why = why.map(|s| {
             let t = s.trim().to_string();
@@ -462,7 +505,22 @@ impl IntentStore {
         if let Some(s) = status {
             intent.status = s;
         }
-        if content_changed || status_changed {
+        // Budget is a runtime control, not a content change: it does not
+        // bump the version, but it persists and updates the timestamp.
+        let mut budget_changed = false;
+        if let Some(mr) = max_rounds {
+            if mr != intent.max_rounds {
+                budget_changed = true;
+            }
+            intent.max_rounds = mr;
+        }
+        if let Some(ts) = timeout_seconds {
+            if ts != intent.timeout_seconds {
+                budget_changed = true;
+            }
+            intent.timeout_seconds = ts;
+        }
+        if content_changed || status_changed || budget_changed {
             intent.updated_at = now_unix_secs();
             let out = intent.clone();
             self.save()?;
@@ -1156,6 +1214,8 @@ mod tests {
                 Some("  because users need it  ".to_string()),
                 vec![acc(" Done ", false), acc("", true), acc("  ", false)],
                 None,
+                None,
+                None,
             )
             .unwrap();
         assert_eq!(intent.statement, "Ship v1");
@@ -1175,15 +1235,25 @@ mod tests {
     fn intent_create_rejects_empty_statement_and_unknown_autonomy() {
         let dir = TempDir::new("intent-create-err");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
-        assert!(store.create("".to_string(), None, vec![], None).is_err());
-        assert!(store.create("   ".to_string(), None, vec![], None).is_err());
+        assert!(
+            store
+                .create("".to_string(), None, vec![], None, None, None)
+                .is_err()
+        );
+        assert!(
+            store
+                .create("   ".to_string(), None, vec![], None, None, None)
+                .is_err()
+        );
         assert!(
             store
                 .create(
                     "Ok".to_string(),
                     None,
                     vec![],
-                    Some("autonomous".to_string())
+                    Some("autonomous".to_string()),
+                    None,
+                    None
                 )
                 .is_err()
         );
@@ -1195,7 +1265,7 @@ mod tests {
         let dir = TempDir::new("intent-create-second");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
         let first = store
-            .create("First".to_string(), None, vec![], None)
+            .create("First".to_string(), None, vec![], None, None, None)
             .unwrap();
         let second = store
             .create(
@@ -1203,6 +1273,8 @@ mod tests {
                 None,
                 vec![],
                 Some("manual".to_string()),
+                None,
+                None,
             )
             .unwrap();
         assert_eq!(second.autonomy, "manual");
@@ -1214,10 +1286,26 @@ mod tests {
         let dir = TempDir::new("intent-update");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
         let intent = store
-            .create("Old".to_string(), Some("why".to_string()), vec![], None)
+            .create(
+                "Old".to_string(),
+                Some("why".to_string()),
+                vec![],
+                None,
+                None,
+                None,
+            )
             .unwrap();
         let updated = store
-            .update(&intent.id, Some("New".to_string()), None, None, None, None)
+            .update(
+                &intent.id,
+                Some("New".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(updated.version, 2);
         assert_eq!(updated.statement, "New");
@@ -1231,9 +1319,20 @@ mod tests {
     fn intent_update_status_only_does_not_bump_version() {
         let dir = TempDir::new("intent-status");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
-        let intent = store.create("S".to_string(), None, vec![], None).unwrap();
+        let intent = store
+            .create("S".to_string(), None, vec![], None, None, None)
+            .unwrap();
         let updated = store
-            .update(&intent.id, None, None, None, Some("done".to_string()), None)
+            .update(
+                &intent.id,
+                None,
+                None,
+                None,
+                Some("done".to_string()),
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(updated.status, "done");
         assert_eq!(updated.version, 1);
@@ -1244,9 +1343,11 @@ mod tests {
     fn intent_update_noop_changes_nothing() {
         let dir = TempDir::new("intent-noop");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
-        let intent = store.create("S".to_string(), None, vec![], None).unwrap();
+        let intent = store
+            .create("S".to_string(), None, vec![], None, None, None)
+            .unwrap();
         let same = store
-            .update(&intent.id, None, None, None, None, None)
+            .update(&intent.id, None, None, None, None, None, None, None)
             .unwrap();
         assert_eq!(same.version, 1);
         assert!(same.history.is_empty());
@@ -1258,6 +1359,8 @@ mod tests {
                 Some("collaborative".to_string()),
                 None,
                 None,
+                None,
+                None,
             )
             .unwrap();
         assert_eq!(same2.version, 1);
@@ -1265,22 +1368,95 @@ mod tests {
     }
 
     #[test]
+    fn intent_budget_set_update_and_clear_round_trip() {
+        let dir = TempDir::new("intent-budget");
+        let path = intent_path(&dir);
+        let id;
+        {
+            let mut store = IntentStore::load(path.clone()).unwrap();
+            let intent = store
+                .create(
+                    "Budgeted".to_string(),
+                    None,
+                    vec![],
+                    None,
+                    Some(4),
+                    Some(120),
+                )
+                .unwrap();
+            assert_eq!(intent.max_rounds, Some(4));
+            assert_eq!(intent.timeout_seconds, Some(120));
+            id = intent.id.clone();
+            // A non-positive value is rejected on create.
+            assert!(
+                store
+                    .create("Bad".to_string(), None, vec![], None, Some(0), None)
+                    .is_err()
+            );
+            // Update to new values; budget is a runtime control, not a
+            // content change, so the version does not bump.
+            let updated = store
+                .update(&id, None, None, None, None, None, Some(8), Some(60))
+                .unwrap();
+            assert_eq!(updated.max_rounds, Some(8));
+            assert_eq!(updated.timeout_seconds, Some(60));
+            assert_eq!(updated.version, 1);
+            // Some(0) clears both back to the server default.
+            let cleared = store
+                .update(&id, None, None, None, None, None, Some(0), Some(0))
+                .unwrap();
+            assert_eq!(cleared.max_rounds, None);
+            assert_eq!(cleared.timeout_seconds, None);
+        }
+        // Persistence round-trip preserves the cleared (default) state.
+        let store = IntentStore::load(path).unwrap();
+        let intent = store.get(&id).unwrap();
+        assert_eq!(intent.max_rounds, None);
+        assert_eq!(intent.timeout_seconds, None);
+    }
+
+    #[test]
     fn intent_update_why_clear_and_rejects() {
         let dir = TempDir::new("intent-why");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
         let intent = store
-            .create("S".to_string(), Some("old why".to_string()), vec![], None)
+            .create(
+                "S".to_string(),
+                Some("old why".to_string()),
+                vec![],
+                None,
+                None,
+                None,
+            )
             .unwrap();
         // Some("") clears the why; the version bumps (content changed).
         let cleared = store
-            .update(&intent.id, None, Some("".to_string()), None, None, None)
+            .update(
+                &intent.id,
+                None,
+                Some("".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         assert_eq!(cleared.why, None);
         assert_eq!(cleared.version, 2);
         // An empty statement is rejected and changes nothing.
         assert!(
             store
-                .update(&intent.id, Some("   ".to_string()), None, None, None, None)
+                .update(
+                    &intent.id,
+                    Some("   ".to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None
+                )
                 .is_err()
         );
         assert_eq!(store.get(&intent.id).unwrap().version, 2);
@@ -1291,6 +1467,8 @@ mod tests {
                     None,
                     None,
                     Some("bogus".to_string()),
+                    None,
+                    None,
                     None,
                     None
                 )
@@ -1304,13 +1482,24 @@ mod tests {
                     None,
                     None,
                     Some("archived".to_string()),
+                    None,
+                    None,
                     None
                 )
                 .is_err()
         );
         assert!(
             store
-                .update("no-such-id", Some("x".to_string()), None, None, None, None)
+                .update(
+                    "no-such-id",
+                    Some("x".to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None
+                )
                 .is_err()
         );
     }
@@ -1320,7 +1509,14 @@ mod tests {
         let dir = TempDir::new("intent-dial");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
         let intent = store
-            .create("S".to_string(), None, vec![], Some("manual".to_string()))
+            .create(
+                "S".to_string(),
+                None,
+                vec![],
+                Some("manual".to_string()),
+                None,
+                None,
+            )
             .unwrap();
         // Raising with no justification fails.
         assert!(
@@ -1330,6 +1526,8 @@ mod tests {
                     None,
                     None,
                     Some("delegated".to_string()),
+                    None,
+                    None,
                     None,
                     None
                 )
@@ -1344,7 +1542,9 @@ mod tests {
                     None,
                     Some("delegated".to_string()),
                     None,
-                    Some("   ".to_string())
+                    Some("   ".to_string()),
+                    None,
+                    None
                 )
                 .is_err()
         );
@@ -1357,6 +1557,8 @@ mod tests {
                 Some("delegated".to_string()),
                 None,
                 Some("the task is routine now".to_string()),
+                None,
+                None,
             )
             .unwrap();
         assert_eq!(raised.autonomy, "delegated");
@@ -1378,6 +1580,8 @@ mod tests {
                 Some("manual".to_string()),
                 None,
                 None,
+                None,
+                None,
             )
             .unwrap();
         assert_eq!(lowered.autonomy, "manual");
@@ -1392,7 +1596,14 @@ mod tests {
         let dir = TempDir::new("intent-acceptance");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
         let intent = store
-            .create("S".to_string(), None, vec![acc("Old", false)], None)
+            .create(
+                "S".to_string(),
+                None,
+                vec![acc("Old", false)],
+                None,
+                None,
+                None,
+            )
             .unwrap();
         let updated = store
             .set_acceptance(
@@ -1413,10 +1624,10 @@ mod tests {
         let dir = TempDir::new("intent-active");
         let mut store = IntentStore::load(intent_path(&dir)).unwrap();
         let first = store
-            .create("First".to_string(), None, vec![], None)
+            .create("First".to_string(), None, vec![], None, None, None)
             .unwrap();
         let second = store
-            .create("Second".to_string(), None, vec![], None)
+            .create("Second".to_string(), None, vec![], None, None, None)
             .unwrap();
         assert_eq!(store.active_id().as_deref(), Some(first.id.as_str()));
         store.set_active(&second.id).unwrap();
@@ -1429,8 +1640,12 @@ mod tests {
         let dir = TempDir::new("intent-delete");
         let mut intents = IntentStore::load(intent_path(&dir)).unwrap();
         let mut work = WorkStore::load(dir.file("work.json")).unwrap();
-        let a = intents.create("A".to_string(), None, vec![], None).unwrap();
-        let b = intents.create("B".to_string(), None, vec![], None).unwrap();
+        let a = intents
+            .create("A".to_string(), None, vec![], None, None, None)
+            .unwrap();
+        let b = intents
+            .create("B".to_string(), None, vec![], None, None, None)
+            .unwrap();
         work.add("job".to_string(), Some(a.id.clone())).unwrap();
         let err = intents.delete(&a.id, &work).unwrap_err();
         assert!(err.contains("1 work item"), "error was: {err}");
@@ -1446,7 +1661,9 @@ mod tests {
         let dir = TempDir::new("intent-delete-active");
         let mut intents = IntentStore::load(intent_path(&dir)).unwrap();
         let work = WorkStore::load(dir.file("work.json")).unwrap();
-        let a = intents.create("A".to_string(), None, vec![], None).unwrap();
+        let a = intents
+            .create("A".to_string(), None, vec![], None, None, None)
+            .unwrap();
         assert_eq!(intents.active_id().as_deref(), Some(a.id.as_str()));
         intents.delete(&a.id, &work).unwrap();
         assert_eq!(intents.active_id(), None);
@@ -1465,11 +1682,22 @@ mod tests {
                     Some("why".to_string()),
                     vec![acc("A", false)],
                     None,
+                    None,
+                    None,
                 )
                 .unwrap();
             id = intent.id.clone();
             store
-                .update(&id, Some("S2".to_string()), None, None, None, None)
+                .update(
+                    &id,
+                    Some("S2".to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
             store
                 .update(
@@ -1479,6 +1707,8 @@ mod tests {
                     Some("delegated".to_string()),
                     None,
                     Some("routine now".to_string()),
+                    None,
+                    None,
                 )
                 .unwrap();
         }
