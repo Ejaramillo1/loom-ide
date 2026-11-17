@@ -1346,6 +1346,45 @@ mod tests {
     }
 
     #[test]
+    fn malformed_json_data_frame_is_counted_not_dropped_silently() {
+        let body = b"data: {not valid json}\n\ndata: {\"stage\":7}\n\n".to_vec();
+        let mut response =
+            format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", body.len()).into_bytes();
+        response.extend_from_slice(&body);
+        let (result, events) = drive(&response, "loom-stream");
+        let read = result.expect("a malformed JSON frame must not abort the stream");
+        assert_eq!(events.len(), 1, "only the valid stage-7 event is emitted");
+        assert_eq!(events[0]["stage"], 7);
+        assert!(read.completed, "the valid completion event still completes");
+        assert!(
+            read.skipped_chunks >= 1,
+            "the malformed frame must be recorded, not silently dropped"
+        );
+    }
+
+    #[test]
+    fn completion_then_truncation_is_an_error_not_a_success() {
+        let mut response = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        // A valid, completed stage-7 event first...
+        let done = b"data: {\"stage\":7}\n\n";
+        response.extend_from_slice(format!("{:x}\r\n", done.len()).as_bytes());
+        response.extend_from_slice(done);
+        response.extend_from_slice(b"\r\n");
+        // ...then a chunk that promises more bytes than it delivers.
+        response.extend_from_slice(b"a\r\nabc");
+        let (result, events) = drive(&response, "loom-stream");
+        // The completed event was delivered, but the truncated tail means
+        // the turn must not read as a clean success.
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["stage"], 7);
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("truncated"),
+            "expected a truncation error, got {err:?}"
+        );
+    }
+
+    #[test]
     fn chunked_sse_over_a_real_tcp_socket_is_decoded() {
         use std::net::TcpListener;
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
