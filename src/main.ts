@@ -3428,7 +3428,7 @@ function openAttentionDialog(item: AttentionItem, opener?: HTMLElement) {
   provenance.className = "decision-provenance";
   provenance.textContent = exp
     ? "Decision recorded by you from real experiment results."
-    : "This item comes from the Loom server.";
+    : "Recorded locally — Loom does not expose attention items yet.";
   dialog.append(provenance);
 
   if (exp) {

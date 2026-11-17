@@ -25,8 +25,8 @@ persistent, editable object: goal, constraints, success checks, owner,
 autonomy level, and current state.
 
 - Loom hook: Weaver already turns natural language into agents and workflows
-  (`documentation/architecture/weaver-system.md`), and the task decomposer turns
-  goals into task graphs (`documentation/architecture/task-system.md`).
+  (`docs/architecture/weaver-system.md`), and the task decomposer turns
+  goals into task graphs (`docs/architecture/task-system.md`).
 - Design rule: no consequential run starts from a bare chat message. It starts
   from an Intent object the person can read, edit, pause, and cancel.
 
@@ -39,9 +39,9 @@ effect immediately.
 
 - Loom hook: the decision layer already supports shadow mode (record only,
   never act) and per-site live bands with uncertainty thresholds
-  (`documentation/reference/agent-configuration.md`, `spec.decision`), and
+  (`docs/reference/agent-configuration.md`, `spec.decision`), and
   learning has three autonomy modes including human-approval
-  (`documentation/architecture/loom-system-architecture.md`).
+  (`docs/architecture/loom-system-architecture.md`).
 - Design rule: defaults are low. The system may *propose* more autonomy with
   evidence; it may never grant itself more.
 
@@ -55,7 +55,7 @@ truth.
 
 - Loom hook: observability already records traces, spans, token/cost/latency,
   pattern match scores and judge verdicts
-  (`documentation/architecture/observability.md`), but its own document says a
+  (`docs/architecture/observability.md`), but its own document says a
   real-time query UI is a non-goal. Understanding is the layer we must add.
 - Design rule: no green tick without evidence one click away. No summary
   without its sources reachable.
@@ -118,13 +118,13 @@ Minimalism here does **not** mean fewer features. It means fewer *demands*.
    asked, why now, the evidence, the alternatives, the consequences of each,
    and the uncertainty. In Loom, only an approval request carrying a non-empty
    `hitl_request.request_id` is answerable
-   (`documentation/guides/human-in-the-loop.md`) — the interface must never
+   (`docs/guides/human-in-the-loop.md`) — the interface must never
    show an answer box for keep-alive or hint messages.
 3. **Unexpected behaviour — honest.** Anomalies are visible where they
    happened, with three always-available actions: inspect, interrupt, recover.
    Loom already supports durable workflow checkpoints that survive process
    exit and refuse to resume against a changed workflow definition
-   (`documentation/guides/human-in-the-loop.md`) — recovery builds on that.
+   (`docs/guides/human-in-the-loop.md`) — recovery builds on that.
 
 ## What we keep from traditional tools
 

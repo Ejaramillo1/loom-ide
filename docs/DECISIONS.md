@@ -79,3 +79,9 @@ The ten decisions below were taken by Eduardo on 15 Nov 2026 and close the
   control (the server offers no unary cancel).
 - Intent rendering: one editor inside `#intent-header` (the critique's
   "two places" is stale — verified resolved).
+- Rust formatting gate: `src-tauri` only. `native-app/src` carries
+  pre-existing formatting drift (since `41170a6`, a rustfmt line-wrapping
+  pass that was never run) and is **explicitly out of the fmt gate**;
+  every "fmt ✓" claim must name its scope. A one-time mechanical format of
+  `native-app` is a future, separate commit, not part of any functional
+  change.
