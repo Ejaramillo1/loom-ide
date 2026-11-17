@@ -1,5 +1,17 @@
 # Quiet Complexity × Loom — Master Audit
 
+> **Current IDE repair — 2026-11-17 (supersedes the prior 2026-11-18 status).**
+> IDE admission now requires explicit ownership, validates stored records and
+> the linked intent ceiling, and rejects Manual before dispatch. Session
+> ownership cannot be bypassed. All execution paths in the corrected inventory,
+> including schedule resume and skill classification, share the guard.
+> Cancellation covers captured chat/workflow/provider owners and intent-only
+> requests. Its terminal event proves local stream closure only; remote status
+> remains unknown. Unary limitations and cancellation failures are visible.
+> Loom runtime permissions are a separate project, outside this repair.
+> See [the current contract and acceptance evidence](17-autonomy-enforcement.md)
+> and `evidence/ide-repair-20261117-results.json`. Earlier evidence remains historical.
+
 Full-system audit of the Quiet Complexity IDE
 (`/home/ed/loom-ide-tauri`, `tauri-prototype`) against Loom v1.4.0
 (`/home/ed/work/loom`). History: the 2026-11-15 merged audit ran against
@@ -39,9 +51,9 @@ possible, live verification. The verdict is still NO because human
 control: Manual is now enforced at the IDE boundary from stored records
 (QC-01/issue 005 — every execution path resolves the governing
 work/Intent and rejects Manual before sending; cancellation is
-requested/confirmed/unavailable as applicable; per-tool approval for
+requested/local-closure/unavailable as applicable; per-tool approval for
 Assisted/Collaborative is a separate Loom project), the traversed-UI proof on the current binary is not yet
-executed, the documentation tail (issue 015, NG-1/NG-2) is unfixed, and
+executed, the earlier IDE budget/copy/fmt-scope tails have landed (W-1/W-8), and
 one gateway residual remains (QC-02/issue 011): the server is now
 **loopback-bound with restricted origins** (contained 2026-11-17,
 `16-gateway-containment.md`), but the prepared reject-before-dispatch
@@ -78,7 +90,7 @@ and `14-report-evaluation.md` (truth table of every prior claim).
 | issue 002 skills disconnected | QC-10 | **FIXED** (server-side) — live `/v1/skills:bulkImport` 400-validation instead of 404 |
 | issue 003 stream framing mismatch | QC-05 | **FIXED** (`bdb92bb`) — NDJSON `{"result":…}` unwrapped; fixtures |
 | issue 004 trace ids unreachable | — (unique to this pass) | **FIXED** (Loom `8082078` + IDE) — TraceId populated; "View trace ›" renders |
-| issue 005 autonomy not enforced | QC-01 | **IDE admission enforced (2026-11-18)** — policy resolved from stored records on every path; Manual rejected before sending; cancellation requested/confirmed/unavailable stated; per-tool approval = separate Loom project (`17-autonomy-enforcement.md`) |
+| issue 005 autonomy not enforced | QC-01 | **IDE admission enforced (2026-11-18)** — policy resolved from stored records on every path; Manual rejected before sending; cancellation requested/local-closure/unavailable stated; per-tool approval = separate Loom project (`17-autonomy-enforcement.md`) |
 | issue 006 workflow attribution/name | QC-13, QC-14 | **FIXED** — `workflowStreamOrigin` + persisted ownership maps + tests |
 | issue 007 newest-session race | QC-03 (root cause) | **FIXED** (`58cce7b`) — no newest/current-session adoption; honest identity note; tests |
 | issue 008 chat evidence kind | — | **FIXED** (`a714b20`) — live replies default to Observed |

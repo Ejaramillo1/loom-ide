@@ -1,131 +1,120 @@
-# 17 — Autonomy enforcement: the IDE's admission and cancellation scope
+# 17 — IDE execution admission and cancellation
 
-> Owner-directed work order (2026-11-17, hardened 2026-11-18): the dial
-> must control what Loom is allowed to do — within the IDE's real
-> authority. **Loom's runtime permissions, approval holds, and gateway
-> patches stay outside this task** (separate project). This document
-> separates three statuses everywhere:
->
-> 1. **IDE admission** — what the IDE rejects before sending (enforced
->    here, tested at the Rust command boundary).
-> 2. **IDE cancellation** — what the IDE can request and observe
->    (cooperative cancel for streams; limitation stated for one-shot
->    requests).
-> 3. **Loom runtime policy** — server-side tool permissions and holds;
->    not part of this repair.
+Current IDE repair, 2026-11-17. Implementation: `9496f41`. Starting point: `cca3cb5` with a clean tree
+and 100 frontend tests passing. This record supersedes the earlier
+`db6471c` / `41124ae` / `cca3cb5` completion claims (which were mistakenly
+dated 2026-11-18). Loom is a separate project; no Loom code, configuration,
+processes or personal sessions were changed or tested in this repair.
 
-## 1. The four levels, defined precisely (the contract for later)
+## What is enforced
 
-Action classes: **A-exec** = agent-execution entry points (chat turns,
-experiment arms, workflow runs, schedule triggers/enabling, session
-resume, provider A/B); **T-read** = read-only tools (recall,
-query_tool_result, shared_memory_read, load_pattern, group_by_query,
-top_n_query, tool_search); **T-write** = consequential tools (everything
-else). These classes belong to the **Loom runtime contract** (status 3) —
-the IDE does not and cannot enforce per-tool-call behavior.
+The Rust commands resolve stored work and intent policy before dispatch.
+Manual rejects execution. Assisted, Collaborative and Delegated admit a
+request; their tool-level behavior remains governed by the separate server.
+Sending an autonomy string from the frontend has no authority.
 
-| Level | A-exec (IDE admission, enforced) | T-read / T-write (Loom runtime, outside this task) |
-|---|---|---|
-| Manual | **Rejected before sending** | n/a (no turn runs) |
-| Assisted | Allowed (intent budget applies) | every call held (future) |
-| Collaborative | Allowed (intent budget applies) | T-write held, T-read immediate (future) |
-| Delegated | Allowed (intent budget applies) | immediate within server bounds |
+A work item's linked intent supplies its ceiling: the stricter of work
+and intent governs. Missing owners, missing parents, invalid levels,
+blank identifiers, and mismatched work/intent references reject execution.
+A known session's stored work link cannot be bypassed by omitting an owner
+or supplying another work item. Ambiguous session ownership also rejects.
 
-## 2. Execution-path inventory (every path, not a command count)
+Requests with no work or intent must explicitly declare `unscoped`, and
+that is accepted only when no active intent exists. Supported UI callers
+capture their identifiers at the start and preserve them across awaits;
+API wrappers turn explicit `null, null` into unscoped and never treat
+omitted arguments as permission. The project default is Collaborative.
+This local policy is not authentication of a hostile desktop client or
+protection against someone editing the user's own local policy files.
 
-| Path | Where | Governing record (captured at start) | Cancellation mechanism | Restriction applied |
-|---|---|---|---|---|
-| Chat, streaming | `sendChat` → `ask_loom_stream` | selected work → active intent → stored active intent → default | `cancel_loom_stream` (supported) | Rust admission (stored policy) |
-| Chat, unary fallback | `sendChatUnary` → `ask_loom` | same ids, captured before the stream; Rust re-resolves **current** stored policy at dispatch | none (one-shot) — limitation stated | Rust admission, re-read at fallback time |
-| Experiment arms | `runExperimentArm` → `ask_loom` | selected work + intent | none (unary) — limitation stated | Rust admission |
-| Workflow run, stream | `execute_workflow_stream` | selected work + intent | `cancel_loom_stream` (supported) | Rust admission |
-| Workflow run, unary | `execute_workflow` | selected work + intent | none — limitation stated | Rust admission |
-| Session resume | `session_resume` | owning work (by `session_id` link) + active intent | none — limitation stated | Rust admission |
-| Schedule "Run now" | `workflow_schedule_trigger` | selected work + intent | none — limitation stated | Rust admission |
-| Schedule create (enabled) / enable | `workflow_schedule_create` / `_update(enabled: true)` | selected work + intent | n/a (server-owned scheduling) | Rust admission; inspecting/disabling/deleting always allowed |
-| Agent-description generation | `ask_loom` (agent prefill) | selected work + intent | none (unary) | Rust admission |
-| Provider A/B | `provider_abtest` | selected work + intent | `cancel_loom_stream` (supported) | Rust admission |
+The shared guard takes locks in the same intents→work order as policy
+mutations. No store lock crosses a network await. Every new dispatch,
+including a unary fallback, re-reads stored policy. Browser preview chat
+re-reads its local store too, fails closed on unreadable policy, and uses
+the same owner and ceiling rules; that is a convenience check, not a
+server security boundary.
 
-Observing an execution (listing sessions, schedules, artifacts, traces)
-is never gated — only starting one is.
+## Execution inventory
 
-## 3. Authoritative resolution (status 1, implemented)
+| Path | Owner captured by IDE | Admission | Cancellation available here |
+|---|---|---|---|
+| Chat stream | Selected work and linked intent; otherwise session-linked work or active intent | Rust `ask_loom_stream` | Local stream close request |
+| Chat unary fallback | Original chat owner | Rust `ask_loom`, fresh policy; browser local-store check | No unary cancellation |
+| Experiment arm | Experiment's known work, otherwise selected work; linked intent | Same `ask_loom` command | No unary cancellation |
+| Workflow stream and unary fallback | Original selected work and linked intent, or active intent | Both Rust execution commands | Stream close only; unary/polling cannot cancel remote execution |
+| Session resume | Stored session-linked work, otherwise active intent | Rust `session_resume`, session association verified | No cancellation through the local dial |
+| Schedule Run now | Selection captured at click | Rust trigger | Server-owned execution; limitation shown |
+| Schedule create, enable, resume, edit | Selection captured at submission/click | Create unless explicitly disabled; updates unless explicitly disabled; separate resume command guarded | Existing server schedule stays server-owned |
+| Agent-description generation | Selection captured before request | `ask_loom` | No unary cancellation |
+| Provider A/B | Selection captured at start | `provider_abtest` | Local stream close request |
+| Skill classification | Shell captures owner when classification starts | `skills_classify` (makes a model call) | No unary cancellation |
+| Task decomposition API | Explicit identifiers required from callers | `loom_task_decompose` guarded | No UI caller; current server implementation is unimplemented |
 
-- Commands take **stable work/Intent identifiers**, never a level
-  string. `resolve_execution_policy` (`lib.rs`) resolves from the
-  stored records: referenced work → referenced intent → stored active
-  intent → project default (`collaborative`).
-- Manual (rank 0) is rejected **before any network work**, with an
-  error naming the governing record and the next action.
-- Missing or invalid referenced records are rejected; store loading
-  itself rejects unknown levels loudly (second layer).
-- Each command resolves fresh at dispatch time, so a fallback that
-  starts after the owner became Manual is rejected (re-read, not
-  cached).
-- The browser dev fallback (no Rust) refuses Manual chat as a
-  **convenience** check; it is not, and is not claimed to be, a
-  security boundary.
+Observations, session subscriptions, schedule inspection, disabling,
+pausing and deletion remain available under Manual. Agent lifecycle,
+manual task CRUD, skill import without classification, and recording a
+session-gap result are not new model-execution paths and remain unchanged.
 
-## 4. Cancellation (status 2, implemented honestly)
+## Cancellation is a request, not proof of remote termination
 
-Three states are kept distinct, in code and copy:
+Lowering work or intent autonomy matches captured ownership, including
+intent-only chat and workflows. Chat, workflow and provider A/B streams
+request cancellation. An attempted cancellation prevents a later startup
+rejection from launching a unary fallback. Errors remain visible.
 
-- **Cancellation requested** — lowering autonomy calls
-  `cancel_loom_stream` for the affected in-flight streams (matched by
-  captured work id, or by captured intent id for intent-owned requests)
-  and annotates the reply: "cancellation requested; waiting for the
-  server to confirm."
-- **Confirmed terminal cancellation** — the stream's `cancelled`
-  terminal event (existing `finishStream` path) marks the reply
-  partial. That is the only thing the IDE calls "cancelled".
-- **Cancellation unavailable or failed** — one-shot (unary) requests,
-  resumed sessions, schedules and experiment arms have no supported
-  cancellation: the UI states the limitation. A cancellation request
-  that fails is shown as an error, never swallowed.
+The existing Rust `kind: cancelled` event is synthesized from its local
+reader cancellation flag. It confirms **local stream closure only**.
+The UI distinguishes:
 
-Completed results are never undone by moving the dial, and the IDE
-never marks a server-owned operation cancelled merely because it
-stopped displaying or reading it.
+- cancellation requested, waiting for local closure;
+- local stream stopped, server termination unconfirmed;
+- cancellation failed or unavailable.
 
-## 5. Proof table status
+Chat's durable run outcome is `unknown` after local closure, with partial
+output retained. Provider output and workflow attribution/last progress
+are retained. Completed results are never undone. Pending unary requests
+are tracked by owner, and lowering produces an explicit unsupported
+cancellation notice while still preserving any successful result.
+A server-owned schedule or resumed execution can outlive its HTTP request;
+the corresponding UI says the local dial cannot cancel it.
 
-| Situation | Status |
+## Evidence and acceptance
+
+| Acceptance | Evidence |
 |---|---|
-| Action forbidden by the selected level | ✅ IDE admission: rejected before sending (stored policy, tested) |
-| Action requires approval | ⏳ Loom runtime policy — outside this task |
-| Approval granted → exactly once | ⏳ Loom runtime policy — outside this task |
-| Approval denied → zero | ⏳ Loom runtime policy — outside this task |
-| Autonomy lowered during execution | ✅ streams: cancellation requested, confirmation observed; one-shot paths: limitation stated |
-| Same action via another entry point | ✅ same resolver on every inventoried path (inventory §2) |
+| Stored Manual cannot execute via inventoried commands | `execution_admission_tests.rs` calls actual Rust command functions under a Tauri mock runtime; disposable loopback peer counts all requests |
+| Rejected requests send nothing | Command matrix permits exactly five requests: allowed chat, disabled schedule create/update, pause and delete; every Manual execution command must return its refusal |
+| Missing/blank/mismatched owners and intent ceiling reject | Command matrix plus resolver/store tests; session link cannot be changed or omitted to escape policy |
+| Fresh policy at fallback dispatch | Allowed command is run, stored policy lowered, same command rejects without another request |
+| Original selection survives awaits | Extracted production chat/workflow/experiment functions exercised in lifecycle tests; linked intent and original session retained |
+| Intent-only/workflow/provider cancellation | Production handler tests assert the actual cancellation call, failure message, partial results, and suppressed fallback |
+| Unary limitation and completed output | Pending unary lifecycle test lowers autonomy, checks unsupported notice, then confirms the returned output is preserved |
+| API ownership | All twelve execution bridges checked for owner propagation and explicit unscoped behavior; no authority-level field sent |
+| Browser convenience | Stored policy re-read, Manual ceiling, session ownership, invalid/missing references, corrupt-store refusal before fetch |
 
-## 6. Tests
+The command fixture runs in a child test process with its own `LOOM_ADDR`,
+so no process-wide environment mutation races the parallel test suite.
+It uses the already-installed Tauri test feature only in dev dependencies;
+no new package was added. Frontend lifecycle tests use extracted production
+functions, a minimal fake DOM, and mocked bridges. These are not rendered
+Tauri UI tests or a live model journey.
 
-- Rust (141 lib tests): stored-Manual rejection regardless of the
-  caller's intent, stored-Manual intent rejection, missing-record
-  rejection, invalid-level rejection (both layers), owner naming,
-  active-intent/default fallback, and the pre-fallback re-read.
-- Frontend (100 vitest): identifiers passed on the stream path; the
-  convenience Manual refusal never invokes the backend and preserves
-  the draft; the earlier lifecycle/settle tests unchanged.
-- The tests fail if the shared resolver is removed or bypassed: every
-  command calls it before building a request, and the wire tests pin
-  the resolved level in `backend_config`.
+Final gates: 116 frontend tests (14 files), 143 Tauri tests passed / 2 ignored,
+22 native tests passed, build and src-tauri fmt passed, Unity 0 errors /
+0 warnings. Production `cargo check` passed with the existing unused
+`StreamRead.completed` warning. Command exit codes are recorded in
+`evidence/ide-repair-20261117-results.json`, with matching logs for frontend,
+build, Tauri, native, scoped fmt and Unity. Historical logs remain preserved.
 
-## 7. Changed in this hardening round
+## Decisions taken
 
-- `src-tauri/src/lib.rs` — `resolve_execution_policy` +
-  `ExecutionPolicy`; `ask_loom`/`execute_workflow` take
-  `work_id`/`intent_id` + `State`; resolver tests.
-- `src-tauri/src/loom_stream.rs` — same for `ask_loom_stream`,
-  `execute_workflow_stream`, `provider_abtest`.
-- `src-tauri/src/loom_http.rs` — same for `session_resume`,
-  `workflow_schedule_trigger`; create/enable gating on schedules.
-- `src/api.ts` — identifier params on all execution bridges; the
-  browser fallback keeps a convenience Manual refusal only.
-- `src/main.ts` — ownership captured at send time and carried through
-  awaits/fallbacks; cancellation status notes; honest dial copy
-  ("Manual prevents new execution requests for this work. Lowering
-  autonomy requests cancellation where supported. Server-side tool
-  permissions remain governed by Loom."); schedule limitation copy.
-- `src/chat-lifecycle.test.ts` — harness + identifier/cancellation
-  tests.
+- Keep Loom runtime permissions, approval holds and gateway work outside this repair, as directed.
+- Reuse stores and existing stream handles; require explicit ownership instead of an implicit policy fallback.
+- Gate classification and the separate schedule-resume command after inventory showed they initiate execution.
+- Guard the task-decomposition execution API despite its current server-side unimplemented response; no feature was added.
+- Treat local cancellation as remote status unknown; never manufacture a server acknowledgment.
+- Preserve the existing src-tauri-only formatting gate and add no dependencies.
+
+The code and caller changes were committed together to keep the required
+owner contract compatible at each commit. The user explicitly authorized
+pushing the completed IDE branch after verification.

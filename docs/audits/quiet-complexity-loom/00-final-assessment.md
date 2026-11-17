@@ -1,6 +1,19 @@
 # 00 — Final Assessment
 
-> Merged audit, refreshed to the **current state** on 2026-11-16.
+> **Current IDE repair — 2026-11-17 (supersedes the prior 2026-11-18 status).**
+> IDE admission now requires explicit ownership, validates stored records and
+> the linked intent ceiling, and rejects Manual before dispatch. Session
+> ownership cannot be bypassed. All execution paths in the corrected inventory,
+> including schedule resume and skill classification, share the guard.
+> Cancellation covers captured chat/workflow/provider owners and intent-only
+> requests. Its terminal event proves local stream closure only; remote status
+> remains unknown. Unary limitations and cancellation failures are visible.
+> Loom runtime permissions are a separate project, outside this repair.
+> See [the current contract and acceptance evidence](17-autonomy-enforcement.md)
+> and `evidence/ide-repair-20261117-results.json`. Earlier evidence remains historical.
+
+> Historical merged-audit baseline, refreshed on 2026-11-16; the current
+> IDE admission/cancellation update is above.
 > Audited: IDE `/home/ed/loom-ide-tauri` @ `f75ad9f` (branch
 > `tauri-prototype`, local only) and Loom `/home/ed/work/loom` @ `8082078`
 > (v1.4.0). The original audit and its post-fix refresh (`b1f16bd`,
@@ -25,7 +38,7 @@ still NO:
 
 1. **Criterion 1 is not yet literally demonstrated on the current
    binary.** The chain is pinned at both ends — Rust wire-contract tests,
-   and 15 lifecycle tests over the **extracted real `main.ts` handlers
+   and lifecycle tests over the **extracted real `main.ts` handlers
    with a minimal fake DOM and mocked Tauri bridges** (not the real Tauri
    event pipeline or a rendered window) — and the wire contract is
    live-verified (byte-faithful stream probe, session-reuse probe), but
@@ -37,7 +50,7 @@ still NO:
    run/enable, session resume, provider A/B) is rejected before
    sending when the governing work/Intent is Manual, and lowering the
    dial requests cancellation for affected streams (requested and
-   confirmed states are kept distinct; one-shot paths state the
+   local-closure states are kept distinct; one-shot paths state the
    limitation). **Per-tool approval for Assisted and Collaborative is a
    separate Loom runtime project** — contract in
    `17-autonomy-enforcement.md` §1; until it exists, levels above
@@ -56,14 +69,13 @@ still NO:
    Host check) is prepared with tests in
    `16-gateway-containment.md` / `evidence/`; applying it is a Loom-side
    change, pending separately authorized execution scope.
-4. **Functional and documentation tails remain, kept separate:**
-   (a) **NG-2, functional:** `max_rounds`/`timeout_seconds` are still
-   never sent by the IDE — every turn runs server defaults, and Loom
-   `8082078` enforces only `timeout_seconds` (no `max_rounds` consumer
-   exists server-side). (b) **Issue 015/NG-3, documentation copy:** stale
-   philosophy citations and one unreachable attention-dialog sentence.
-   (c) **NG-1, tooling scope:** fmt discipline is src-tauri-only
-   (`native-app` has never been rustfmt-clean).
+4. **Earlier IDE tails have since landed.** Intent budgets are sent by
+   the IDE (`42ded6b`); the separate runtime's enforcement is outside this
+   repair. Citation/attention-copy corrections and the src-tauri-only fmt
+   decision are recorded in `15-execution-plan.md` W-1/W-8. They must not
+   be presented as still-unshipped IDE work. Broader live UI and held-tool
+   approval proofs remain outside this repair's automated evidence.
+
 
 Everything the previous assessments listed as primary-path breaks is now
 **fixed, and verified to the level each item below states** — no item is
@@ -131,7 +143,7 @@ the absence of an autonomy enforcement contract (QC-01).
 **8. Which gaps compromise human control or understanding?**
 Autonomy is labeled honestly and **Manual is enforced at the IDE
 boundary from stored records** (005 — cancellation is
-requested/confirmed/unavailable as applicable; per-tool approval for
+requested/local-closure/unavailable as applicable; per-tool approval for
 Assisted/Collaborative is a separate Loom project); the gateway is
 loopback-bound with restricted origins (011, contained 2026-11-17 —
 the unlisted-origin action path is the prepared-patch residual); the
@@ -190,7 +202,7 @@ the pattern — honesty instead of pretense, truth instead of removal.
 7. Autonomy is observable in Loom's approval behavior, or its copy states
    exactly what it governs; the deployment respects the trust boundary.
    — *Half: Manual is enforced at the IDE boundary from stored records,
-   cancellation is requested-and-confirmed honestly, and the copy is
+   cancellation is requested with local closure reported honestly, and the copy is
    accurate; per-tool approval enforcement (Assisted/Collaborative) is
    a separate Loom project (QC-01); the deployment is
    loopback-contained with restricted origins (QC-02 contained

@@ -1,22 +1,20 @@
 # Issue 005 — The autonomy dial does not govern Loom execution permissions
 
-- **Title:** The autonomy dial does not govern Loom execution permissions
-- **Severity:** P1 — the flagship control concept is UI-only
-- **Status (2026-11-18):** **IDE admission enforced from stored records;
-  cancellation honest; runtime policy separate.** Every execution
-  command resolves policy from the stored work/Intent records
-  (`resolve_execution_policy`, identifiers only — a caller-supplied
-  level string no longer exists): Manual is rejected before any network
-  work on chat, workflow runs, experiment arms, schedule run/enable,
-  session resume and provider A/B; missing/invalid records are rejected;
-  fallbacks re-read current policy at dispatch. Lowering the dial
-  requests cancellation for affected streams (requested → confirmed
-  terminal → unavailable/failed, each stated) and reports one-shot
-  paths as not cancellable. **Outside this repair:** per-tool-call
-  approval (Assisted/Collaborative) and runtime acknowledgment — a
-  Loom project, contract in `17-autonomy-enforcement.md` §1.
+> **Current IDE repair — 2026-11-17 (supersedes the prior 2026-11-18 status).**
+> IDE admission now requires explicit ownership, validates stored records and
+> the linked intent ceiling, and rejects Manual before dispatch. Session
+> ownership cannot be bypassed. All execution paths in the corrected inventory,
+> including schedule resume and skill classification, share the guard.
+> Cancellation covers captured chat/workflow/provider owners and intent-only
+> requests. Its terminal event proves local stream closure only; remote status
+> remains unknown. Unary limitations and cancellation failures are visible.
+> Loom runtime permissions are a separate project, outside this repair.
+> See [the current contract and acceptance evidence](../17-autonomy-enforcement.md)
+> and `../evidence/ide-repair-20261117-results.json`. Earlier evidence remains historical.
 
-## Problem statement
+- **Title:** The autonomy dial does not govern Loom execution permissions
+- **Original audit severity:** P1 — the control was UI-only
+## Historical problem statement
 
 The philosophy's core control claim — "autonomy is a visible dial…
 Moving the dial… changes how much freedom the system has" — is not backed

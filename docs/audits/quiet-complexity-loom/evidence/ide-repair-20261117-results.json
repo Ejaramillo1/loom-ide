@@ -1,0 +1,65 @@
+{
+  "baseline": "cca3cb5808c49e8a18d49f5fd8fec08169d608fe",
+  "scope": "IDE only; no live Loom session or model tests",
+  "checks": [
+    {
+      "name": "frontend",
+      "command": "npm test -- --run",
+      "exit_code": 0,
+      "log": "ide-repair-20261117-vitest.log"
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "exit_code": 0,
+      "log": "ide-repair-20261117-build.log"
+    },
+    {
+      "name": "tauri",
+      "command": "cargo test --offline --locked --manifest-path src-tauri/Cargo.toml --lib",
+      "exit_code": 0,
+      "log": "ide-repair-20261117-tauri.log"
+    },
+    {
+      "name": "native",
+      "command": "cargo test --offline --locked --manifest-path native-app/Cargo.toml",
+      "exit_code": 0,
+      "log": "ide-repair-20261117-native.log"
+    },
+    {
+      "name": "fmt_src_tauri",
+      "command": "cargo fmt --check --manifest-path src-tauri/Cargo.toml",
+      "exit_code": 0,
+      "log": "ide-repair-20261117-fmt.log"
+    },
+    {
+      "name": "unity",
+      "command": "unity recompile --project-path \"$PWD/unity-memory-palace\" --format json",
+      "exit_code": 0,
+      "log": "ide-repair-20261117-unity.log"
+    },
+    {
+      "name": "cargo_check",
+      "command": "cargo check --offline --locked --manifest-path src-tauri/Cargo.toml",
+      "exit_code": 0,
+      "log": "ide-repair-20261117-cargo-check.log"
+    }
+  ],
+  "verified_at": "2026-11-17T11:45:51.720912-08:00",
+  "counts": {
+    "frontend_passed": 116,
+    "frontend_files": 14,
+    "tauri_passed": 143,
+    "tauri_ignored": 2,
+    "native_passed": 22,
+    "unity_errors": 0,
+    "unity_warnings": 0
+  },
+  "limitations": [
+    "No rendered Tauri window or live model turn tested.",
+    "Local stream closure does not confirm remote termination.",
+    "Existing Rust dead-code/unused-mut and Vite bundle-size warnings remain.",
+    "Intermediate command-tests/lifecycle captures precede final complete suite logs."
+  ],
+  "implementation_commit": "9496f41be621dcb5307c9856f2791e8175ecec9b"
+}

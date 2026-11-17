@@ -1,22 +1,20 @@
 # QC-01 — Autonomy changes do not constrain Loom execution
 
+> **Current IDE repair — 2026-11-17 (supersedes the prior 2026-11-18 status).**
+> IDE admission now requires explicit ownership, validates stored records and
+> the linked intent ceiling, and rejects Manual before dispatch. Session
+> ownership cannot be bypassed. All execution paths in the corrected inventory,
+> including schedule resume and skill classification, share the guard.
+> Cancellation covers captured chat/workflow/provider owners and intent-only
+> requests. Its terminal event proves local stream closure only; remote status
+> remains unknown. Unary limitations and cancellation failures are visible.
+> Loom runtime permissions are a separate project, outside this repair.
+> See [the current contract and acceptance evidence](../17-autonomy-enforcement.md)
+> and `../evidence/ide-repair-20261117-results.json`. Earlier evidence remains historical.
+
 Severity: **P0**. Confidence: **Confirmed**. Audit baseline: IDE `c46aa644`, Loom `ab46f76f`, 15 November 2026.
 
-## Status (2026-11-18)
-
-**IDE admission enforced from stored records; cancellation honest;
-runtime policy separate (Loom project).** `resolve_execution_policy`
-(`lib.rs`) resolves the governing level from stored work/Intent
-identifiers on every execution command — Manual is rejected before any
-network request, missing/invalid records are rejected, and a fallback
-re-reads current policy at dispatch (no caller-supplied level strings
-remain). Lowering the dial requests cancellation for affected streams
-and states requested/confirmed/unavailable-failed distinctly; one-shot
-paths are reported as not cancellable. Per-tool approval behavior
-(Assisted/Collaborative) is explicitly **outside** the IDE claim — see
-`17-autonomy-enforcement.md` §1 for the Loom contract.
-
-## Problem and current behavior
+## Historical problem and behavior
 
 A work item can be Manual or Paused while chat, experiment arms, workflows and session resume still invoke Loom. Lowering autonomy updates local records, not the permissions of an in-flight run.
 

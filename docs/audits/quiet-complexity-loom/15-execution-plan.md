@@ -1,5 +1,17 @@
 # 15 — Execution plan: baseline, single work queue, progress
 
+> **Current IDE repair — 2026-11-17 (supersedes the prior 2026-11-18 status).**
+> IDE admission now requires explicit ownership, validates stored records and
+> the linked intent ceiling, and rejects Manual before dispatch. Session
+> ownership cannot be bypassed. All execution paths in the corrected inventory,
+> including schedule resume and skill classification, share the guard.
+> Cancellation covers captured chat/workflow/provider owners and intent-only
+> requests. Its terminal event proves local stream closure only; remote status
+> remains unknown. Unary limitations and cancellation failures are visible.
+> Loom runtime permissions are a separate project, outside this repair.
+> See [the current contract and acceptance evidence](17-autonomy-enforcement.md)
+> and `evidence/ide-repair-20261117-results.json`. Earlier evidence remains historical.
+
 > Created 2026-11-16 under the owner's two-phase plan: **make the report
 > accurate, then collect the missing proof and fix the remaining
 > behavior.** Reuses the existing roadmap (`09-remediation-roadmap.md`,
@@ -144,7 +156,7 @@ source):**
 | # | Problem | Change | Proof | Status | Evidence |
 |---|---|---|---|---|---|
 | W-1 | Execution limits never sent (NG-2); Intent-budget direction | Wire Intent budget fields → editor → TS API → Rust validation → **both** weave requests (`max_rounds`, `timeout_seconds`); preserve existing saved Intents with documented defaults | Rust wire tests assert both fields; **caveat verified: Loom enforces `timeout_seconds`; `max_rounds` has no server consumer** — record honestly and gate the max_rounds claim on Loom-side work or agent `max_turns` | **done (IDE)** | `Intent.max_rounds`/`timeout_seconds` (store.rs, serde default None); editor number inputs; `ask_loom`/`ask_loom_stream` send camelCase `maxRounds`/`timeoutSeconds` and snake_case `max_rounds`/`timeout_seconds`; Rust wire tests (`weave_unary_body_*`, `weave_stream_body_carries_budget_*`) + store round-trip + 2 lifecycle tests (97 frontend, 130 lib). Server enforcement of `max_rounds` remains gated (no consumer in Loom `8082078`) |
-| W-2 | Autonomy unenforced (QC-01) | Define what the 4 existing levels permit; inventory every entry point (chat, experiment arms, workflows, resume, schedules, tools); enforce applicable restrictions at the Rust boundary; specify the runtime contract for lowering during an active run; no invented levels, no prompt-wording-as-permission | Forbidden actions cannot execute via any entry point; UI reports enforcement accurately; full runtime enforcement stays open until Loom-side work exists | **IDE admission + cancellation done (2026-11-18); runtime policy separate** | `17-autonomy-enforcement.md`: stored-policy resolution (`resolve_execution_policy`) on every inventoried path; Manual rejected before sending; requested/confirmed/unavailable cancellation states; tests fail if the guard is bypassed (Rust 141, frontend 100) |
+| W-2 | Autonomy unenforced (QC-01) | Define what the 4 existing levels permit; inventory every entry point (chat, experiment arms, workflows, resume, schedules, tools); enforce applicable restrictions at the Rust boundary; specify the runtime contract for lowering during an active run; no invented levels, no prompt-wording-as-permission | Forbidden actions cannot execute via any entry point; UI reports enforcement accurately; full runtime enforcement stays open until Loom-side work exists | **IDE admission + local cancellation repaired (2026-11-17); runtime policy separate** | `17-autonomy-enforcement.md`: stored-policy resolution (`resolve_execution_policy`) on every inventoried path; Manual rejected before sending; requested/local-closure/unavailable cancellation states; actual command matrix and lifecycle tests; final counts in `evidence/ide-repair-20261117-results.json` |
 | W-3 | Gateway posture (QC-02) | Local test deployment: loopback-only binds, Tauri origin works, foreign origin gets no read, unary + stream same policy; remote deployment = separate authenticated transport (out of scope) | Observed `ss` addresses + origin probes match the documented local deployment | **contained (config); prepared patch pending Loom-side scope** | `16-gateway-containment.md`: loopback sockets observed + restart-proof; exact-origin allowlist; isolated matrix proved the unlisted-origin **action** path → prepared `qc2-cors-reject.patch` + `qc2-host-check.patch` + tests in `evidence/` (not applied) |
 | W-4 | Disposable playground | Disposable `XDG_DATA_HOME` app profile + `LOOM_VAULT_DIR` vault + synthetic sessions + temp work; fixtures never demo data; empirically confirm the app-data dir at launch | Launching checks cannot touch personal notes/sessions/approvals | **open** | §1 data-dir facts |
 | W-5 | Approval buttons prove control (QC-07 round-trip) | Harmless counted tool in the isolated env; cases: no-approve→0, approve→1, repeat-approve→1, deny→0, expired answer→server's expired state, reload/restart→stored decision; plus the parked-request refusal; pending requests only via the runtime's supported path | UI, stored request, and actual tool execution agree | **unblocked (server runs loopback) — needs a live held tool** | doc 13 Phase 3 (route only); §10 above (route re-verified after containment) |
@@ -227,3 +239,21 @@ source):**
   still deferred (peer-owned Editor); W-2 (autonomy) and W-3/W-5/W-6
   (server-dependent) remain open/blocked — unblock conditions in the
   queue rows above.
+
+
+### IDE repair follow-up — 2026-11-17
+
+The above 2026-11-18 entry records prior commits and is superseded by the
+current repair in document 17. Explicit owners, intent ceilings, session
+association and fresh dispatch policy are enforced. Schedule resume and
+skill classification were added to the inventory. Task decomposition is
+guarded as an execution API although the current server returns unimplemented.
+Cancellation covers intent-only chat, workflow and provider streams; its
+local terminal signal never proves remote termination. Unary output is retained.
+
+Required gates: frontend **116/116 (14 files)**; Tauri **143 passed, 2 ignored**;
+native **22/22**; build passed; src-tauri fmt passed; Unity recompile
+**0 errors / 0 warnings**, up to date. Production `cargo check` also passed.
+Evidence: `evidence/ide-repair-20261117-results.json` and its listed logs.
+The command matrix uses a disposable TCP peer; no live model or personal
+session was used. The broader W-5/W-6 live journeys are not claimed here.
