@@ -74,6 +74,7 @@ type ChatStubs = {
   getLoomStatus: ReturnType<typeof vi.fn>;
   answerClarification: ReturnType<typeof vi.fn>;
   buildChatContext: ReturnType<typeof vi.fn>;
+  expandChatOnReply: ReturnType<typeof vi.fn>;
   askLoomStream: ReturnType<typeof vi.fn>;
   askLoom: ReturnType<typeof vi.fn>;
   recordRunStart: ReturnType<typeof vi.fn>;
@@ -100,6 +101,7 @@ function defaultStubs(): ChatStubs {
     getLoomStatus: vi.fn(async () => ({ online: true })),
     answerClarification: vi.fn(async () => "accepted"),
     buildChatContext: vi.fn(() => ({ active_work: "w1" })),
+    expandChatOnReply: vi.fn(() => false),
     askLoomStream: vi.fn(() => new Promise<void>(() => {})),
     askLoom: vi.fn(async () => ({ text: "unary reply" })),
     recordRunStart: vi.fn(() => "run-1"),
@@ -164,7 +166,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     "addChatError", "addChatMessage", "cacheChatMessage",
     "refreshSessions", "refreshAgents", "setWorkSession",
     "renderWorkList", "renderSessionBar", "loadWorkArtifacts",
-    "getLoomStatus", "answerClarification", "buildChatContext", "cancelLoomStream",
+    "getLoomStatus", "answerClarification", "buildChatContext", "expandChatOnReply", "cancelLoomStream",
     "askLoomStream", "askLoom", "recordRunStart", "recordRunSettle",
     code + "\nreturn install();",
   )(
@@ -177,7 +179,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     stubs.addChatError, stubs.addChatMessage, stubs.cacheChatMessage,
     stubs.refreshSessions, stubs.refreshAgents, stubs.setWorkSession,
     stubs.renderWorkList, stubs.renderSessionBar, stubs.loadWorkArtifacts,
-    stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext, cancelLoomStream,
+    stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext, stubs.expandChatOnReply, cancelLoomStream,
     stubs.askLoomStream, stubs.askLoom, stubs.recordRunStart, stubs.recordRunSettle,
   );
   return { api, stubs, node, window, localStorage, cancelLoomStream };
