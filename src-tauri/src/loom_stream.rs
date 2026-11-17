@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, State};
 
-use super::{AppState, loom_request, percent_encode, resolve_execution_policy};
+use super::{AppState, loom_request, percent_encode};
 
 /// Per-request cancel flags, keyed by the frontend's request id. Dropping a
 /// stream (server close, error, completion) also drops its entry.
@@ -30,8 +30,8 @@ fn cancels() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
 /// Start one SSE stream from Loom. `method`/`path`/`body` describe the
 /// endpoint, `event_name` is the Tauri event the frontend listens to, and
 /// the terminal payload carries the request id so listeners can correlate.
-pub fn start_loom_stream(
-    app: AppHandle,
+pub fn start_loom_stream<R: tauri::Runtime>(
+    app: AppHandle<R>,
     request_id: String,
     event_name: &'static str,
     method: &'static str,
@@ -83,8 +83,8 @@ fn validate_stream_inputs(request_id: &str, message: &str) -> Result<(), String>
 }
 
 #[tauri::command]
-pub fn ask_loom_stream(
-    app: AppHandle,
+pub fn ask_loom_stream<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request_id: String,
     message: String,
@@ -95,16 +95,15 @@ pub fn ask_loom_stream(
     timeout_seconds: Option<i32>,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
 ) -> Result<(), String> {
     validate_stream_inputs(&request_id, &message)?;
     // Authoritative admission from stored records (QC-01/W-2 hardening).
-    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-    let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-    let policy = resolve_execution_policy(
-        &work,
-        &intents,
+    let policy = state.admit_execution(
         work_id.as_deref(),
         intent_id.as_deref(),
+        unscoped,
+        session_id.as_deref(),
         "agent chat",
     )?;
     let body = weave_stream_body(
@@ -203,24 +202,23 @@ pub fn cancel_loom_stream(request_id: String) -> Result<(), String> {
 /// Stream a workflow run (POST /v1/workflows:stream) as `loom-workflow`
 /// events so long runs report live progress instead of one blocking wait.
 #[tauri::command]
-pub fn execute_workflow_stream(
-    app: AppHandle,
+pub fn execute_workflow_stream<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request_id: String,
     workflow_ref: String,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
 ) -> Result<(), String> {
     if workflow_ref.trim().is_empty() {
         return Err("No workflow selected.".into());
     }
-    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-    let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-    resolve_execution_policy(
-        &work,
-        &intents,
+    state.admit_execution(
         work_id.as_deref(),
         intent_id.as_deref(),
+        unscoped,
+        None,
         "workflow runs",
     )?;
     start_loom_stream(
@@ -262,8 +260,8 @@ pub fn session_subscribe(
 /// events: each provider's streamed answer plus score/latency/cost and the
 /// winner on the final event.
 #[tauri::command]
-pub fn provider_abtest(
-    app: AppHandle,
+pub fn provider_abtest<R: tauri::Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     request_id: String,
     prompt: String,
@@ -271,17 +269,16 @@ pub fn provider_abtest(
     mode: Option<String>,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
 ) -> Result<(), String> {
     if prompt.trim().is_empty() {
         return Err("Enter a prompt to compare.".into());
     }
-    let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-    let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-    resolve_execution_policy(
-        &work,
-        &intents,
+    state.admit_execution(
         work_id.as_deref(),
         intent_id.as_deref(),
+        unscoped,
+        None,
         "provider A/B runs",
     )?;
     let mut obj = serde_json::Map::new();
@@ -1056,8 +1053,8 @@ fn read_response_events<R: BufRead>(
 /// Consume one stream from Loom: connect, write the request, decode the
 /// response (head, chunked/Content-Length framing), and re-emit decoded
 /// events as Tauri events.
-fn run_stream(
-    app: &AppHandle,
+fn run_stream<R: tauri::Runtime>(
+    app: &AppHandle<R>,
     rid: &str,
     method: &str,
     path: &str,

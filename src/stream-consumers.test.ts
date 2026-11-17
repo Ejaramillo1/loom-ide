@@ -17,7 +17,7 @@ const abtestCode = slice("function handleAbtestEvent(", "function renderAbtest()
 
 async function build(code: string, extras: string, params: string[], args: any[]) {
   const { code: js } = await transformWithOxc(
-    `function install() { ${code} ${extras} }`,
+    `function install() { let workflowStreamIntent = null; ${code} ${extras} }`,
     "stream-consumers-check.ts",
   );
   const api = new Function(...params, js + "\nreturn install();")(...args);

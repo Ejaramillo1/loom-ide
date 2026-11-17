@@ -918,6 +918,50 @@ async function loomRequest(path: string, body?: object, timeoutMs?: number): Pro
 
 // Throws when the Loom server cannot be reached or answers without
 // usable text. The caller shows the error; nothing invents a reply.
+// Browser preview owns a local store; re-read it at dispatch, including fallbacks.
+// This is a convenience guard. The desktop authority lives in Rust.
+function browserExecutionLevel(workId: string | null | undefined, intentId: string | null | undefined, sessionId?: string): IntentAutonomy {
+  let items: WorkItem[];
+  let list: IntentsList;
+  try {
+    items = JSON.parse(localStorage.getItem(LOCAL_KEY) ?? "[]");
+    list = JSON.parse(localStorage.getItem(INTENTS_KEY) ?? '{"active_intent_id":null,"intents":[]}');
+    if (!Array.isArray(items) || !Array.isArray(list.intents)) throw new Error("Invalid records");
+  } catch {
+    throw new Error("Cannot read stored execution policy. Repair the browser's work and intent records before running again.");
+  }
+  if (workId != null && !workId.trim() || intentId != null && !intentId.trim()) {
+    throw new Error("Execution owner identifiers cannot be empty.");
+  }
+  const sessionOwners = sessionId ? items.filter(w => w.session_id === sessionId) : [];
+  if (sessionOwners.length > 1) throw new Error("This session has multiple work owners. Reopen the owning work before running again.");
+  if (sessionOwners.length === 1) {
+    if ((workId != null && workId !== sessionOwners[0].id) || (workId === null && intentId === null)) throw new Error("The session belongs to a work item. Reopen that work before executing.");
+    workId = sessionOwners[0].id;
+  }
+  const work = workId != null ? items.find(w => w.id === workId) : undefined;
+  if (workId != null && !work) throw new Error("The referenced work item no longer exists. Reopen the work item.");
+  if (work && intentId != null && intentId !== work.intent_id) throw new Error("The intent does not belong to this work item.");
+  const governingIntentId = work ? work.intent_id : intentId;
+  const intent = governingIntentId != null ? list.intents.find(i => i.id === governingIntentId) : undefined;
+  if (governingIntentId != null && !intent) throw new Error("The referenced intent no longer exists. Reopen the intent.");
+  if (!work && !intent) {
+    if (workId !== null || intentId !== null || list.active_intent_id != null) {
+      throw new Error("Choose the governing work or intent before executing this request.");
+    }
+    return "collaborative";
+  }
+  let rank = AUTONOMY_LEVELS.length - 1;
+  for (const owner of [work, intent]) {
+    if (!owner) continue;
+    const ownerRank = AUTONOMY_LEVELS.indexOf(owner.autonomy);
+    if (ownerRank < 0) throw new Error("The stored autonomy level is invalid. Correct the governing work or intent.");
+    rank = Math.min(rank, ownerRank);
+  }
+  if (rank === 0) throw new Error("Manual autonomy forbids agent chat. Raise the governing work or intent to Assisted or higher, or do it by hand.");
+  return AUTONOMY_LEVELS[rank];
+}
+
 export async function askLoom(
   message: string,
   sessionId?: string,
@@ -927,11 +971,7 @@ export async function askLoom(
   timeoutSeconds?: number,
   workId?: string | null,
   intentId?: string | null,
-  autonomy?: string,
 ): Promise<ChatReply> {
-  // `autonomy` is a CONVENIENCE value for the browser fallback only: the
-  // Tauri path sends stable work/Intent identifiers and Rust resolves the
-  // stored policy authoritatively (QC-01/W-2 hardening).
   if (IN_TAURI) {
     return invoke<ChatReply>("ask_loom", {
       message,
@@ -942,21 +982,18 @@ export async function askLoom(
       timeoutSeconds,
       workId,
       intentId,
+      unscoped: workId === null && intentId === null,
     });
   }
   if (!message.trim()) throw new Error("Enter a message first.");
-  if (autonomy === "manual") {
-    throw new Error(
-      "Manual autonomy forbids agent chat. Raise the work item's autonomy to Assisted or higher to let the agent act — or do it by hand.",
-    );
-  }
+  const autonomy = browserExecutionLevel(workId, intentId, sessionId);
   const body: Record<string, unknown> = { query: message };
   if (sessionId?.trim()) body.sessionId = sessionId;
   if (agentId?.trim()) body.agentId = agentId;
   if (context && Object.keys(context).length > 0) body.context = context;
   if (maxRounds && maxRounds > 0) body.maxRounds = maxRounds;
   if (timeoutSeconds && timeoutSeconds > 0) body.timeoutSeconds = timeoutSeconds;
-  if (autonomy) body.backendConfig = { autonomy };
+  body.backendConfig = { autonomy };
   const value = await loomRequest("/v1/weave", body as object);
   const text = [value.text, value.response, value.content, value.reply, value.message]
     .find(value => typeof value === "string" && value.trim());
@@ -1102,7 +1139,7 @@ export async function executeWorkflow(
   workId?: string | null,
   intentId?: string | null,
 ): Promise<ExecuteWorkflowResponse> {
-  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef, workId, intentId });
+  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef, workId, intentId, unscoped: workId === null && intentId === null });
 }
 
 export async function getWorkflowExecution(
@@ -1280,6 +1317,7 @@ export async function askLoomStream(
     timeoutSeconds,
     workId,
     intentId,
+    unscoped: workId === null && intentId === null,
   });
 }
 
@@ -1359,7 +1397,7 @@ export const listApps = () => invokeCmd<unknown[]>("apps_list");
 export const deleteSession = (sessionId: string) =>
   invokeCmd<string>("session_delete", { sessionId });
 export const resumeSession = (sessionId: string, workId?: string | null, intentId?: string | null) =>
-  invokeCmd<unknown>("session_resume", { sessionId, workId, intentId });
+  invokeCmd<unknown>("session_resume", { sessionId, workId, intentId, unscoped: workId === null && intentId === null });
 export const resolveSessionGap = (sessionId: string) =>
   invokeCmd<unknown>("session_resolve_gap", { sessionId });
 
@@ -1395,13 +1433,13 @@ export interface StreamEnvelope<T> {
 }
 
 export const executeWorkflowStream = (requestId: string, workflowRef: string, workId?: string | null, intentId?: string | null) =>
-  invokeCmd<void>("execute_workflow_stream", { requestId, workflowRef, workId, intentId });
+  invokeCmd<void>("execute_workflow_stream", { requestId, workflowRef, workId, intentId, unscoped: workId === null && intentId === null });
 export const sessionSubscribe = (requestId: string, sessionId: string) =>
   invokeCmd<void>("session_subscribe", { requestId, sessionId });
 export const providerAbtest = (
   requestId: string, prompt: string, providerNames?: string[], mode?: string,
   workId?: string | null, intentId?: string | null,
-) => invokeCmd<void>("provider_abtest", { requestId, prompt, providerNames, mode, workId, intentId });
+) => invokeCmd<void>("provider_abtest", { requestId, prompt, providerNames, mode, workId, intentId, unscoped: workId === null && intentId === null });
 
 // ---- Workflow scheduling ----
 
@@ -1411,15 +1449,15 @@ export const getWorkflowSchedule = (scheduleId: string) =>
 export const createWorkflowSchedule = (
   workflowName: string, cron: string, timezone?: string, enabled?: boolean,
   workId?: string | null, intentId?: string | null,
-) => invokeCmd<unknown>("workflow_schedule_create", { workflowName, cron, timezone, enabled, workId, intentId });
+) => invokeCmd<unknown>("workflow_schedule_create", { workflowName, cron, timezone, enabled, workId, intentId, unscoped: workId === null && intentId === null });
 export const updateWorkflowSchedule = (
   scheduleId: string, cron?: string, timezone?: string, enabled?: boolean,
   workId?: string | null, intentId?: string | null,
-) => invokeCmd<unknown>("workflow_schedule_update", { scheduleId, cron, timezone, enabled, workId, intentId });
+) => invokeCmd<unknown>("workflow_schedule_update", { scheduleId, cron, timezone, enabled, workId, intentId, unscoped: workId === null && intentId === null });
 export const deleteWorkflowSchedule = (scheduleId: string) =>
   invokeCmd<string>("workflow_schedule_delete", { scheduleId });
 export const triggerWorkflowSchedule = (scheduleId: string, workId?: string | null, intentId?: string | null) =>
-  invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId, workId, intentId });
+  invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId, workId, intentId, unscoped: workId === null && intentId === null });
 export const cancelScheduleExecution = (executionId: string) =>
   invokeCmd<unknown>("workflow_schedule_cancel_execution", { executionId });
 
@@ -1427,8 +1465,8 @@ export const workflowScheduleHistory = (scheduleId: string) =>
   invokeCmd<unknown[]>("workflow_schedule_history", { scheduleId });
 export const pauseWorkflowSchedule = (scheduleId: string) =>
   invokeCmd<unknown>("workflow_schedule_pause", { scheduleId });
-export const resumeWorkflowSchedule = (scheduleId: string) =>
-  invokeCmd<unknown>("workflow_schedule_resume", { scheduleId });
+export const resumeWorkflowSchedule = (scheduleId: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("workflow_schedule_resume", { scheduleId, workId, intentId, unscoped: workId === null && intentId === null });
 export const cancelScheduledExecution = (executionId: string) =>
   invokeCmd<unknown>("workflow_schedule_cancel_execution", { executionId });
 export const patternUpdatesStream = (requestId: string) =>
@@ -1481,8 +1519,8 @@ export const boardReadyTasks = (boardId: string) =>
   invokeCmd<unknown[]>("task_board_ready", { boardId });
 export const boardBlockedTasks = (boardId: string) =>
   invokeCmd<unknown[]>("task_board_blocked", { boardId });
-export const decomposeLoomTask = (goal: string, context?: string, boardId?: string) =>
-  invokeCmd<unknown>("loom_task_decompose", { goal, context, boardId });
+export const decomposeLoomTask = (goal: string, context?: string, boardId?: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("loom_task_decompose", { goal, context, boardId, workId, intentId, unscoped: workId === null && intentId === null });
 export const loomTaskContext = (agentId: string) =>
   invokeCmd<unknown>("loom_task_context", { agentId });
 
@@ -1490,8 +1528,8 @@ export const loomTaskContext = (agentId: string) =>
 
 export const addSkill = (inline: Record<string, unknown>) =>
   invokeCmd<unknown>("skills_add", { inline });
-export const classifySkill = (skillName: string) =>
-  invokeCmd<unknown>("skills_classify", { skillName });
+export const classifySkill = (skillName: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("skills_classify", { skillName, workId, intentId, unscoped: workId === null && intentId === null });
 export const bulkImportSkills = (requestId: string, srcDir: string, outDir?: string) =>
   invokeCmd<void>("skills_bulk_import", { requestId, srcDir, outDir });
 

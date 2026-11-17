@@ -1,5 +1,6 @@
 import { loomState } from "./loom-state";
 import { installKnowledge } from "./knowledge";
+import { classifySkill } from "./api";
 import { getAppearance, setAppearance } from "./theme";
 import { installSpatialWorkbench, notifySpatialVaultChanged, notifySpatialState, notifySpatialBackground } from "./spatial";
 import "./style.css";
@@ -279,6 +280,8 @@ let workflowStreamState: { progress: number; message: string; executionId: strin
 /** The work the current workflow run was started from — captured once at
     start, never read from the selection at completion (QC-13). */
 let workflowStreamOrigin: string | null = null;
+let workflowStreamIntent: string | null = null;
+let workflowCancellationRequested = false;
 /** The active session subscription (GET /v1/sessions/{id}:subscribe). */
 let sessionSubId: string | null = null;
 /** The session the current subscription targets (ids are generation-unique). */
@@ -289,6 +292,10 @@ let schedulesLoadError: string | null = null;
 /** The provider A/B run in flight, keyed per provider. */
 let abtestState: {
   requestId: string;
+  owner: ExecutionOwner;
+  finished: boolean;
+  cancellationRequested?: boolean;
+  notice?: string;
   per: Map<string, { text: string; finished: boolean; score?: number; latencyMs?: number; costUsd?: number }>;
   winner?: string;
   error?: string;
@@ -947,7 +954,7 @@ function buildAutonomyDial(
   const scope = document.createElement("p");
   scope.className = "autonomy-scope-note";
   scope.textContent =
-    "Manual prevents new execution requests for this work. Lowering autonomy requests cancellation where supported. Server-side tool permissions remain governed by Loom.";
+    "Manual prevents new execution requests for the governing work or intent. Lowering autonomy requests cancellation where supported. Closing a local stream does not confirm the server stopped. Server-side tool permissions remain governed by Loom.";
   root.append(scope);
 
   // Autonomy history.
@@ -1199,9 +1206,7 @@ function buildIntentEditor(
           // Re-render with updated history.
           intentEditor = { mode: "edit", id: target.id };
           renderIntentHeader();
-          // Lowering the intent's level stops in-flight runs of every work
-          // item under it (QC-01/W-2 v1; the Rust side also tightens the
-          // stored levels). Completed actions are not undone.
+          // Lowering requests supported cancellation; completed actions remain.
           if (AUTONOMY_LEVELS[next].level < wasRank) {
             const affected = workItems
               .filter((w) => w.intent_id === target.id)
@@ -1474,8 +1479,7 @@ function buildWorkSummary(item: WorkItem): HTMLElement {
       workItems = workItems.map((w) => (w.id === updated.id ? updated : w));
       renderWorkList();
       renderWorkDetail();
-      // Lowering the level mid-run stops this work's in-flight agent runs
-      // (QC-01/W-2 v1). Completed actions are not undone.
+      // Request supported cancellation for this work; completed actions remain.
       if (AUTONOMY_LEVELS[next].level < wasRank) {
         cancelInFlightForAutonomyLower([item.id], null);
       }
@@ -1821,6 +1825,9 @@ function buildWorkflowsSection(): HTMLElement {
           cancelWorkflow = true;
           currentRunSeq = ++runSeq;
           runningWorkflow = null;
+          workflowStreamActive = null;
+          workflowStreamOrigin = null;
+          workflowStreamIntent = null;
           renderWorkDetail();
           setSphereState("idle");
         });
@@ -1968,8 +1975,11 @@ async function runWorkflow(name: string) {
   cancelWorkflow = false;
   workflowError = null;
   workflowStreamState = null;
-  const startedFromWork = selectedWorkId;
+  const owner = captureExecutionOwner();
+  const startedFromWork = owner.workId;
   workflowStreamOrigin = startedFromWork;
+  workflowStreamIntent = owner.intentId;
+  workflowCancellationRequested = false;
   renderWorkDetail();
   setSphereState("executing");
   // Streaming first (§14.2): live progress instead of one blocking wait.
@@ -1983,13 +1993,21 @@ async function runWorkflow(name: string) {
   workflowStreamActive = requestId;
   renderWorkDetail();
   try {
-    await executeWorkflowStream(requestId, name, selectedWorkId, activeIntentId);
+    await executeWorkflowStream(requestId, name, owner.workId, owner.intentId);
   } catch {
     // Only the pre-spawn rejection falls back to unary. If a terminal
     // already raced the rejection, the run was settled — fall back only
     // when this request is still the registered handle.
-    if (workflowStreamActive !== requestId) return;
-    await runWorkflowUnary(name, token, startedFromWork);
+    if (workflowStreamActive !== requestId || token !== currentRunSeq) return;
+    workflowStreamActive = null;
+    if (workflowCancellationRequested) {
+      runningWorkflow = null;
+      workflowError = "Cancellation requested before the stream started. No fallback was sent; server execution is unconfirmed.";
+      renderWorkDetail();
+      setSphereState("idle");
+      return;
+    }
+    await runWorkflowUnary(name, token, owner);
     return;
   }
 }
@@ -2004,6 +2022,7 @@ function finishWorkflowRun(
   workflowStreamActive = null;
   workflowStreamState = null;
   workflowStreamOrigin = null;
+  workflowStreamIntent = null;
   void (async () => {
     if (error === null) {
       setLoomReachable(true);
@@ -2051,6 +2070,10 @@ function handleWorkflowStreamEvent(p: StreamEnvelope<WorkflowProgressEvent>) {
       message: p.event.message ?? "",
       executionId: p.event.executionId ?? workflowStreamState?.executionId ?? null,
     };
+    if (workflowStreamState.executionId && workflowStreamOrigin) {
+      executionWorkIds.set(workflowStreamState.executionId, workflowStreamOrigin);
+      saveOwnershipMap(EXEC_WORK_KEY, executionWorkIds);
+    }
     renderWorkDetail();
     return;
   }
@@ -2061,11 +2084,14 @@ function handleWorkflowStreamEvent(p: StreamEnvelope<WorkflowProgressEvent>) {
   if (p.kind === "done") {
     finishWorkflowRun(currentRunSeq, origin, executionId, null);
   } else if (p.kind === "cancelled") {
+    const lastMessage = workflowStreamState?.message;
     runningWorkflow = null;
     cancelWorkflow = false;
     workflowStreamActive = null;
     workflowStreamState = null;
     workflowStreamOrigin = null;
+    workflowStreamIntent = null;
+    workflowError = "Local workflow stream stopped. Server cancellation is not confirmed." + (lastMessage ? ` Last update: ${lastMessage}` : "");
     renderWorkDetail();
     setSphereState("idle");
   } else {
@@ -2073,11 +2099,14 @@ function handleWorkflowStreamEvent(p: StreamEnvelope<WorkflowProgressEvent>) {
   }
 }
 
-async function runWorkflowUnary(name: string, token: number, startedFromWork: string | null) {
+async function runWorkflowUnary(name: string, token: number, owner: ExecutionOwner) {
+  const startedFromWork = owner.workId;
   try {
     // execute_workflow returns the run's own result, so the UI can show
     // the run's actual output instead of only re-listing executions.
-    const res = await executeWorkflow(name, selectedWorkId, activeIntentId);
+    const res = await trackUnaryExecution(owner, "Workflow run", () =>
+      executeWorkflow(name, owner.workId, owner.intentId),
+    );
     if (token !== currentRunSeq) return;
     if (cancelWorkflow) {
       runningWorkflow = null;
@@ -2196,12 +2225,15 @@ function handleAbtestEvent(p: StreamEnvelope<AbTestEvent>) {
     if (e.winner) abtestState.winner = e.winner;
     renderAbtest();
   } else if (p.kind === "done") {
+    abtestState.finished = true;
     renderAbtest();
   } else if (p.kind === "error") {
+    abtestState.finished = true;
     abtestState.error = p.error ?? "stream failed";
     renderAbtest();
   } else if (p.kind === "cancelled") {
-    abtestState = null;
+    abtestState.finished = true;
+    abtestState.notice = "Local A/B stream stopped. Results below may be partial; server cancellation is not confirmed.";
     renderAbtest();
   }
 }
@@ -2211,6 +2243,9 @@ function renderAbtest() {
   if (!body) return;
   body.replaceChildren();
   if (!abtestState) return;
+  if (abtestState.notice) {
+    body.append(Object.assign(document.createElement("p"), { className: "wd-sub-label", textContent: abtestState.notice }));
+  }
   if (abtestState.error) {
     body.append(Object.assign(document.createElement("p"), { className: "field-error", textContent: `A/B test failed: ${abtestState.error}` }));
   }
@@ -2266,16 +2301,20 @@ function openAbtestDialog() {
 }
 
 async function startAbtest() {
+  if (abtestState && !abtestState.finished) return;
+  const owner = captureExecutionOwner();
   const prompt = ($("#abtest-prompt") as HTMLTextAreaElement).value.trim();
   if (!prompt) return;
   const names = [...document.querySelectorAll<HTMLInputElement>("#abtest-providers input:checked")].map((c) => c.value);
   const mode = ($("#abtest-mode") as HTMLSelectElement).value;
   const requestId = `ab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  abtestState = { requestId, per: new Map(), winner: undefined };
+  abtestState = { requestId, owner, finished: false, per: new Map(), winner: undefined };
   renderAbtest();
   try {
-    await providerAbtest(requestId, prompt, names.length ? names : undefined, mode, selectedWorkId, activeIntentId);
+    await providerAbtest(requestId, prompt, names.length ? names : undefined, mode, owner.workId, owner.intentId);
   } catch (err) {
+    if (abtestState.requestId !== requestId || abtestState.finished) return;
+    abtestState.finished = true;
     abtestState.error = err instanceof Error ? err.message : String(err);
     renderAbtest();
   }
@@ -2333,8 +2372,9 @@ function renderSchedules() {
     toggle.className = "btn ghost small";
     toggle.textContent = s.enabled ? "Pause" : "Resume";
     toggle.addEventListener("click", async () => {
+      const owner = captureExecutionOwner();
       try {
-        await updateWorkflowSchedule(s.id, undefined, undefined, !s.enabled, selectedWorkId, activeIntentId);
+        await updateWorkflowSchedule(s.id, undefined, undefined, !s.enabled, owner.workId, owner.intentId);
         await refreshSchedules();
       } catch (err) {
         schedulesLoadError = err instanceof Error ? err.message : String(err);
@@ -2346,10 +2386,11 @@ function renderSchedules() {
     trigger.className = "btn ghost small";
     trigger.textContent = "Run now";
     trigger.addEventListener("click", async () => {
+      const owner = captureExecutionOwner();
       try {
-        await triggerWorkflowSchedule(s.id, selectedWorkId, activeIntentId);
+        await trackUnaryExecution(owner, "Scheduled workflow", () => triggerWorkflowSchedule(s.id, owner.workId, owner.intentId));
         await refreshExecutionsList();
-        agentsNotice(`Triggered ${s.workflow}.`, false);
+        agentsNotice(`Triggered ${s.workflow}. The local autonomy dial cannot cancel this server-owned execution.`, false);
       } catch (err) {
         agentsNotice(`Could not trigger: ${err instanceof Error ? err.message : String(err)}`, true);
       }
@@ -2486,8 +2527,9 @@ async function submitSchedule() {
   const cron = ($("#schedule-cron") as HTMLInputElement).value.trim();
   const timezone = ($("#schedule-timezone") as HTMLInputElement).value.trim();
   if (!name || !cron) return;
+  const owner = captureExecutionOwner();
   try {
-    await createWorkflowSchedule(name, cron, timezone || undefined, true, selectedWorkId, activeIntentId);
+    await createWorkflowSchedule(name, cron, timezone || undefined, true, owner.workId, owner.intentId);
     ($("#schedule-dialog") as HTMLDialogElement).close();
     await refreshSchedules();
   } catch (err) {
@@ -4527,17 +4569,17 @@ async function describeAgent() {
       "",
       `Description: ${describe}`,
     ].join("\n");
-    const reply = await askLoom(
+    const owner = captureExecutionOwner();
+    const reply = await trackUnaryExecution(owner, "Agent description", () => askLoom(
       prompt,
       undefined,
       undefined,
       undefined,
       undefined,
       undefined,
-      selectedWorkId,
-      activeIntentId,
-      governingAutonomy(),
-    );
+      owner.workId,
+      owner.intentId,
+    ));
     const match = reply.text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("The Weaver's reply had no JSON config to prefill.");
     ($("#agent-config") as HTMLTextAreaElement).value = JSON.stringify(JSON.parse(match[0]), null, 2);
@@ -4648,13 +4690,10 @@ async function deleteSelectedSession() {
 async function resumeSelectedSession() {
   const id = selectedSessionId;
   if (!id) return showSessionNote("No session selected.");
+  const owner = captureExecutionOwner(workItems.find((w) => w.session_id === id)?.id ?? null);
   try {
-    await resumeSession(
-      id,
-      workItems.find((w) => w.session_id === id)?.id ?? null,
-      activeIntentId,
-    );
-    showSessionNote("Resume requested — check the session state.");
+    await trackUnaryExecution(owner, "Session resume", () => resumeSession(id, owner.workId, owner.intentId));
+    showSessionNote("Resume requested — check the session state. This execution cannot be cancelled from the IDE.");
     await refreshSessions();
   } catch (err) {
     showSessionNote(`Could not resume the session: ${err instanceof Error ? err.message : String(err)}`, true);
@@ -5257,78 +5296,104 @@ function handleSkillImportEvent(p: StreamEnvelope<unknown>) {
     item's level, else the active intent's, else the default
     "collaborative". The Rust boundary enforces it (Manual forbids agent
     execution) and the wire carries it for the Loom runtime contract. */
-function governingAutonomy(): string {
-  const work = workItems.find((w) => w.id === selectedWorkId);
-  if (work) return work.autonomy;
-  const intent = intents.find((i) => i.id === activeIntentId);
-  return intent?.autonomy ?? "collaborative";
+interface ExecutionOwner {
+  workId: string | null;
+  intentId: string | null;
 }
 
-/** After an autonomy lowering, request cancellation for the affected
-    work's in-flight streamed runs (QC-01/W-2: cooperative cancel, and
-    only where a cancellation mechanism exists). Three statuses are kept
-    distinct: "cancellation requested" (this note), confirmed terminal
-    cancellation (the stream's `cancelled` event in finishStream), and
-    "cancellation unavailable or failed" (the error notes below).
-    Completed results are never undone, and a one-shot (unary) request is
-    never claimed cancelled merely because the IDE stopped reading it. */
-function cancelInFlightForAutonomyLower(
-  workIds: Iterable<string> | null,
-  intentId: string | null,
-) {
-  const ids = workIds === null ? null : new Set(workIds);
-  const note = (st: StreamReplyState, text: string, isError: boolean) => {
-    const p = document.createElement("p");
-    p.className = isError ? "chat-stopped error" : "chat-stopped";
-    p.textContent = text;
-    st.msg.append(p);
-  };
+function captureExecutionOwner(workId: string | null = selectedWorkId): ExecutionOwner {
+  const work = workItems.find((w) => w.id === workId);
+  return { workId, intentId: workId ? work?.intent_id ?? null : activeIntentId };
+}
+
+function governingAutonomy(owner = captureExecutionOwner()): string {
+  const work = workItems.find((w) => w.id === owner.workId);
+  const intent = intents.find((i) => i.id === owner.intentId);
+  const levels = [work?.autonomy, intent?.autonomy].filter((level): level is keyof typeof AUTONOMY_LEVELS => !!level);
+  if (levels.length === 0) return "collaborative";
+  if (levels.some(level => !AUTONOMY_LEVELS[level])) return "invalid";
+  return levels.reduce((lower, level) => AUTONOMY_LEVELS[level].level < AUTONOMY_LEVELS[lower].level ? level : lower);
+}
+
+const pendingUnaryExecutions = new Set<ExecutionOwner & { label: string }>();
+
+async function trackUnaryExecution<T>(owner: ExecutionOwner, label: string, run: () => Promise<T>): Promise<T> {
+  const pending = { ...owner, label };
+  pendingUnaryExecutions.add(pending);
+  try {
+    return await run();
+  } finally {
+    pendingUnaryExecutions.delete(pending);
+  }
+}
+
+function requestChatCancellation(requestId: string, st: StreamReplyState) {
+  if (st.finished || st.cancellationRequested) return;
+  st.cancellationRequested = true;
+  const note = document.createElement("p");
+  note.className = "chat-stopped";
+  note.textContent = "Cancellation requested. Waiting for the local stream to close; the server may keep running.";
+  st.msg.append(note);
+  void cancelLoomStream(requestId).catch((err) => {
+    if (st.finished) return;
+    note.className = "chat-stopped error";
+    note.textContent = `Cancellation request failed: ${err instanceof Error ? err.message : String(err)}. The server may keep running.`;
+  });
+}
+
+/** Cancel captured owners, including intent-only runs; local stream closure
+    never proves remote execution stopped. */
+function cancelInFlightForAutonomyLower(workIds: Iterable<string> | null, intentId: string | null) {
+  const ids = new Set(workIds ?? []);
+  const matches = (owner: ExecutionOwner) =>
+    (owner.workId !== null && ids.has(owner.workId)) ||
+    (intentId !== null && owner.intentId === intentId);
   for (const [requestId, st] of activeStreams) {
-    if (st.finished) continue;
-    const matches =
-      (ids !== null && ids.has(st.workId ?? "")) ||
-      (ids === null && intentId !== null && st.intentId === intentId);
-    if (!matches) continue;
-    cancelLoomStream(requestId)
-      .then(() => {
-        note(
-          st,
-          "Autonomy lowered — cancellation requested; waiting for the server to confirm.",
-          false,
-        );
-      })
-      .catch((err) => {
-        note(
-          st,
-          `Autonomy lowered, but cancellation could not be requested: ${err instanceof Error ? err.message : String(err)}. The server may keep running this turn.`,
-          true,
-        );
-      });
+    if (matches(st)) requestChatCancellation(requestId, st);
   }
-  // One-shot requests have no supported cancellation mechanism: state the
-  // limitation instead of marking the operation cancelled.
-  const runningUnary = runRecords.filter(
-    (r) =>
-      r.status === "running" &&
-      ((ids !== null && ids.has(r.workId ?? "")) ||
-        (ids === null && intentId !== null && r.intentId === intentId)) &&
-      ![...activeStreams.values()].some((s) => s.runId === r.id),
-  );
-  if (runningUnary.length > 0) {
-    addChatError(
-      "Autonomy lowered while a one-shot request was running. This path cannot be cancelled from the IDE — the server will finish it; completed actions are not undone.",
-    );
+  if (runningWorkflow && matches({ workId: workflowStreamOrigin, intentId: workflowStreamIntent })) {
+    workflowCancellationRequested = true;
+    if (workflowStreamActive) {
+      const requestId = workflowStreamActive;
+      workflowError = "Cancellation requested. Waiting for the local workflow stream to close; the server may keep running.";
+      renderWorkDetail();
+      void cancelLoomStream(requestId).catch((err) => {
+        if (workflowStreamActive !== requestId) return;
+        workflowError = `Cancellation request failed: ${err instanceof Error ? err.message : String(err)}. The server may keep running.`;
+        renderWorkDetail();
+      });
+    } else {
+      workflowError = "Autonomy lowered. This workflow has no supported cancellation from the IDE; the server may keep running.";
+      renderWorkDetail();
+    }
+  }
+  const ab = abtestState;
+  if (ab && !ab.finished && !ab.cancellationRequested && matches(ab.owner)) {
+    ab.cancellationRequested = true;
+    ab.notice = "Cancellation requested. Waiting for the local A/B stream to close; the server may keep running.";
+    renderAbtest();
+    void cancelLoomStream(ab.requestId).catch((err) => {
+      if (ab.finished) return;
+      ab.notice = `Cancellation request failed: ${err instanceof Error ? err.message : String(err)}. The server may keep running.`;
+      renderAbtest();
+    });
+  }
+  for (const pending of pendingUnaryExecutions) {
+    if (matches(pending)) {
+      addChatError(`Autonomy lowered during ${pending.label.toLowerCase()}. This request cannot be cancelled from the IDE; the server may keep running. Completed results will be preserved.`);
+    }
   }
 }
 
-function buildChatContext(): Record<string, string> | undefined {  const context: Record<string, string> = {};
-  const work = workItems.find((w) => w.id === selectedWorkId);
+function buildChatContext(owner = captureExecutionOwner()): Record<string, string> | undefined {
+  const context: Record<string, string> = {};
+  const work = workItems.find((w) => w.id === owner.workId);
   if (work) {
     context.active_work = work.title;
     context.active_work_status = work.status;
     context.active_work_autonomy = work.autonomy;
   }
-  const intent = intents.find((i) => i.id === activeIntentId);
+  const intent = intents.find((i) => i.id === owner.intentId);
   if (intent) context.active_intent = intent.statement;
   if (openFilePath) {
     context.open_file = workspaceLabel(openFilePath);
@@ -5482,6 +5547,7 @@ interface StreamReplyState {
   /** The turn's cost from the completion event (USD); null = unknown. */
   costUsd: number | null;
   finished: boolean;
+  cancellationRequested?: boolean;
 }
 
 const activeStreams = new Map<string, StreamReplyState>();
@@ -5793,7 +5859,7 @@ function finishStream(
   if (kind === "cancelled") {
     const note = document.createElement("p");
     note.className = "chat-stopped";
-    note.textContent = st.text ? "Stopped. The reply above is partial." : "Stopped before Loom answered.";
+    note.textContent = "Local stream stopped. Server cancellation is not confirmed." + (st.text ? " The reply above is partial." : " No reply was received.");
     st.msg.append(note);
     // A cancelled turn's partial output is real content: keep it for the
     // conversation, marked partial (review #10).
@@ -5801,7 +5867,8 @@ function finishStream(
       cacheChatMessage(st.cacheKey, "loom", st.text, true);
     }
     recordRunSettle(st.runId, {
-      status: "cancelled",
+      status: "unknown",
+      error: "Local stream stopped; server cancellation is not confirmed.",
       partial: st.text.trim() !== "",
       costUsd: st.costUsd,
       costSource: st.costUsd === null ? undefined : "weave completion event",
@@ -5956,11 +6023,10 @@ async function sendChatUnary(
     maxRounds?: number;
     timeoutSeconds?: number;
     workId: string | null;
-    autonomy?: string;
   },
 ) {
   try {
-    const reply = await askLoom(
+    const reply = await trackUnaryExecution(captured, "Chat reply", () => askLoom(
       clean,
       captured.sessionId ?? undefined,
       captured.agentId ?? undefined,
@@ -5969,8 +6035,7 @@ async function sendChatUnary(
       captured.timeoutSeconds,
       captured.workId,
       captured.intentId,
-      captured.autonomy,
-    );
+    ));
     typing.remove();
     loomVerified = true;
     setLoomReachable(true);
@@ -6061,19 +6126,19 @@ async function sendChat(text: string) {
   // Capture everything the reply belongs to at send time: the user may
   // switch work, session or agent while the reply is in flight, and the
   // stream must address exactly what was selected when it was sent.
-  const workId = selectedWorkId;
+  const owner = captureExecutionOwner(selectedWorkId ?? workItems.find((w) => w.session_id === selectedSessionId)?.id ?? null);
+  const { workId, intentId } = owner;
   const sessionId = selectedSessionId;
   const agentId = selectedAgentId;
-  const intentId = activeIntentId;
   // Per-turn budget from the active intent (W-1). Undefined means the
   // server default; only positive values travel on the wire.
-    const activeIntentNow = activeIntent();
+  const activeIntentNow = intents.find((i) => i.id === intentId);
   const maxRounds = activeIntentNow?.max_rounds ?? undefined;
   const timeoutSeconds = activeIntentNow?.timeout_seconds ?? undefined;
   // Governing autonomy, captured at send time like everything else: the
   // Rust boundary enforces it (Manual forbids agent execution) and the
   // wire carries it for the Loom runtime contract (QC-01/W-2).
-  const autonomy = governingAutonomy();
+  const autonomy = governingAutonomy(owner);
   // Convenience admission: the browser fallback has no Rust boundary, and
   // under Tauri an early refusal preserves the draft. The authoritative
   // check remains in Rust for every Tauri path (stored records decide).
@@ -6089,7 +6154,7 @@ async function sendChat(text: string) {
   // The context map rides both request paths; Loom consumes it into the
   // prompt as a bounded labeled section (server-side), so the IDE sends
   // the plain query — no double injection (QC-09).
-  const context = buildChatContext();
+  const context = buildChatContext(owner);
   const cacheKey = workId ?? UNASSIGNED_KEY;
   const requestId = `r-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAt = Date.now();
@@ -6159,6 +6224,10 @@ async function sendChat(text: string) {
     // safe here and only here. If a terminal event raced the rejection
     // and already settled the stream, skip the fallback entirely.
     if (state.finished) return;
+    if (state.cancellationRequested) {
+      finishStream(state, requestId, "cancelled");
+      return;
+    }
     activeStreams.delete(requestId);
     if (activeStreamId === requestId) activeStreamId = null;
     // The empty stream bubble gives way to the unary reply.
@@ -6173,7 +6242,6 @@ async function sendChat(text: string) {
       maxRounds,
       timeoutSeconds,
       workId,
-      autonomy,
     });
     return;
   }
@@ -7432,7 +7500,11 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
   // Capture the work at send time: the reply (and the session link) belong
   // to the work the run was started from, even if the user switches work
   // while it is in flight.
-  const workId = selectedWorkId;
+  const owner = captureExecutionOwner(experimentWorkIds.get(exp.id) ?? selectedWorkId);
+  const { workId, intentId } = owner;
+  const sessionId = selectedSessionId;
+  const agentId = selectedAgentId;
+  const context = buildChatContext(owner);
   const cacheKey = workId ?? UNASSIGNED_KEY;
   try {
     const running = await setExperimentArmStatus(exp.id, arm.id, "running");
@@ -7467,17 +7539,16 @@ async function runExperimentArm(exp: Experiment, arm: ExperimentArm) {
   log.scrollTop = log.scrollHeight;
 
   try {
-    const reply = await askLoom(
+    const reply = await trackUnaryExecution(owner, "Experiment arm", () => askLoom(
       prompt,
-      selectedSessionId ?? undefined,
-      selectedAgentId ?? undefined,
-      buildChatContext(),
+      sessionId ?? undefined,
+      agentId ?? undefined,
+      context,
       undefined,
       undefined,
-      selectedWorkId,
-      activeIntentId,
-      governingAutonomy(),
-    );
+      workId,
+      intentId,
+    ));
     typing.remove();
     loomVerified = true;
     setLoomReachable(true);
@@ -7935,7 +8006,10 @@ async function init() {
     attributeFilter: ["data-theme"],
   });
   initWorkspaceExplorer();
-  knowledge = installKnowledge(() => setMode("knowledge"), (count, failed) => { pendingKnowledge = count; knowledgeFailed = failed; renderStatusPill(); }, refreshSpatialVault, (container) => { knowledgeEvidenceHost = container; renderEvidence(); });
+  knowledge = installKnowledge(() => setMode("knowledge"), (count, failed) => { pendingKnowledge = count; knowledgeFailed = failed; renderStatusPill(); }, refreshSpatialVault, (container) => { knowledgeEvidenceHost = container; renderEvidence(); }, (skillName) => {
+    const owner = captureExecutionOwner();
+    return trackUnaryExecution(owner, "Skill classification", () => classifySkill(skillName, owner.workId, owner.intentId));
+  });
   installSpatialWorkbench((object) => {
     switch (object) {
       case "Work": setMode("work"); break;
@@ -8364,7 +8438,10 @@ async function init() {
   }
   const stopBtn = $("#chat-stop") as HTMLButtonElement | null;
   if (stopBtn) stopBtn.addEventListener("click", () => {
-    if (activeStreamId) void cancelLoomStream(activeStreamId);
+    if (activeStreamId) {
+      const st = activeStreams.get(activeStreamId);
+      if (st) requestChatCancellation(activeStreamId, st);
+    }
   });
   // The header pill is also the re-check control: click to probe again.
   $("#loom-status").addEventListener("click", () => {

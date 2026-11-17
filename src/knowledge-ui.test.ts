@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { installKnowledge } from "./knowledge";
-import { listKnowledge, readKnowledge, archiveKnowledge, restoreKnowledge, listPatterns, type KnowledgeListing, type KnowledgeNote, type KnowledgeDetail } from "./api";
+import { listKnowledge, readKnowledge, archiveKnowledge, restoreKnowledge, listPatterns, classifySkill, type KnowledgeListing, type KnowledgeNote, type KnowledgeDetail } from "./api";
 
 vi.mock("./api", () => ({ listKnowledge: vi.fn(), readKnowledge: vi.fn(), createKnowledge: vi.fn(), saveKnowledge: vi.fn(), relateKnowledge: vi.fn(), reviewKnowledge: vi.fn(), archiveKnowledge: vi.fn(), restoreKnowledge: vi.fn(), exportKnowledgeCanvas: vi.fn(), syncKnowledge: vi.fn(), knowledgeSignature: vi.fn(), saveCanvasLayout: vi.fn(), loadCanvasLayout: vi.fn(), listPatterns: vi.fn(), getPattern: vi.fn(), createPattern: vi.fn(), loadPatterns: vi.fn(), patternUpdatesStream: vi.fn().mockResolvedValue(undefined), addSkill: vi.fn(), classifySkill: vi.fn(), bulkImportSkills: vi.fn() }));
 
@@ -36,7 +36,7 @@ class Node {
 }
 const note = (id: string): KnowledgeNote => ({ meta: { id, title: id, kind: "note", created: 1, modified: 1, author: "human", source: "test", status: "working", version: 1 }, body: "", path: `${id}.md`, original: "" });
 const listing = (notes = [note("Alpha"), note("Beta")], archived: KnowledgeNote[] = []): KnowledgeListing => ({ notes, archived, edges: [{ from: "Alpha", to: "Beta", kind: "supports" }], activity: [], pending: 0, revision: "test", root: "/test", kinds: ["note"], folders: ["10 Fleeting Notes"], relations: ["supports"] });
-async function mount(data = listing()) {
+async function mount(data = listing(), classify?: (skillName: string) => Promise<unknown>) {
   const root = new Node();
   const ids = ["view-knowledge", "knowledge-content", "knowledge-notice", "knowledge-tabs", "knowledge-bell", "knowledge-dialog", "knowledge-search-slot", "knowledge-new", "knowledge-refresh", "knowledge-sync", "spatial-graph", "spatial-canvas", "spatial-tab-graph", "spatial-tab-canvas", "spatial-open-full"];
   const nodes = Object.fromEntries(ids.map(id => { const n = new Node(); n.id = id; return [id, n]; }));
@@ -47,7 +47,7 @@ async function mount(data = listing()) {
   vi.stubGlobal("Option", class extends Node { constructor(text: string, value: string) { super("option"); this.textContent = text; this.value = value; } });
   vi.mocked(listKnowledge).mockResolvedValue(data);
   const navigate = vi.fn();
-  const instance = installKnowledge(navigate, vi.fn());
+  const instance = installKnowledge(navigate, vi.fn(), undefined, undefined, classify);
   // The install-time refresh spans several awaits (listing → layout →
   // signature); a macrotask drains them all before assertions run.
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -195,6 +195,32 @@ it("skills shelf offers add, classify and bulk import (Loom has no list endpoint
   expect(text).toContain("Classify a skill");
   expect(text).toContain("Bulk import");
   expect(text).toContain("no skill list to read");
+});
+
+it("classifies only through the owning shell and states the cancellation limit", async () => {
+  let reject!: (error: Error) => void;
+  const classify = vi.fn(() => new Promise<unknown>((_resolve, fail) => { reject = fail; }));
+  const { nodes } = await mount(listing(), classify);
+  nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "skills")!.fire("click");
+  const content = nodes["knowledge-content"];
+  content.querySelectorAll("input").find(n => n.attrs["aria-label"] === "Skill name to classify")!.value = "  query-helper  ";
+  content.querySelectorAll("button").find(b => b.textContent === "Classify")!.fire("click");
+  expect(classify).toHaveBeenCalledWith("query-helper");
+  expect(classifySkill).not.toHaveBeenCalled();
+  expect(nodes["knowledge-notice"].text()).toContain("cannot be cancelled from the IDE");
+  reject(new Error("Manual autonomy forbids skill classification."));
+  await new Promise(r => setTimeout(r, 0));
+  expect(nodes["knowledge-notice"].text()).toContain("Manual autonomy forbids skill classification");
+});
+
+it("refuses skill classification when no owning shell handler is installed", async () => {
+  const { nodes } = await mount();
+  nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "skills")!.fire("click");
+  const content = nodes["knowledge-content"];
+  content.querySelectorAll("input").find(n => n.attrs["aria-label"] === "Skill name to classify")!.value = "query-helper";
+  content.querySelectorAll("button").find(b => b.textContent === "Classify")!.fire("click");
+  expect(classifySkill).not.toHaveBeenCalled();
+  expect(nodes["knowledge-notice"].text()).toContain("Skill classification is unavailable");
 });
 
 it("evidence tab mounts the shell's evidence renderer into the content area", async () => {

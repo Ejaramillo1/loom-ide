@@ -74,8 +74,6 @@ type ChatStubs = {
   getLoomStatus: ReturnType<typeof vi.fn>;
   answerClarification: ReturnType<typeof vi.fn>;
   buildChatContext: ReturnType<typeof vi.fn>;
-  governingAutonomy: ReturnType<typeof vi.fn>;
-  activeIntent: ReturnType<typeof vi.fn>;
   askLoomStream: ReturnType<typeof vi.fn>;
   askLoom: ReturnType<typeof vi.fn>;
   recordRunStart: ReturnType<typeof vi.fn>;
@@ -102,8 +100,6 @@ function defaultStubs(): ChatStubs {
     getLoomStatus: vi.fn(async () => ({ online: true })),
     answerClarification: vi.fn(async () => "accepted"),
     buildChatContext: vi.fn(() => ({ active_work: "w1" })),
-    governingAutonomy: vi.fn(() => "collaborative"),
-    activeIntent: vi.fn(() => null),
     askLoomStream: vi.fn(() => new Promise<void>(() => {})),
     askLoom: vi.fn(async () => ({ text: "unary reply" })),
     recordRunStart: vi.fn(() => "run-1"),
@@ -127,12 +123,24 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
   const start = source.indexOf("/** The in-flight state of one streamed weave");
   const end = source.indexOf("// ---------------------------------------------------------------------------\n// Sessions + agents");
   const chatCode = source.slice(start, end);
+  const ownershipCode = source.slice(source.indexOf("interface ExecutionOwner {"), source.indexOf("function buildChatContext("));
+  const cancelLoomStream = vi.fn().mockResolvedValue(undefined);
 
   const { code } = await transformWithOxc(
     `function install() {
+      let runningWorkflow = null, workflowStreamOrigin = null, workflowStreamIntent = null;
+      let workflowStreamActive = null, workflowCancellationRequested = false, workflowError = null;
+      let abtestState = null;
+      const renderWorkDetail = () => {}, renderAbtest = () => {};
+      let intents = [];
+      ${source.slice(source.indexOf("const AUTONOMY_LEVELS:"), source.indexOf("};", source.indexOf("const AUTONOMY_LEVELS:")) + 2)}
+      ${ownershipCode}
       ${chatCode}
       return {
-        sendChat, handleStreamEvent, finishStream,
+        sendChat, handleStreamEvent, finishStream, cancelInFlightForAutonomyLower,
+        trackUnaryExecution, captureExecutionOwner,
+        setWorkItems: (items) => { workItems = items; },
+        setIntents: (items, active = null) => { intents = items; activeIntentId = active; },
         getChatInFlight: () => chatInFlight,
         getActiveStreams: () => activeStreams,
         getActiveStreamId: () => activeStreamId,
@@ -156,7 +164,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     "addChatError", "addChatMessage", "cacheChatMessage",
     "refreshSessions", "refreshAgents", "setWorkSession",
     "renderWorkList", "renderSessionBar", "loadWorkArtifacts",
-    "getLoomStatus", "answerClarification", "buildChatContext", "governingAutonomy", "activeIntent",
+    "getLoomStatus", "answerClarification", "buildChatContext", "cancelLoomStream",
     "askLoomStream", "askLoom", "recordRunStart", "recordRunSettle",
     code + "\nreturn install();",
   )(
@@ -169,13 +177,79 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     stubs.addChatError, stubs.addChatMessage, stubs.cacheChatMessage,
     stubs.refreshSessions, stubs.refreshAgents, stubs.setWorkSession,
     stubs.renderWorkList, stubs.renderSessionBar, stubs.loadWorkArtifacts,
-    stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext, stubs.governingAutonomy, stubs.activeIntent,
+    stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext, cancelLoomStream,
     stubs.askLoomStream, stubs.askLoom, stubs.recordRunStart, stubs.recordRunSettle,
   );
-  return { api, stubs, node, window, localStorage };
+  return { api, stubs, node, window, localStorage, cancelLoomStream };
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
+
+it("keeps original ownership when selection changes before unary fallback", async () => {
+  const stubs = defaultStubs();
+  let reject!: (e: Error) => void;
+  stubs.askLoomStream.mockImplementation(() => new Promise((_r, r) => { reject = r; }));
+  const { api } = await shell(stubs);
+  api.setWorkItems([{ id: "w1", intent_id: "i1", autonomy: "collaborative" }]);
+  api.setIntents([{ id: "i1", autonomy: "collaborative" }], "other-intent");
+  api.setSelectedWorkId("w1");
+  const pending = api.sendChat("hello");
+  api.setSelectedWorkId("w2");
+  reject(new Error("stream unavailable"));
+  await pending;
+  expect(stubs.askLoom.mock.calls[0].slice(6)).toEqual(["w1", "i1"]);
+});
+
+it("cancels intent-owned chat without work and reports only local closure", async () => {
+  const { api, cancelLoomStream, stubs } = await shell();
+  api.setIntents([{ id: "i1", autonomy: "assisted" }], "i1");
+  void api.sendChat("hello");
+  const [requestId, state] = [...api.getActiveStreams()][0] as [string, any];
+  api.cancelInFlightForAutonomyLower([], "i1");
+  expect(cancelLoomStream).toHaveBeenCalledWith(requestId);
+  expect(state.finished).toBe(false);
+  expect(state.msg.children.at(-1).textContent).toContain("Cancellation requested");
+  api.handleStreamEvent({ requestId, kind: "cancelled" });
+  expect(stubs.recordRunSettle).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "unknown" }));
+  expect(state.msg.children.at(-1).textContent).toContain("Server cancellation is not confirmed");
+});
+
+it("shows cancellation failure and never starts fallback after a cancellation request", async () => {
+  const stubs = defaultStubs();
+  let reject!: (e: Error) => void;
+  stubs.askLoomStream.mockImplementation(() => new Promise((_r, r) => { reject = r; }));
+  const { api, cancelLoomStream } = await shell(stubs);
+  api.setSelectedWorkId("w1");
+  const pending = api.sendChat("hello");
+  const state = [...api.getActiveStreams().values()][0] as any;
+  cancelLoomStream.mockRejectedValue(new Error("cancel unavailable"));
+  api.cancelInFlightForAutonomyLower(["w1"], null);
+  await tick();
+  expect(state.msg.children.at(-1).textContent).toContain("Cancellation request failed");
+  expect(state.finished).toBe(false);
+  reject(new Error("stream startup failed"));
+  await pending;
+  expect(stubs.askLoom).not.toHaveBeenCalled();
+  expect(api.getChatInFlight()).toBe(0);
+});
+
+it("warns for affected unary requests and still preserves their completed result", async () => {
+  const stubs = defaultStubs();
+  stubs.askLoomStream.mockRejectedValue(new Error("stream unavailable"));
+  let resolve!: (value: unknown) => void;
+  stubs.askLoom.mockImplementation(() => new Promise(r => { resolve = r; }));
+  const { api, cancelLoomStream } = await shell(stubs);
+  api.setSelectedWorkId("w1");
+  const pending = api.sendChat("hello");
+  await tick();
+  api.cancelInFlightForAutonomyLower(["w1"], null);
+  expect(cancelLoomStream).not.toHaveBeenCalled();
+  expect(stubs.addChatError).toHaveBeenCalledWith(expect.stringContaining("cannot be cancelled from the IDE"));
+  resolve({ text: "completed output" });
+  await pending;
+  expect(stubs.cacheChatMessage).toHaveBeenCalledWith("w1", "loom", "completed output");
+  expect(stubs.recordRunSettle).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ status: "succeeded" }));
+});
 
 it("settles an early terminal event delivered before the invoke resolves (issue 016)", async () => {
   const stubs = defaultStubs();
@@ -434,7 +508,7 @@ it("records cancelled and failed outcomes with partial flags", async () => {
   api.handleStreamEvent({ requestId: sends[0], kind: "cancelled" });
   expect(stubs.recordRunSettle).toHaveBeenCalledWith(
     "run-1",
-    expect.objectContaining({ status: "cancelled", partial: true }),
+    expect.objectContaining({ status: "unknown", partial: true }),
   );
 
   void api.sendChat("second");
@@ -467,7 +541,6 @@ it("keeps the Stop control when the finished request was not the only stream (re
 
 it("passes the active intent's budget to the stream path (W-1)", async () => {
   const stubs = defaultStubs();
-  stubs.activeIntent = vi.fn(() => ({ max_rounds: 4, timeout_seconds: 120 }));
   const streamArgs: unknown[][] = [];
   stubs.askLoomStream = vi.fn((...args: unknown[]) => {
     streamArgs.push(args);
@@ -475,6 +548,8 @@ it("passes the active intent's budget to the stream path (W-1)", async () => {
   });
   const { api } = await shell(stubs);
   api.setSelectedWorkId("w1");
+  api.setWorkItems([{ id: "w1", intent_id: "i1", autonomy: "collaborative" }]);
+  api.setIntents([{ id: "i1", autonomy: "collaborative", max_rounds: 4, timeout_seconds: 120 }], "i1");
   void api.sendChat("hello");
   // sendChat(...) => askLoomStream(requestId, message, sessionId, agentId, context, maxRounds, timeoutSeconds)
   expect(streamArgs[0][5]).toBe(4);
@@ -483,14 +558,15 @@ it("passes the active intent's budget to the stream path (W-1)", async () => {
 
 it("passes the active intent's budget to the unary fallback path (W-1)", async () => {
   const stubs = defaultStubs();
-  stubs.activeIntent = vi.fn(() => ({ max_rounds: 3, timeout_seconds: 90 }));
   stubs.askLoomStream = vi.fn(() => Promise.reject(new Error("validation")));
   const { api } = await shell(stubs);
   api.setSelectedWorkId("w1");
+  api.setWorkItems([{ id: "w1", intent_id: "i1", autonomy: "collaborative" }]);
+  api.setIntents([{ id: "i1", autonomy: "collaborative", max_rounds: 3, timeout_seconds: 90 }], "i1");
   void api.sendChat("hello");
   await tick();
   expect(stubs.askLoom).toHaveBeenCalledWith(
-    "hello", undefined, undefined, expect.anything(), 3, 90, "w1", null, "collaborative",
+    "hello", undefined, undefined, expect.anything(), 3, 90, "w1", "i1",
   );
 });
 
@@ -522,8 +598,8 @@ it("sends the governing work and intent identifiers on the stream path (QC-01/W-
 
 it("a Manual convenience refusal never invokes the backend and keeps the draft", async () => {
   const stubs = defaultStubs();
-  stubs.governingAutonomy.mockReturnValue("manual");
   const { api, localStorage } = await shell(stubs);
+  api.setIntents([{ id: "i1", autonomy: "manual" }], "i1");
 
   await api.sendChat("do a thing");
   expect(stubs.askLoomStream).not.toHaveBeenCalled();
@@ -537,7 +613,6 @@ it("a Manual convenience refusal never invokes the backend and keeps the draft",
 
 it("a Manual-autonomy send is rejected at the boundary and settles", async () => {
   const stubs = defaultStubs();
-  stubs.governingAutonomy.mockReturnValue("manual");
   const admission = new Error(
     "Manual autonomy forbids agent chat. Raise the work item's autonomy to Assisted or higher to let the agent act — or do it by hand.",
   );

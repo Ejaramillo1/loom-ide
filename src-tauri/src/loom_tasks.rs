@@ -334,10 +334,21 @@ pub async fn loom_task_decompose(
     goal: String,
     context: Option<String>,
     board_id: Option<String>,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    unscoped: Option<bool>,
+    state: tauri::State<'_, super::AppState>,
 ) -> Result<Value, String> {
     if goal.trim().is_empty() {
         return Err("Describe the goal to decompose.".into());
     }
+    state.admit_execution(
+        work_id.as_deref(),
+        intent_id.as_deref(),
+        unscoped,
+        None,
+        "decomposing a task",
+    )?;
     let mut body = serde_json::json!({ "goal": goal.trim() });
     if let Some(c) = context {
         if !c.trim().is_empty() {

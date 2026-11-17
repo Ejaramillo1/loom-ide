@@ -40,6 +40,8 @@ use store::{
 use workspace::{WorkspaceInfo, WorkspaceStore};
 
 #[cfg(test)]
+mod execution_admission_tests;
+#[cfg(test)]
 mod gateway_tests;
 #[cfg(test)]
 mod workspace_tests;
@@ -373,67 +375,100 @@ fn validate_stored_level(level: &str) -> Result<(), String> {
     }
 }
 
-/// Resolve the stored policy governing a request and reject Manual before
-/// any network work. Precedence: referenced work item wins; else the
-/// referenced intent; else the stored active intent; else the project
-/// default (collaborative). A missing or invalid referenced record is
-/// rejected — an absent identifier must never silently bypass a
-/// restriction that belongs to a work item.
+/// Resolve explicit ownership and apply the intent ceiling to stored work policy.
+/// Unscoped execution is an explicit project-default action, allowed only when
+/// there is no active intent. Missing ownership is never silently inferred.
 pub(crate) fn resolve_execution_policy(
     work: &WorkStore,
     intents: &IntentStore,
     work_id: Option<&str>,
     intent_id: Option<&str>,
+    unscoped: bool,
+    session_id: Option<&str>,
     action: &str,
 ) -> Result<ExecutionPolicy, String> {
-    let work_id = work_id.map(str::trim).filter(|s| !s.is_empty());
-    let intent_id = intent_id.map(str::trim).filter(|s| !s.is_empty());
-    let (level, owner) = if let Some(id) = work_id {
-        let item = work
-            .items()
-            .into_iter()
-            .find(|w| w.id == id)
-            .ok_or_else(|| {
-                "The work item referenced by this request no longer exists. Reopen the work item and try again."
-                    .to_string()
-            })?;
-        validate_stored_level(&item.autonomy)?;
-        (
-            item.autonomy.clone(),
-            format!("work item \"{}\"", item.title),
-        )
-    } else if let Some(id) = intent_id {
-        let intent = intents.get(&id).ok_or_else(|| {
-            "The intent referenced by this request no longer exists. Reopen the intent and try again."
-                .to_string()
-        })?;
-        validate_stored_level(&intent.autonomy)?;
-        (
-            intent.autonomy.clone(),
-            format!("intent \"{}\"", intent.statement),
-        )
-    } else {
-        // Requests outside any work or intent follow the stored active
-        // intent; with none, the project default applies.
-        match intents.active_id() {
-            Some(id) => match intents.get(&id) {
-                Some(i) => {
-                    validate_stored_level(&i.autonomy)?;
-                    (
-                        i.autonomy.clone(),
-                        format!("the active intent \"{}\"", i.statement),
-                    )
-                }
-                None => (
-                    "collaborative".to_string(),
-                    "the project default (collaborative)".to_string(),
-                ),
-            },
-            None => (
-                "collaborative".to_string(),
-                "the project default (collaborative)".to_string(),
-            ),
+    if work_id.is_some_and(|id| id.trim().is_empty())
+        || intent_id.is_some_and(|id| id.trim().is_empty())
+    {
+        return Err("Execution ownership contains an empty identifier. Reopen the work or intent and try again.".into());
+    }
+    if unscoped && (work_id.is_some() || intent_id.is_some()) {
+        return Err("An execution cannot be both owned and unscoped.".into());
+    }
+    let items = work.items();
+    // A known session cannot escape its work policy by omitting or changing ids.
+    let session_owners: Vec<_> = session_id
+        .filter(|id| !id.trim().is_empty())
+        .map(|id| {
+            items
+                .iter()
+                .filter(|w| w.session_id.as_deref() == Some(id))
+                .collect()
+        })
+        .unwrap_or_default();
+    if session_owners.len() > 1 {
+        return Err("This session is linked to more than one work item. Correct its work links before executing.".into());
+    }
+    let linked_work = session_owners.first().copied();
+    if let Some(linked) = linked_work {
+        if work_id.is_some_and(|id| id != linked.id) || unscoped {
+            return Err(format!(
+                "This session belongs to work item \"{}\". Reopen that work item before executing.",
+                linked.title
+            ));
         }
+    }
+    let work_id = work_id.or_else(|| linked_work.map(|w| w.id.as_str()));
+    let requested_intent = intent_id
+        .map(|id| intents.get(id).ok_or_else(|| "The intent referenced by this request no longer exists. Reopen the intent and try again.".to_string()))
+        .transpose()?;
+    if let Some(intent) = &requested_intent {
+        validate_stored_level(&intent.autonomy)?;
+    }
+    let (level, owner) = if let Some(id) = work_id {
+        let item = items.iter().find(|w| w.id == id).ok_or_else(|| {
+            "The work item referenced by this request no longer exists. Reopen the work item and try again.".to_string()
+        })?;
+        validate_stored_level(&item.autonomy)?;
+        let parent = item.intent_id.as_deref().map(|id| {
+            intents.get(id).ok_or_else(|| "The work item's intent no longer exists. Repair its intent link before executing.".to_string())
+        }).transpose()?;
+        if intent_id.is_some() && intent_id != item.intent_id.as_deref() {
+            return Err("The requested intent does not own this work item. Reopen the work item and try again.".into());
+        }
+        if let Some(parent) = &parent {
+            validate_stored_level(&parent.autonomy)?;
+        }
+        let ceiling = parent.as_ref();
+        if let Some(intent) =
+            ceiling.filter(|i| autonomy_rank(&i.autonomy) < autonomy_rank(&item.autonomy))
+        {
+            (
+                intent.autonomy.clone(),
+                format!(
+                    "intent \"{}\" governing work item \"{}\"",
+                    intent.statement, item.title
+                ),
+            )
+        } else {
+            (
+                item.autonomy.clone(),
+                format!("work item \"{}\"", item.title),
+            )
+        }
+    } else if let Some(intent) = requested_intent {
+        (intent.autonomy, format!("intent \"{}\"", intent.statement))
+    } else {
+        if !unscoped {
+            return Err("Execution ownership is required. Select a work item or intent, or explicitly start an unscoped request.".into());
+        }
+        if intents.active_id().is_some() {
+            return Err("An active intent exists. Execute under that intent instead of an unscoped request.".into());
+        }
+        (
+            "collaborative".to_string(),
+            "the project default (collaborative)".to_string(),
+        )
     };
     if autonomy_rank(&level) == Some(0) {
         return Err(format!(
@@ -441,6 +476,30 @@ pub(crate) fn resolve_execution_policy(
         ));
     }
     Ok(ExecutionPolicy { level })
+}
+
+impl AppState {
+    pub(crate) fn admit_execution(
+        &self,
+        work_id: Option<&str>,
+        intent_id: Option<&str>,
+        unscoped: Option<bool>,
+        session_id: Option<&str>,
+        action: &str,
+    ) -> Result<ExecutionPolicy, String> {
+        // Match the mutation commands' lock order to avoid deadlocking the dial.
+        let intents = self.intents.lock().unwrap_or_else(|e| e.into_inner());
+        let work = self.work.lock().unwrap_or_else(|e| e.into_inner());
+        resolve_execution_policy(
+            &work,
+            &intents,
+            work_id,
+            intent_id,
+            unscoped.unwrap_or(false),
+            session_id,
+            action,
+        )
+    }
 }
 
 #[tauri::command]
@@ -1702,19 +1761,18 @@ async fn execute_workflow(
     workflow_ref: String,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<ExecuteWorkflowResponse, String> {
     if workflow_ref.trim().is_empty() {
         return Err("No workflow selected.".to_string());
     }
     {
-        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-        resolve_execution_policy(
-            &work,
-            &intents,
+        state.admit_execution(
             work_id.as_deref(),
             intent_id.as_deref(),
+            unscoped,
+            None,
             "workflow runs",
         )?;
     }
@@ -2072,6 +2130,7 @@ async fn ask_loom(
     timeout_seconds: Option<i32>,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<ChatReply, String> {
     if message.trim().is_empty() {
@@ -2081,13 +2140,11 @@ async fn ask_loom(
     // (QC-01/W-2 hardening). Manual is rejected before any network work.
     // Guards are scoped so no store lock crosses the await below.
     let policy = {
-        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-        resolve_execution_policy(
-            &work,
-            &intents,
+        state.admit_execution(
             work_id.as_deref(),
             intent_id.as_deref(),
+            unscoped,
+            session_id.as_deref(),
             "agent chat",
         )?
     };
@@ -2622,8 +2679,16 @@ mod tests {
         // the work item governs its own execution.
         work.set_autonomy(&item.id, "manual").unwrap();
         for action in ["agent chat", "workflow runs"] {
-            let err = resolve_execution_policy(&work, &intents, Some(&item.id), None, action)
-                .unwrap_err();
+            let err = resolve_execution_policy(
+                &work,
+                &intents,
+                Some(&item.id),
+                None,
+                false,
+                None,
+                action,
+            )
+            .unwrap_err();
             assert!(
                 err.contains("Manual autonomy forbids"),
                 "unexpected message: {err}"
@@ -2645,8 +2710,16 @@ mod tests {
                 None,
             )
             .unwrap();
-        let err = resolve_execution_policy(&work, &intents, None, Some(&intent.id), "agent chat")
-            .unwrap_err();
+        let err = resolve_execution_policy(
+            &work,
+            &intents,
+            None,
+            Some(&intent.id),
+            false,
+            None,
+            "agent chat",
+        )
+        .unwrap_err();
         assert!(err.contains("Manual autonomy forbids"), "{err}");
         assert!(err.contains("strict intent"), "{err}");
     }
@@ -2655,14 +2728,30 @@ mod tests {
     fn missing_referenced_records_are_rejected() {
         let (_dir, work, intents) = admission_stores();
         assert!(
-            resolve_execution_policy(&work, &intents, Some("ghost"), None, "agent chat")
-                .unwrap_err()
-                .contains("no longer exists")
+            resolve_execution_policy(
+                &work,
+                &intents,
+                Some("ghost"),
+                None,
+                false,
+                None,
+                "agent chat"
+            )
+            .unwrap_err()
+            .contains("no longer exists")
         );
         assert!(
-            resolve_execution_policy(&work, &intents, None, Some("ghost"), "agent chat")
-                .unwrap_err()
-                .contains("no longer exists")
+            resolve_execution_policy(
+                &work,
+                &intents,
+                None,
+                Some("ghost"),
+                false,
+                None,
+                "agent chat"
+            )
+            .unwrap_err()
+            .contains("no longer exists")
         );
     }
 
@@ -2680,8 +2769,16 @@ mod tests {
             )
             .unwrap();
         let item = work.add("open work".into(), Some(intent.id)).unwrap();
-        let policy =
-            resolve_execution_policy(&work, &intents, Some(&item.id), None, "agent chat").unwrap();
+        let policy = resolve_execution_policy(
+            &work,
+            &intents,
+            Some(&item.id),
+            None,
+            false,
+            None,
+            "agent chat",
+        )
+        .unwrap();
         assert_eq!(policy.level, "collaborative");
         // Owner naming is asserted through the Manual rejection message
         // in stored_manual_work_rejects_execution_no_matter_what.
@@ -2697,13 +2794,18 @@ mod tests {
     }
 
     #[test]
-    fn no_identifiers_follows_the_active_intent_then_the_default() {
+    fn omitted_ownership_is_rejected_and_unscoped_requires_no_active_intent() {
         let (_dir, work, mut intents) = admission_stores();
-        // No active intent: the project default applies.
-        let policy = resolve_execution_policy(&work, &intents, None, None, "agent chat").unwrap();
-        assert_eq!(policy.level, "collaborative");
-        // A Manual active intent governs identifier-less requests too —
-        // absence of an identifier must not silently bypass policy.
+        assert!(
+            resolve_execution_policy(&work, &intents, None, None, false, None, "agent chat")
+                .is_err()
+        );
+        assert_eq!(
+            resolve_execution_policy(&work, &intents, None, None, true, None, "agent chat")
+                .unwrap()
+                .level,
+            "collaborative"
+        );
         let manual = intents
             .create(
                 "strict".into(),
@@ -2716,8 +2818,8 @@ mod tests {
             .unwrap();
         intents.set_active(&manual.id).unwrap();
         assert!(
-            resolve_execution_policy(&work, &intents, None, None, "agent chat").is_err(),
-            "an identifier-less request under a Manual active intent must be rejected"
+            resolve_execution_policy(&work, &intents, None, None, true, None, "agent chat")
+                .is_err()
         );
     }
 
@@ -2737,13 +2839,31 @@ mod tests {
         let item = work.add("fallback work".into(), Some(intent.id)).unwrap();
         // First pass: Delegated — the request may start.
         assert!(
-            resolve_execution_policy(&work, &intents, Some(&item.id), None, "agent chat").is_ok()
+            resolve_execution_policy(
+                &work,
+                &intents,
+                Some(&item.id),
+                None,
+                false,
+                None,
+                "agent chat"
+            )
+            .is_ok()
         );
         // The owner becomes Manual before the fallback dispatches: the
         // re-resolution (a fresh call per request) must reject.
         work.set_autonomy(&item.id, "manual").unwrap();
         assert!(
-            resolve_execution_policy(&work, &intents, Some(&item.id), None, "agent chat").is_err()
+            resolve_execution_policy(
+                &work,
+                &intents,
+                Some(&item.id),
+                None,
+                false,
+                None,
+                "agent chat"
+            )
+            .is_err()
         );
     }
 

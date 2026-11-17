@@ -1,6 +1,6 @@
 import { listKnowledge, readKnowledge, createKnowledge, saveKnowledge, relateKnowledge, reviewKnowledge, archiveKnowledge, restoreKnowledge, exportKnowledgeCanvas, syncKnowledge,
   knowledgeSignature, saveCanvasLayout, loadCanvasLayout, listPatterns, getPattern, createPattern, loadPatterns,
-  patternUpdatesStream, addSkill, classifySkill, bulkImportSkills,
+  patternUpdatesStream, addSkill, bulkImportSkills,
   type KnowledgeListing, type KnowledgeNote, type KnowledgeEdge, type KnowledgeDetail, type KnowledgeAudit, type VaultSignature } from "./api";
 
 type Tab = "graph" | "canvas" | "notes" | "patterns" | "skills" | "evidence" | "review" | "activity";
@@ -34,7 +34,7 @@ function select(label: string, values: string[], value: string, all?: string) {
 }
 const time = (value: number) => new Date(value * 1000).toLocaleString();
 
-export function installKnowledge(navigate: () => void, pendingChanged: (count: number, failed: boolean) => void, onWatcherRefresh?: () => void, openEvidence?: (container: HTMLElement) => void) {
+export function installKnowledge(navigate: () => void, pendingChanged: (count: number, failed: boolean) => void, onWatcherRefresh?: () => void, openEvidence?: (container: HTMLElement) => void, classify?: (skillName: string) => Promise<unknown>) {
   const host = document.querySelector<HTMLElement>("#view-knowledge")!;
   const content = host.querySelector<HTMLElement>("#knowledge-content")!;
   const notice = host.querySelector<HTMLElement>("#knowledge-notice")!;
@@ -316,7 +316,9 @@ export function installKnowledge(navigate: () => void, pendingChanged: (count: n
     classForm.append(cname, button("Classify", async () => {
       if (!cname.value.trim()) return;
       try {
-        const result = await classifySkill(cname.value.trim());
+        if (!classify) throw new Error("Skill classification is unavailable in this view.");
+        showNotice("Classifying the skill. This request cannot be cancelled from the IDE; the server may finish it after autonomy is lowered.");
+        const result = await classify(cname.value.trim());
         showNotice(`Classified: ${JSON.stringify(result).slice(0, 200)}`);
       } catch (e) {
         fail(e);

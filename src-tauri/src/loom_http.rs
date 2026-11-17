@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::State;
 
-use super::{AppState, loom_request, percent_encode, resolve_execution_policy};
+use super::{AppState, loom_request, percent_encode};
 
 async fn loom_get(path: String) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || loom_request("GET", &path, None))
@@ -558,6 +558,7 @@ pub async fn workflow_schedule_create(
     enabled: Option<bool>,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
     if workflow_name.trim().is_empty() || cron.trim().is_empty() {
@@ -566,13 +567,11 @@ pub async fn workflow_schedule_create(
     // Creating a schedule that can fire is an execution-class action; a
     // deliberately disabled schedule is still allowed (inspect later).
     if enabled != Some(false) {
-        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-        resolve_execution_policy(
-            &work,
-            &intents,
+        state.admit_execution(
             work_id.as_deref(),
             intent_id.as_deref(),
+            unscoped,
+            None,
             "creating a scheduled workflow",
         )?;
     }
@@ -601,21 +600,20 @@ pub async fn workflow_schedule_update(
     enabled: Option<bool>,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
     if schedule_id.trim().is_empty() {
         return Err("No schedule selected.".into());
     }
-    // Enabling a schedule initiates future execution: gate it. Disabling
-    // or editing other fields stays allowed at any autonomy.
-    if enabled == Some(true) {
-        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-        resolve_execution_policy(
-            &work,
-            &intents,
+    // Editing a possibly enabled schedule can change future execution.
+    // Only an explicit disable is guaranteed not to initiate work.
+    if enabled != Some(false) {
+        state.admit_execution(
             work_id.as_deref(),
             intent_id.as_deref(),
+            unscoped,
+            None,
             "enabling a scheduled workflow",
         )?;
     }
@@ -665,19 +663,18 @@ pub async fn workflow_schedule_trigger(
     schedule_id: String,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
     if schedule_id.trim().is_empty() {
         return Err("No schedule selected.".into());
     }
     {
-        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-        resolve_execution_policy(
-            &work,
-            &intents,
+        state.admit_execution(
             work_id.as_deref(),
             intent_id.as_deref(),
+            unscoped,
+            None,
             "triggering a scheduled workflow",
         )?;
     }
@@ -722,10 +719,23 @@ pub async fn workflow_schedule_pause(schedule_id: String) -> Result<Value, Strin
 }
 
 #[tauri::command]
-pub async fn workflow_schedule_resume(schedule_id: String) -> Result<Value, String> {
+pub async fn workflow_schedule_resume(
+    schedule_id: String,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    unscoped: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
     if schedule_id.trim().is_empty() {
         return Err("No schedule selected.".into());
     }
+    state.admit_execution(
+        work_id.as_deref(),
+        intent_id.as_deref(),
+        unscoped,
+        None,
+        "resuming a scheduled workflow",
+    )?;
     loom_send(
         "POST",
         format!(
@@ -781,10 +791,23 @@ pub async fn skills_add(inline: Value) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn skills_classify(skill_name: String) -> Result<Value, String> {
+pub async fn skills_classify(
+    skill_name: String,
+    work_id: Option<String>,
+    intent_id: Option<String>,
+    unscoped: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
     if skill_name.trim().is_empty() {
         return Err("No skill selected.".into());
     }
+    state.admit_execution(
+        work_id.as_deref(),
+        intent_id.as_deref(),
+        unscoped,
+        None,
+        "classifying a skill",
+    )?;
     loom_send(
         "POST",
         format!("/v1/skills/{}:classify", percent_encode(&skill_name)),
@@ -977,19 +1000,18 @@ pub async fn session_resume(
     session_id: String,
     work_id: Option<String>,
     intent_id: Option<String>,
+    unscoped: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
     if session_id.trim().is_empty() {
         return Err("No session selected.".into());
     }
     {
-        let work = state.work.lock().unwrap_or_else(|e| e.into_inner());
-        let intents = state.intents.lock().unwrap_or_else(|e| e.into_inner());
-        resolve_execution_policy(
-            &work,
-            &intents,
+        state.admit_execution(
             work_id.as_deref(),
             intent_id.as_deref(),
+            unscoped,
+            Some(&session_id),
             "resuming an agent session",
         )?;
     }
