@@ -12,6 +12,11 @@ using Loom.MemoryPalace;
 // written to docs/check-workbench.log with a timestamp, so a passing run
 // is verifiable from the repo instead of only from a shell transcript.
 
+// The bench is built in Awake from the ResoluteWorkbench scene; open it so
+// the self-check works regardless of the editor's current scene state.
+if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().path != "Assets/Scenes/ResoluteWorkbench.unity")
+    UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/ResoluteWorkbench.unity");
+
 EditorApplication.EnterPlaymode();
 var started = DateTime.UtcNow;
 while (!EditorApplication.isPlaying && (DateTime.UtcNow - started).TotalSeconds < 90)
