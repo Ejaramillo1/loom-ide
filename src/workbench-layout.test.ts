@@ -6,7 +6,6 @@ import source from "./main.ts?raw";
 async function shell(width: number) {
   const paneCode = source.slice(source.indexOf("let rightTab: RightTab"), source.indexOf("// Agents view —"));
   const routeCode = source.slice(source.indexOf("function setMode(next: Mode)"), source.indexOf("// File canvas. Legacy"));
-  const railCode = source.slice(source.indexOf('  $("#spatial-knowledge").hidden = mode'), source.indexOf('  $("#left-close").addEventListener'));
   const views = ["spatial", "work", "experiment", "code", "agents", "artifacts", "knowledge"];
   const nodes = new Map<string, any>();
   let active: any = null;
@@ -34,14 +33,14 @@ async function shell(width: number) {
     const ALL_VIEWS = ${JSON.stringify(views)};
     const knowledge = { refresh: () => Promise.resolve() };
     const closeMenus = () => {};
-    ${paneCode}\n${routeCode}\n${railCode}
+    ${paneCode}\n${routeCode}
     applyRightPane();
     return { setMode, openRight, closeRight, closeDrawers, isRightDrawer, applyRightPane };
     }
   `, "pane-check.ts");
   const api = new Function("document", "window", "$", "loadChatForWork", "selectedWorkId", "selectedSessionId", code + "return install();")(doc,
     { matchMedia: (query: string) => ({ matches: width >= Number(query.match(/\d+/)![0]) }) }, (s: string) => node(s.slice(1)), loadChat, null, null);
-  return { node, api, loadChat, active: () => active, click: (id: string) => node(id).handlers.click({ currentTarget: node(id) }) };
+  return { node, api, loadChat, active: () => active };
 }
 
 it("starts Spatial with conversation on desktop and restores the other modes' inspector state", async () => {
@@ -62,30 +61,22 @@ it("starts Spatial with conversation on desktop and restores the other modes' in
   expect(node("scrim").hidden).toBe(true);
 });
 
-it("keeps narrow conversation and Knowledge drawers exclusive and returns focus on closing", async () => {
-  const { node, api, click, active } = await shell(900);
+it("keeps the narrow conversation drawer exclusive and returns focus on closing", async () => {
+  const { node, api, active } = await shell(900);
   expect(node("body").classList.contains("right-open")).toBe(false);
   api.openRight("conversation", node("chat-toggle"));
   expect(active()).toBe(node("chat-text"));
-  click("spatial-knowledge-toggle");
-  expect(node("body").classList.contains("right-open")).toBe(false);
-  expect(node("body").classList.contains("knowledge-open")).toBe(true);
-  expect(active()).toBe(node("spatial-knowledge-close"));
+  expect(node("body").classList.contains("right-open")).toBe(true);
   expect(node("scrim").hidden).toBe(false);
   api.closeDrawers();
-  expect(active()).toBe(node("spatial-knowledge-toggle"));
-  expect(node("scrim").hidden).toBe(true);
-  click("spatial-knowledge-toggle");
-  api.openRight("conversation", node("chat-toggle"));
-  expect(node("body").classList.contains("knowledge-open")).toBe(false);
-  api.closeDrawers();
+  expect(node("body").classList.contains("right-open")).toBe(false);
   expect(active()).toBe(node("chat-toggle"));
+  expect(node("scrim").hidden).toBe(true);
 });
 
-it("hides the bench rail on other modes and preserves the wide inspector tab", async () => {
+it("keeps the inspector tab visible on other modes and the conversation on Spatial", async () => {
   const { node, api } = await shell(1600);
   api.setMode("agents");
-  expect(node("spatial-knowledge").hidden).toBe(true);
   expect(node("inspector-context").hidden).toBe(false);
   api.openRight("conversation");
   api.setMode("spatial");

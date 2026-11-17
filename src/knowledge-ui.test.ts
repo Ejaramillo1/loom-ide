@@ -38,7 +38,7 @@ const note = (id: string): KnowledgeNote => ({ meta: { id, title: id, kind: "not
 const listing = (notes = [note("Alpha"), note("Beta")], archived: KnowledgeNote[] = []): KnowledgeListing => ({ notes, archived, edges: [{ from: "Alpha", to: "Beta", kind: "supports" }], activity: [], pending: 0, revision: "test", root: "/test", kinds: ["note"], folders: ["10 Fleeting Notes"], relations: ["supports"] });
 async function mount(data = listing(), classify?: (skillName: string) => Promise<unknown>) {
   const root = new Node();
-  const ids = ["view-knowledge", "knowledge-content", "knowledge-notice", "knowledge-tabs", "knowledge-bell", "knowledge-dialog", "knowledge-search-slot", "knowledge-new", "knowledge-refresh", "knowledge-sync", "spatial-graph", "spatial-canvas", "spatial-tab-graph", "spatial-tab-canvas", "spatial-open-full"];
+  const ids = ["view-knowledge", "knowledge-content", "knowledge-notice", "knowledge-tabs", "knowledge-bell", "knowledge-dialog", "knowledge-search-slot", "knowledge-new", "knowledge-refresh", "knowledge-sync"];
   const nodes = Object.fromEntries(ids.map(id => { const n = new Node(); n.id = id; return [id, n]; }));
   root.append(nodes["view-knowledge"]);
   nodes["view-knowledge"].append(...ids.slice(1).map(id => nodes[id]));
@@ -55,67 +55,65 @@ async function mount(data = listing(), classify?: (skillName: string) => Promise
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
-it("renders the same vault notes and edges in both graphs and the bench canvas with unique arrows", async () => {
+it("renders the vault notes and edges in the graph and canvas", async () => {
   const { nodes } = await mount();
   expect(listKnowledge).toHaveBeenCalledTimes(1);
-  for (const id of ["knowledge-content", "spatial-graph"]) {
-    expect(nodes[id].querySelectorAll("g")).toHaveLength(2);
-    expect(nodes[id].querySelectorAll("line")).toHaveLength(1);
-    expect(nodes[id].text()).toContain("Alpha");
-  }
-  const full = nodes["knowledge-content"].querySelector("marker")!.attrs.id;
-  const compact = nodes["spatial-graph"].querySelector("marker")!.attrs.id;
-  expect(full).not.toBe(compact);
-  expect(nodes["spatial-graph"].querySelector("line")!.attrs["marker-end"]).toBe(`url(#${compact})`);
-  // The bench shows one view at a time; Canvas is reached through the toggle.
-  expect(nodes["spatial-canvas"].querySelectorAll("button")).toHaveLength(0);
-  nodes["spatial-tab-canvas"].fire("click");
-  expect(nodes["spatial-canvas"].querySelectorAll("button")).toHaveLength(2);
-  expect(nodes["spatial-canvas"].querySelectorAll("line")).toHaveLength(1);
+  // The graph tab is the default view.
+  expect(nodes["knowledge-content"].querySelectorAll("g")).toHaveLength(2);
+  expect(nodes["knowledge-content"].querySelectorAll("line")).toHaveLength(1);
+  expect(nodes["knowledge-content"].text()).toContain("Alpha");
+  expect(nodes["knowledge-content"].querySelector("marker")!.attrs.id).toBe("knowledge-arrow");
+  // Canvas is reached through its tab.
+  const canvasTab = nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "canvas")!;
+  canvasTab.fire("click");
+  expect(nodes["knowledge-content"].querySelectorAll(".knowledge-canvas-card")).toHaveLength(2);
+  expect(nodes["knowledge-content"].querySelectorAll("line")).toHaveLength(1);
 });
 
-it("opens the full tools and retains canvas positions across the two surfaces", async () => {
-  const { nodes, navigate } = await mount();
-  nodes["spatial-tab-canvas"].fire("click");
-  const card = nodes["spatial-canvas"].querySelector("button")!;
+it("retains canvas positions across tab switches and opens notes without losing the drag guard", async () => {
+  const { nodes } = await mount();
+  const canvasTab = nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "canvas")!;
+  canvasTab.fire("click");
+  const card = nodes["knowledge-content"].querySelector(".knowledge-canvas-card")!;
   card.fire("pointerdown", { button: 0, clientX: 0, clientY: 0, pointerId: 1 });
   card.fire("pointermove", { clientX: 62, clientY: 31 });
   card.fire("pointerup");
   expect(card.style.left).toBe("62px");
   expect(card.style.top).toBe("31px");
+  // A drag (moved) must not open the note.
   card.fire("click");
   expect(readKnowledge).not.toHaveBeenCalled();
-  nodes["spatial-open-full"].fire("click");
-  expect(navigate).toHaveBeenCalledTimes(1);
-  const full = nodes["knowledge-content"].querySelector(".knowledge-canvas-card")!;
-  expect(full.style.left).toBe("62px");
-  full.fire("keydown", { key: "ArrowRight" });
-  expect(full.style.left).toBe("82px");
-  nodes["spatial-tab-graph"].fire("click");
-  nodes["spatial-open-full"].fire("click");
+  card.fire("keydown", { key: "ArrowRight" });
+  expect(card.style.left).toBe("82px");
+  // The durable layout survives a tab round-trip.
+  const graphTab = nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "graph")!;
+  graphTab.fire("click");
   expect(nodes["knowledge-content"].querySelectorAll("g")).toHaveLength(2);
+  canvasTab.fire("click");
+  expect(nodes["knowledge-content"].querySelector(".knowledge-canvas-card")!.style.left).toBe("82px");
 });
 
-it("never invents content for an empty vault and replaces stale previews on a load failure", async () => {
+it("never invents content for an empty vault and reports a load failure honestly", async () => {
   const { nodes, instance } = await mount(listing([]));
-  expect(nodes["spatial-graph"].text()).toContain("No notes yet");
-  expect(nodes["spatial-graph"].querySelectorAll("g")).toHaveLength(0);
-  expect(nodes["spatial-canvas"].querySelectorAll(".knowledge-canvas-card")).toHaveLength(0);
+  expect(nodes["knowledge-content"].text()).toContain("No notes yet");
+  expect(nodes["knowledge-content"].querySelectorAll("g")).toHaveLength(0);
   vi.mocked(listKnowledge).mockResolvedValueOnce(listing()); await instance.refresh();
-  expect(nodes["spatial-graph"].querySelectorAll("g")).toHaveLength(2);
+  expect(nodes["knowledge-content"].querySelectorAll("g")).toHaveLength(2);
+  // A failed refresh keeps the last good data and surfaces the error notice.
   vi.mocked(listKnowledge).mockRejectedValueOnce(new Error("disk unavailable")); await instance.refresh();
-  expect(nodes["spatial-graph"].text()).toContain("Vault unavailable");
-  expect(nodes["spatial-graph"].querySelectorAll("g")).toHaveLength(0);
-  expect(nodes["spatial-canvas"].querySelectorAll(".knowledge-canvas-card")).toHaveLength(0);
+  expect(nodes["knowledge-content"].querySelectorAll("g")).toHaveLength(2);
+  expect(nodes["knowledge-notice"].text()).toContain("disk unavailable");
 });
 
 it("drops dangling canvas edges after a note disappears from the refreshed vault", async () => {
   const { nodes, instance } = await mount();
-  nodes["spatial-tab-canvas"].fire("click");
+  const canvasTab = nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "canvas")!;
+  canvasTab.fire("click");
   vi.mocked(listKnowledge).mockResolvedValueOnce(listing([note("Alpha")])); await instance.refresh();
-  expect(nodes["spatial-canvas"].querySelectorAll("line")).toHaveLength(0);
-  nodes["spatial-tab-graph"].fire("click");
-  expect(nodes["spatial-graph"].querySelectorAll("line")).toHaveLength(0);
+  expect(nodes["knowledge-content"].querySelectorAll("line")).toHaveLength(0);
+  const graphTab = nodes["knowledge-tabs"].querySelectorAll(".knowledge-tab").find(b => b.dataset.tab === "graph")!;
+  graphTab.fire("click");
+  expect(nodes["knowledge-content"].querySelectorAll("line")).toHaveLength(0);
 });
 
 it("routes preview notes through the shared editor and preserves a dirty draft", async () => {
@@ -124,7 +122,7 @@ it("routes preview notes through the shared editor and preserves a dirty draft",
   const dialog = nodes["knowledge-dialog"];
   const body = dialog.querySelector("textarea")!;
   body.value = "Unsent thought"; body.fire("input");
-  nodes["spatial-graph"].querySelector("g")!.fire("keydown", { key: "Enter" });
+  nodes["knowledge-content"].querySelector("g")!.fire("keydown", { key: "Enter" });
   expect(navigate).toHaveBeenCalled();
   expect(readKnowledge).not.toHaveBeenCalled();
   expect(dialog.querySelector("textarea")!.value).toBe("Unsent thought");
