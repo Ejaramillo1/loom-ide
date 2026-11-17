@@ -256,7 +256,7 @@ it("captures work, session and agent at send time and never adopts the newest se
   void api.sendChat("hello");
   expect(stubs.askLoomStream).toHaveBeenCalledWith(
     expect.any(String), "hello", "sess-1", "agent-2", expect.anything(),
-    undefined, undefined, "collaborative",
+    undefined, undefined, "w1", null,
   );
 
   // The human switches work and session while the reply is in flight.
@@ -490,7 +490,7 @@ it("passes the active intent's budget to the unary fallback path (W-1)", async (
   void api.sendChat("hello");
   await tick();
   expect(stubs.askLoom).toHaveBeenCalledWith(
-    "hello", undefined, undefined, expect.anything(), 3, 90, "collaborative",
+    "hello", undefined, undefined, expect.anything(), 3, 90, "w1", null, "collaborative",
   );
 });
 
@@ -509,15 +509,30 @@ it("cancelled turns keep their partial output marked partial (review #10)", asyn
   expect(stubs.cacheChatMessage).toHaveBeenCalledWith("__unassigned", "loom", "partial value", true);
 });
 
-it("sends the governing autonomy on the stream path (QC-01/W-2)", async () => {
+it("sends the governing work and intent identifiers on the stream path (QC-01/W-2)", async () => {
   const stubs = defaultStubs();
-  stubs.governingAutonomy.mockReturnValue("assisted");
   const { api } = await shell(stubs);
-
+  api.setSelectedWorkId("w1");
   void api.sendChat("hello");
   await tick();
   const args = stubs.askLoomStream.mock.calls.at(-1);
-  expect(args?.[7]).toBe("assisted");
+  expect(args?.[7]).toBe("w1");
+  expect(args?.[8]).toBeNull();
+});
+
+it("a Manual convenience refusal never invokes the backend and keeps the draft", async () => {
+  const stubs = defaultStubs();
+  stubs.governingAutonomy.mockReturnValue("manual");
+  const { api, localStorage } = await shell(stubs);
+
+  await api.sendChat("do a thing");
+  expect(stubs.askLoomStream).not.toHaveBeenCalled();
+  expect(stubs.askLoom).not.toHaveBeenCalled();
+  expect(api.getChatInFlight()).toBe(0);
+  expect(stubs.addChatError).toHaveBeenCalled();
+  const msg = String(stubs.addChatError.mock.calls.at(-1)?.[0] ?? "");
+  expect(msg).toContain("Manual autonomy forbids agent chat");
+  expect(localStorage.setItem).toHaveBeenCalledWith("draft-key", "do a thing");
 });
 
 it("a Manual-autonomy send is rejected at the boundary and settles", async () => {

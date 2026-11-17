@@ -925,8 +925,13 @@ export async function askLoom(
   context?: Record<string, string>,
   maxRounds?: number,
   timeoutSeconds?: number,
+  workId?: string | null,
+  intentId?: string | null,
   autonomy?: string,
 ): Promise<ChatReply> {
+  // `autonomy` is a CONVENIENCE value for the browser fallback only: the
+  // Tauri path sends stable work/Intent identifiers and Rust resolves the
+  // stored policy authoritatively (QC-01/W-2 hardening).
   if (IN_TAURI) {
     return invoke<ChatReply>("ask_loom", {
       message,
@@ -935,10 +940,16 @@ export async function askLoom(
       context,
       maxRounds,
       timeoutSeconds,
-      autonomy,
+      workId,
+      intentId,
     });
   }
   if (!message.trim()) throw new Error("Enter a message first.");
+  if (autonomy === "manual") {
+    throw new Error(
+      "Manual autonomy forbids agent chat. Raise the work item's autonomy to Assisted or higher to let the agent act — or do it by hand.",
+    );
+  }
   const body: Record<string, unknown> = { query: message };
   if (sessionId?.trim()) body.sessionId = sessionId;
   if (agentId?.trim()) body.agentId = agentId;
@@ -1088,9 +1099,10 @@ export async function listWorkflows(): Promise<Workflow[]> {
 
 export async function executeWorkflow(
   workflowRef: string,
-  autonomy?: string,
+  workId?: string | null,
+  intentId?: string | null,
 ): Promise<ExecuteWorkflowResponse> {
-  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef, autonomy });
+  return invokeCmd<ExecuteWorkflowResponse>("execute_workflow", { workflowRef, workId, intentId });
 }
 
 export async function getWorkflowExecution(
@@ -1255,7 +1267,8 @@ export async function askLoomStream(
   context?: Record<string, string>,
   maxRounds?: number,
   timeoutSeconds?: number,
-  autonomy?: string,
+  workId?: string | null,
+  intentId?: string | null,
 ): Promise<void> {
   return invokeCmd<void>("ask_loom_stream", {
     requestId,
@@ -1265,7 +1278,8 @@ export async function askLoomStream(
     context,
     maxRounds,
     timeoutSeconds,
-    autonomy,
+    workId,
+    intentId,
   });
 }
 
@@ -1344,8 +1358,8 @@ export const listApps = () => invokeCmd<unknown[]>("apps_list");
 
 export const deleteSession = (sessionId: string) =>
   invokeCmd<string>("session_delete", { sessionId });
-export const resumeSession = (sessionId: string, autonomy?: string) =>
-  invokeCmd<unknown>("session_resume", { sessionId, autonomy });
+export const resumeSession = (sessionId: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("session_resume", { sessionId, workId, intentId });
 export const resolveSessionGap = (sessionId: string) =>
   invokeCmd<unknown>("session_resolve_gap", { sessionId });
 
@@ -1380,13 +1394,14 @@ export interface StreamEnvelope<T> {
   error?: string | null;
 }
 
-export const executeWorkflowStream = (requestId: string, workflowRef: string, autonomy?: string) =>
-  invokeCmd<void>("execute_workflow_stream", { requestId, workflowRef, autonomy });
+export const executeWorkflowStream = (requestId: string, workflowRef: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<void>("execute_workflow_stream", { requestId, workflowRef, workId, intentId });
 export const sessionSubscribe = (requestId: string, sessionId: string) =>
   invokeCmd<void>("session_subscribe", { requestId, sessionId });
 export const providerAbtest = (
   requestId: string, prompt: string, providerNames?: string[], mode?: string,
-) => invokeCmd<void>("provider_abtest", { requestId, prompt, providerNames, mode });
+  workId?: string | null, intentId?: string | null,
+) => invokeCmd<void>("provider_abtest", { requestId, prompt, providerNames, mode, workId, intentId });
 
 // ---- Workflow scheduling ----
 
@@ -1395,14 +1410,16 @@ export const getWorkflowSchedule = (scheduleId: string) =>
   invokeCmd<unknown>("workflow_schedule_get", { scheduleId });
 export const createWorkflowSchedule = (
   workflowName: string, cron: string, timezone?: string, enabled?: boolean,
-) => invokeCmd<unknown>("workflow_schedule_create", { workflowName, cron, timezone, enabled });
+  workId?: string | null, intentId?: string | null,
+) => invokeCmd<unknown>("workflow_schedule_create", { workflowName, cron, timezone, enabled, workId, intentId });
 export const updateWorkflowSchedule = (
   scheduleId: string, cron?: string, timezone?: string, enabled?: boolean,
-) => invokeCmd<unknown>("workflow_schedule_update", { scheduleId, cron, timezone, enabled });
+  workId?: string | null, intentId?: string | null,
+) => invokeCmd<unknown>("workflow_schedule_update", { scheduleId, cron, timezone, enabled, workId, intentId });
 export const deleteWorkflowSchedule = (scheduleId: string) =>
   invokeCmd<string>("workflow_schedule_delete", { scheduleId });
-export const triggerWorkflowSchedule = (scheduleId: string, autonomy?: string) =>
-  invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId, autonomy });
+export const triggerWorkflowSchedule = (scheduleId: string, workId?: string | null, intentId?: string | null) =>
+  invokeCmd<unknown>("workflow_schedule_trigger", { scheduleId, workId, intentId });
 export const cancelScheduleExecution = (executionId: string) =>
   invokeCmd<unknown>("workflow_schedule_cancel_execution", { executionId });
 

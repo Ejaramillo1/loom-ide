@@ -363,8 +363,6 @@ fn autonomy_admission(
 pub(crate) struct ExecutionPolicy {
     /// Resolved autonomy level (for the wire's backend_config and the UI).
     pub level: String,
-    /// Human label naming the governing record (for error messages).
-    pub owner: String,
 }
 
 fn validate_stored_level(level: &str) -> Result<(), String> {
@@ -442,7 +440,7 @@ pub(crate) fn resolve_execution_policy(
             "Manual autonomy forbids {action} under {owner}. Raise that autonomy to Assisted or higher to let the agent act — or do it by hand."
         ));
     }
-    Ok(ExecutionPolicy { level, owner })
+    Ok(ExecutionPolicy { level })
 }
 
 #[tauri::command]
@@ -2685,7 +2683,8 @@ mod tests {
         let policy =
             resolve_execution_policy(&work, &intents, Some(&item.id), None, "agent chat").unwrap();
         assert_eq!(policy.level, "collaborative");
-        assert!(policy.owner.contains("open work"));
+        // Owner naming is asserted through the Manual rejection message
+        // in stored_manual_work_rejects_execution_no_matter_what.
     }
 
     #[test]
