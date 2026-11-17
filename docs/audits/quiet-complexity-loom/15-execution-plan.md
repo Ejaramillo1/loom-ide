@@ -19,9 +19,12 @@
 | Loom | `/home/ed/work/loom` | `main` | `8082078f050008d97d09d5bdf13eebf347f32d91` ("Gateway: register Task/Skills services, answer stored HITL requests, consume WeaveRequest.context, return TraceId") | ahead 1 of origin, clean |
 
 **Implementation range (canonical for all commit/line counts):**
-`f7217bc..f75ad9f` — **23 commits**; source tree (excluding audit docs):
-**18 files, +3,889/−400**; audit docs: 6 files, +997; total:
-40 files, +5,502/−415. Round boundaries (source commits):
+`f7217bc..f75ad9f` — **23 commits** (`git rev-list --count
+f7217bc..f75ad9f`); code tree (everything outside `docs/`): **19 files,
++3,960/−410** (`git diff --shortstat f7217bc..f75ad9f -- .
+':(exclude)docs'`); docs outside the audit corpus: 15 files, +545/−5;
+audit docs: 6 files, +997; total: 40 files, +5,502/−415 (`git diff
+--shortstat f7217bc..f75ad9f`). Round boundaries (source commits):
 `58cce7b` issue-016 lifecycle, `bdb92bb` issues-017/003 framing+NDJSON,
 `7f93a2f` QC-13/17 + slot origin, `b6c612f` QC-08/11/12/21/22 + issue 009,
 `ff272af` QC-07 route, `a714b20` QC-14/issue 008, `1959b2b` QC-09
@@ -45,6 +48,14 @@ A loopback-only test deployment is `looms serve --host 127.0.0.1
 --http-port 5006 --port 60051 [--db <disposable>] [--config <...>]`.
 The owner's default DB is `/home/ed/.loom/loom.db` (personal — never
 targeted by tests).
+
+**QC-02 posture nuance (re-verify at server start):** doc 13 §1 records
+the 2026-11-16 afternoon server (pid 297398, restarted in the round-2
+ledger `e88badb`) as already **loopback-bound** — HTTP `127.0.0.1:5006`,
+gRPC `127.0.0.1:60051`. The "0.0.0.0 exposure" claims in doc 14 §4 and
+README may therefore be stale audit-era evidence (the pre-restart
+posture). W-3 must re-observe the actual binds before any exposure claim
+is repeated or closed.
 
 **Toolchain:** node v24.22.1 · npm 11.19.1 · cargo 1.99.1 · rustc
 1.99.1. Test runner: vitest 5.1.0.
@@ -123,7 +134,7 @@ source):**
 
 | # | Problem | Change | Proof | Status | Evidence |
 |---|---|---|---|---|---|
-| E1 | Doc 14's commit/line counts are wrong | Publish the canonical range `f7217bc..f75ad9f`: 23 commits; source 18 files +3,889/−400; audit docs 6 files +997; total 40 files +5,502/−415; Loom 1 commit, 4 files +203/−3 | 14 corrected; counts reproducible via the exact commands in §1 | **done** | `git rev-list --count`, `git diff --shortstat` (this run); 14 §1 corrected |
+| E1 | Doc 14's commit/line counts are wrong | Publish the canonical range `f7217bc..f75ad9f`: 23 commits; code tree 19 files +3,960/−410; docs non-audit 15 files +545/−5; audit docs 6 files +997; total 40 files +5,502/−415; Loom 1 commit, 4 files +203/−3 | 14 corrected; counts reproducible via the exact commands in §1 | **done** | `git rev-list --count`, `git diff --shortstat` (this run); 14 §1 corrected |
 | E2 | "16 tests" appears in 14 and 08; the file has 15 | Correct to 15 everywhere; cite the runner output | grep finds no "16 tests" for chat-lifecycle | **done** | vitest run 2026-11-16 20:09: "Tests 15 passed (15)"; 14 §2 row 8 and 08 corrected |
 | E3 | fmt evidence mixes a missing-manifest error with FMT_EXIT=0 | Re-record: src-tauri `cargo fmt --check --manifest-path src-tauri/Cargo.toml` (exit 0) and native-app (exit 1, pre-existing debt since `41170a6`) as two separate logs with exit codes; supersede `eval-20261116-fmt.log` | Logs show per-manifest results and real exit codes | **done** | `evidence/exec-20261116-fmt-src-tauri.log` (EXIT=0), `exec-20261116-fmt-native-app.log` (EXIT=1, 1886-line diff) |
 | E4 | All six required checks re-run at head | Run the six commands at `f75ad9f` with the §2 capture standard | Six fresh logs, exit codes recorded | **done (Unity deferred)** | `evidence/exec-20261116-*.log` — frontend 95/95 (incl. peer's uncommitted spatial tests; committed state 93), build exit 0, tauri 125/2, native 22, fmt src-tauri 0, fmt native-app 1. Unity deferred: the peer task owns the only running Editor (port 7800) mid-import |
@@ -149,11 +160,14 @@ source):**
 - 2026-11-16 ~20:15 — **R1–R6 applied** to 00/01/08/README/14 + qc-04/
   qc-07 status blocks; **E1–E4 executed** (canonical git numbers,
   lifecycle count 15, per-manifest fmt logs, six fresh suite logs at
-  `f75ad9f`). Committed in the correction slice. Unity checks deferred:
-  the peer task (20261116-195041) owns the only running Editor (port
-  7800) and is actively staging Unity assets — no Unity commands were
-  run to avoid colliding with its session.
+  `f75ad9f`). Committed as `a43f957` (8 files, explicit pathspecs —
+  the peer task's files were never staged by this pass). Unity checks
+  deferred at the time: the peer task owned the only running Editor.
+- 2026-11-16 ~20:20 — peer task completed and committed its backgrounds
+  work (`3a769d1`, staged under `f75ad9f`); HEAD is now `a43f957`.
+  QC-02 posture nuance recorded (doc 13 shows the restarted server was
+  already loopback-bound — re-observe before repeating exposure claims).
 - Remaining: W-1..W-10. W-3/W-5/W-6 are blocked on the Loom server (not
-  running at baseline) — unblock condition: owner starts `looms serve`
-  loopback-bound, or authorizes this agent to start it with a disposable
-  `--db`/profile.
+  running) — unblock condition: owner starts `looms serve` loopback-bound
+  (as in doc 13, pid 297398), or authorizes this agent to start it with
+  that exact configuration.

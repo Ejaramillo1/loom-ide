@@ -18,8 +18,10 @@ The report is **true for the state it audited** (`b1f16bd` + `7f65bfc`,
 every defect it names was real at that commit. It is **not true as a
 description of the current state**: after it was written, an authorized
 implementation pass landed **23 IDE commits** (`f7217bc..f75ad9f`;
-source tree 18 files, +3,889/−400; audit docs 6 files, +997; total
-40 files, +5,502/−415) and a Loom commit (`8082078`, 4 files, +203/−3)
+code tree (everything outside `docs/`) 19 files, +3,960/−410; docs
+outside the audit corpus 15 files, +545/−5; audit docs 6 files, +997;
+total 40 files, +5,502/−415) and a Loom commit (`8082078`, 4 files,
++203/−3)
 that **close most of the defects the report lists as open**. (Earlier
 drafts of this evaluation cited "~15 commits, +5,416/−783, 46 files" —
 those numbers are superseded by the canonical range above, measured with
