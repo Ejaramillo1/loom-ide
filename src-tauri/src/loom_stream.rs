@@ -896,10 +896,10 @@ fn strip_line_endings(line: &[u8]) -> &[u8] {
     &line[..end]
 }
 
-/// What the decoded stream produced: whether a weave completion event was
-/// observed, plus the skipped-chunk accounting for the diagnostic event.
+/// Diagnostic accounting, plus completion evidence for reader tests.
 #[derive(Debug)]
 struct StreamRead {
+    #[cfg(test)]
     completed: bool,
     skipped_chunks: usize,
     skipped_sample: String,
@@ -1044,6 +1044,7 @@ fn read_response_events<R: BufRead>(
     }
 
     Ok(StreamRead {
+        #[cfg(test)]
         completed,
         skipped_chunks,
         skipped_sample,
