@@ -76,13 +76,11 @@ namespace Loom.MemoryPalace
         readonly List<MemoryAnchor> anchors = new();
         readonly List<Material> orbitMaterials = new();
         readonly List<Color> orbitColors = new();
+        readonly Dictionary<string, Material> skyboxes = new();
         Material floorMaterial;
         Material benchMaterial;
-        Material backdropMaterial;
         Material sphereMaterial;
         Material contactShadowMaterial;
-        static Texture2D backdropDark;
-        static Texture2D backdropLight;
         UnityEngine.Rendering.Universal.Bloom bloomOverride;
         Light keyLight;
         Light fillLight;
@@ -93,6 +91,7 @@ namespace Loom.MemoryPalace
         Color liveReading = Reading;
         Color liveSurface = Surface;
         string currentTheme = "white";
+        string currentBackground = "charcoal";
         string currentState = "idle";
         Color liveStateColor = Purple;
         Camera sceneCamera;
@@ -153,7 +152,6 @@ namespace Loom.MemoryPalace
 
             if (floorMaterial) floorMaterial.color = dark ? DarkFloor : LightFloor;
             if (benchMaterial) benchMaterial.color = surface;
-            if (backdropMaterial) backdropMaterial.SetTexture("_BaseMap", dark ? BackdropTexture(true) : BackdropTexture(false));
             ApplyLoomState(currentState);
             for (var i = 0; i < orbitMaterials.Count; i++)
                 orbitMaterials[i].color = dark ? (i == 0 ? DarkOrbitInner : DarkOrbitOuter) : orbitColors[i];
@@ -196,6 +194,36 @@ namespace Loom.MemoryPalace
         }
 
         public void ApplyReducedMotion(string reduced) => reduceMotion = reduced == "true";
+
+        /// The shell's background choice (charcoal/dusk/moss/night). The
+        /// matching skybox material is swapped into RenderSettings.skybox; the
+        /// ambient light source stays Gradient (Trilight), so this is a cheap
+        /// visual change with no environment regeneration. The materials are
+        /// Resources assets (created by Tools/CreateSkyboxMaterials.cs) that
+        /// reference the Loom skybox shaders, so those shaders survive IL2CPP
+        /// stripping in the WebGL build.
+        public void ApplyBackground(string id)
+        {
+            if (string.IsNullOrEmpty(id)) id = "charcoal";
+            currentBackground = id;
+            RenderSettings.skybox = SkyboxFor(id);
+        }
+
+        Material SkyboxFor(string id)
+        {
+            if (skyboxes.TryGetValue(id, out var cached) && cached) return cached;
+            var resource = id switch
+            {
+                "dusk" => "SkyboxDusk",
+                "moss" => "SkyboxMoss",
+                "night" => "SkyboxNight",
+                _ => "SkyboxCharcoal",
+            };
+            var material = Resources.Load<Material>(resource);
+            if (!material) throw new InvalidOperationException($"Loom skybox material resource is missing: {resource}");
+            skyboxes[id] = material;
+            return material;
+        }
 
         /// The shell's quality-tier choice (High/Balanced/Low). The index
         /// mirrors the quality levels BeautifyBench wrote: High 0, Balanced 1,
@@ -346,7 +374,10 @@ namespace Loom.MemoryPalace
                 cameraObject.tag = "MainCamera";
                 sceneCamera = cameraObject.GetComponent<Camera>();
             }
-            sceneCamera.clearFlags = CameraClearFlags.SolidColor;
+            // The selectable skybox (RenderSettings.skybox) is the background;
+            // the ambient light stays Gradient (Trilight) so swapping it never
+            // regenerates the environment.
+            sceneCamera.clearFlags = CameraClearFlags.Skybox;
             sceneCamera.backgroundColor = Deep;
             // Product-shot framing (§5.8): a vertical FOV of ~35–45° reads
             // like a desk photograph, with less distortion on the near props
@@ -406,21 +437,6 @@ namespace Loom.MemoryPalace
             bench.transform.position = new Vector3(0f, 0.18f, 0f);
             bench.transform.localScale = new Vector3(13.5f, 0.34f, 7.8f);
             bench.GetComponent<Renderer>().sharedMaterial = benchMaterial = Material("Workbench surface", Surface, 0.32f, 0f);
-
-            // A soft radial-gradient backdrop fills the frame and gives the
-            // scene depth (§1): a warm glow behind the sphere fading to the
-            // shell's own #1d1b1a at the edges, so the embedded canvas meets
-            // the surrounding UI without a hard border. Unlit, so the
-            // gradient is exact and independent of the rig lights.
-            var backdrop = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            backdrop.name = "Backdrop";
-            backdrop.transform.SetPositionAndRotation(new Vector3(0f, 1.6f, 8f), Quaternion.identity);
-            backdrop.transform.localScale = new Vector3(52f, 42f, 1f);
-            var backdropTemplate = Resources.Load<Material>("LoomUnlit");
-            if (!backdropTemplate) throw new InvalidOperationException("Loom unlit material resource is missing");
-            backdropMaterial = new Material(backdropTemplate) { name = "Backdrop gradient" };
-            backdropMaterial.SetTexture("_BaseMap", BackdropTexture(currentTheme == "dark"));
-            backdrop.GetComponent<Renderer>().sharedMaterial = backdropMaterial;
 
             sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
             sphere.name = "Loom sphere";
@@ -505,6 +521,7 @@ namespace Loom.MemoryPalace
             for (var i = 0; i < Portals.Length; i++) anchors.Add(CreateAnchor(Portals[i], placements[i]));
 
             ApplyTheme(currentTheme);
+            ApplyBackground(currentBackground);
             MoveCamera();
         }
 
@@ -1036,41 +1053,6 @@ namespace Loom.MemoryPalace
 
         static Texture2D BrushedMetalTexture(int size) => TileableTexture(size, BrushedHeight, Rgb(128, 136, 142), Rgb(178, 186, 192));
         static Texture2D BrushedMetalNormal(int size) => NormalFromHeight(size, BrushedHeight);
-
-        // The backdrop radial gradient (§1): a warm glow centered just above
-        // mid-height (behind the sphere) that fades to the shell's own deep
-        // colour at the edges, so the canvas has visible depth and no hard
-        // border against the surrounding UI. Cached per theme; generated once.
-        static Texture2D BackdropTexture(bool dark)
-        {
-            var cache = dark ? backdropDark : backdropLight;
-            if (cache) return cache;
-            const int size = 256;
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            var edge = dark ? DarkDeep : Deep;
-            var glow = dark ? Rgb(84, 68, 56) : Rgb(233, 222, 212);
-            var horizon = dark ? Rgb(46, 39, 34) : Rgb(240, 232, 226);
-            for (var y = 0; y < size; y++)
-            {
-                for (var x = 0; x < size; x++)
-                {
-                    var u = (x + 0.5f) / size;
-                    var v = (y + 0.5f) / size;
-                    // Radial falloff from a center just above the middle.
-                    var dx = (u - 0.5f) * 2f;
-                    var dy = (v - 0.56f) * 2f;
-                    var radial = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
-                    var t = radial * radial;
-                    var color = Color.Lerp(edge, glow, t);
-                    // A subtle warm lift at the horizon adds vertical depth.
-                    color = Color.Lerp(color, horizon, 0.18f * Mathf.Clamp01(1f - Mathf.Abs(v - 0.5f) * 2.6f));
-                    tex.SetPixel(x, y, color);
-                }
-            }
-            tex.Apply();
-            if (dark) backdropDark = tex; else backdropLight = tex;
-            return tex;
-        }
 
         static Texture2D MakeTexture(Color color, int radius)
         {

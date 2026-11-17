@@ -75,6 +75,19 @@ foreach (var theme in new[] { "dark", "white" })
 }
 controller.ApplyTheme("white"); controller.ApplyLoomState("idle");
 var camera = Camera.main;
+// Selectable backgrounds: each id swaps RenderSettings.skybox while the
+// ambient light stays Gradient (Trilight) — a cheap visual change with no
+// environment regeneration. All four must resolve to a Loom skybox shader.
+Check(camera != null && camera.clearFlags == CameraClearFlags.Skybox, "Camera must use the skybox background.");
+Check(RenderSettings.ambientMode == UnityEngine.Rendering.AmbientMode.Trilight, "Ambient light must stay Gradient (Trilight) so the switch is cheap.");
+foreach (var background in new[] { "charcoal", "dusk", "moss", "night" })
+{
+    controller.ApplyBackground(background);
+    var sky = RenderSettings.skybox;
+    Check(sky != null, "Missing skybox material for " + background + ".");
+    if (sky) Check(sky.shader != null && sky.shader.name.StartsWith("Loom/Skybox"), "Unexpected skybox shader for " + background + ".");
+}
+controller.ApplyBackground("charcoal");
 var aspect = camera.aspect;
 controller.ApplyReducedMotion("true");
 foreach (var ratio in new[] { 0.65f, 1f, 1.6f })
@@ -120,6 +133,7 @@ return new
     colliderErrors,
     palette = true,
     themes = 2,
+    backgrounds = 4,
     cameraAspects = 3,
     glassVariant = true,
 };
