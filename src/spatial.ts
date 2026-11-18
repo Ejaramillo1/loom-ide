@@ -1,5 +1,11 @@
 import type { SphereState } from "./sphere";
 
+/** Which spatial renderer to load. Babylon is the default; the Unity
+    fallback stays behind `?player=unity` (Babylon migration, Stage 2.3). */
+function spatialPlayer(): "babylon" | "unity" {
+  return new URLSearchParams(location.search).get("player") === "unity" ? "unity" : "babylon";
+}
+
 export function installSpatialWorkbench(
   onSpatialSelect?: (object: string) => void,
   getVaultCounts?: () => { work: number; experiments: number },
@@ -14,7 +20,8 @@ export function installSpatialWorkbench(
     loadError.hidden = true;
     const theme = document.documentElement?.dataset?.theme === "white" ? "white" : "dark";
     const background = getBackground?.() || "charcoal";
-    frame.src = `/spatial-player.html?theme=${theme}&background=${encodeURIComponent(background)}`;
+    const page = spatialPlayer() === "unity" ? "spatial-player.html" : "spatial-player-babylon.html";
+    frame.src = `/${page}?theme=${theme}&background=${encodeURIComponent(background)}`;
   }
   loadButton.addEventListener("click", load);
   window.addEventListener("message", async (event) => {
