@@ -892,9 +892,6 @@ impl Vault {
                 return Err("Invalid Loom ID".into());
             }
             let marker = format!("Loom ID: {id}");
-            if self.loom_markers.contains(&marker) {
-                continue;
-            }
             let title = item
                 .get("name")
                 .and_then(|v| v.as_str())
@@ -929,17 +926,34 @@ impl Vault {
                     "createdAt",
                 ][..],
             };
-            let mut body = marker;
-            for field in fields {
-                if let Some(v) = item.get(field) {
-                    body.push_str(&format!("\n{field}: {v}"));
+            let body = mirror_body(&marker, item, kind, fields);
+            // Update-only reconcile: a pristine mirror whose server
+            // metadata changed is refreshed in place; a human-edited note
+            // (anything that no longer ends with the sync footer) is never
+            // touched. Deletes are deliberately NOT mirrored — removing a
+            // human-visible note because a list happened to be empty is
+            // destructive, and is a separate, owner-gated decision.
+            if self.loom_markers.contains(&marker) {
+                if let Some(mut note) = self
+                    .list(&marker)
+                    .notes
+                    .into_iter()
+                    .find(|n| n.body.lines().any(|l| l == marker))
+                {
+                    let pristine = {
+                        let t = note.body.trim_end();
+                        t.ends_with("Synced from the Loom server.")
+                            || t.ends_with("referenced, not downloaded.")
+                    };
+                    if pristine && note.body != body {
+                        note.body = body;
+                        let revision = self.revision.clone();
+                        self.save(note, &revision, Actor::Human)?;
+                        count += 1;
+                    }
                 }
+                continue;
             }
-            body.push_str(if kind == "artifact" {
-                "\n\nContent is referenced, not downloaded."
-            } else {
-                "\n\nSynced from the Loom server."
-            });
             self.create(
                 title,
                 &body,
@@ -952,6 +966,25 @@ impl Vault {
         }
         Ok(count)
     }
+}
+
+/// Build the mirrored note body for one Loom record: the stable ID marker
+/// followed by a whitelist of metadata fields, then a footer that marks
+/// the note as a pristine, machine-synced mirror (so the update reconcile
+/// can safely refresh it without overwriting human edits).
+fn mirror_body(marker: &str, item: &serde_json::Value, kind: &str, fields: &[&str]) -> String {
+    let mut body = marker.to_string();
+    for field in fields {
+        if let Some(v) = item.get(field) {
+            body.push_str(&format!("\n{field}: {v}"));
+        }
+    }
+    body.push_str(if kind == "artifact" {
+        "\n\nContent is referenced, not downloaded."
+    } else {
+        "\n\nSynced from the Loom server."
+    });
+    body
 }
 
 fn with_vault<T>(f: impl FnOnce(&mut Vault) -> Result<T, String>) -> Result<T, String> {
@@ -1524,6 +1557,61 @@ mod tests {
         assert!(!fs::read_to_string(canvas).unwrap().contains(&hidden_id));
         assert_eq!(fs::read_to_string(v.root.join(sample.path)).unwrap(), bytes);
     }
+    #[test]
+    fn sync_refreshes_a_pristine_mirror_when_server_metadata_changes() {
+        let mut v = vault();
+        let first =
+            serde_json::json!({"sessions":[{"id":"s1","name":"Session One","state":"active"}]});
+        assert_eq!(
+            v.mirror(&first, "sessions", "session", FOLDERS[8]).unwrap(),
+            1
+        );
+        // The server reports a changed state; the pristine mirror is
+        // refreshed in place (update reconcile), never duplicated.
+        let second =
+            serde_json::json!({"sessions":[{"id":"s1","name":"Session One","state":"paused"}]});
+        assert_eq!(
+            v.mirror(&second, "sessions", "session", FOLDERS[8])
+                .unwrap(),
+            1
+        );
+        let notes = v.list("Loom ID: s1").notes;
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].body.contains("state: \"paused\""));
+    }
+
+    #[test]
+    fn sync_never_overwrites_a_human_edited_mirror() {
+        let mut v = vault();
+        let first =
+            serde_json::json!({"sessions":[{"id":"s2","name":"Session Two","state":"active"}]});
+        assert_eq!(
+            v.mirror(&first, "sessions", "session", FOLDERS[8]).unwrap(),
+            1
+        );
+        // A human edits the mirrored note so it no longer ends with the
+        // sync footer.
+        let id = v.list("Loom ID: s2").notes[0].meta.id.clone();
+        let mut note = v.get(&id).unwrap().clone();
+        note.body.push_str("\n\nHuman annotation.");
+        note.meta.author = "human".into();
+        let revision = v.revision.clone();
+        v.save(note, &revision, Actor::Human).unwrap();
+        // The server changes the state; the human edit must survive.
+        let second =
+            serde_json::json!({"sessions":[{"id":"s2","name":"Session Two","state":"paused"}]});
+        assert_eq!(
+            v.mirror(&second, "sessions", "session", FOLDERS[8])
+                .unwrap(),
+            0
+        );
+        assert!(
+            v.list("Loom ID: s2").notes[0]
+                .body
+                .contains("Human annotation.")
+        );
+    }
+
     #[test]
     fn sync_markers_are_exact_idempotent_and_artifact_content_excluded() {
         let mut v = vault();
