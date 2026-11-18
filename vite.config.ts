@@ -22,5 +22,13 @@ export default defineConfig({
   build: {
     // Tauri serves the built frontend from dist/.
     target: "es2021",
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        // The Babylon spatial player is a second page, loaded in the same
+        // iframe Unity used (Babylon migration, Stage 1.2).
+        spatial: "spatial-player-babylon.html",
+      },
+    },
   },
 });
