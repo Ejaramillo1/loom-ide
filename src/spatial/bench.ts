@@ -9,36 +9,14 @@
 import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { STATE_COLORS } from "./state-colors";
 import { createPearl } from "./pearl";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Scene } from "@babylonjs/core/scene";
 import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 
-// State -> tint colour. From design-tokens.json (white / dark). The tint is
-// applied discreetly (fresnel rim + a whisper of emissive), never a loud
-// full recolor of the pearl sphere (v2 risk H3).
-const STATE_WHITE: Record<string, Color3> = {
-  idle: new Color3(161 / 255, 134 / 255, 116 / 255), // purple
-  listening: new Color3(161 / 255, 134 / 255, 116 / 255),
-  processing: new Color3(161 / 255, 134 / 255, 116 / 255),
-  exploring: new Color3(106 / 255, 145 / 255, 204 / 255), // blue
-  executing: new Color3(106 / 255, 145 / 255, 204 / 255),
-  attention: new Color3(217 / 255, 166 / 255, 95 / 255), // amber
-  completed: new Color3(120 / 255, 155 / 255, 137 / 255), // green
-  error: new Color3(184 / 255, 117 / 255, 112 / 255), // red
-};
-const STATE_DARK: Record<string, Color3> = {
-  idle: new Color3(185 / 255, 164 / 255, 144 / 255),
-  listening: new Color3(185 / 255, 164 / 255, 144 / 255),
-  processing: new Color3(185 / 255, 164 / 255, 144 / 255),
-  exploring: new Color3(139 / 255, 166 / 255, 204 / 255),
-  executing: new Color3(139 / 255, 166 / 255, 204 / 255),
-  attention: new Color3(217 / 255, 166 / 255, 95 / 255),
-  completed: new Color3(147 / 255, 177 / 255, 159 / 255),
-  error: new Color3(211 / 255, 146 / 255, 138 / 255),
-};
-
 export interface BenchHandle {
+  ready: Promise<void>;
   engine: Engine;
   scene: Scene;
   applyLoomState(state: string): void;
@@ -60,17 +38,17 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
   // Transparent canvas: the CSS atmospheric background shows through.
   scene.clearColor = new Color4(0, 0, 0, 0);
 
-  // Keep the pearl inside its orbital controls at every container aspect.
+  // Diameter is 60% of the smaller iframe dimension, leaving room for shortcuts.
   const camera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2, 5.3, Vector3.Zero(), scene);
   camera.fov = 0.733; // ~42°
   camera.minZ = 0.1;
   camera.maxZ = 80;
-  // No pointer control: the sphere is an ambient indicator, not a navigable
-  // diorama. Navigation lives in the DOM (bottom nav / View menu).
+  // Camera stays fixed; the pearl itself is the Overview control.
 
   const sphere = CreateSphere("sphere", { diameter: 2, segments: 64 }, scene);
   const mat = createPearl(scene);
   sphere.material = mat;
+  const ready = mat.forceCompilationAsync(sphere);
 
   let currentState = "idle";
   let theme: "white" | "dark" = "dark";
@@ -79,8 +57,7 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
 
   const applyState = (state: string) => {
     currentState = state;
-    const palette = theme === "white" ? STATE_WHITE : STATE_DARK;
-    const tint = palette[state] ?? palette.idle;
+    const tint = Color3.FromHexString(STATE_COLORS[state] ?? STATE_COLORS.idle);
     mat.setColor3("stateTint", tint);
   };
 
@@ -113,6 +90,7 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
   window.addEventListener("resize", onResize);
 
   return {
+    ready,
     engine,
     scene,
     applyLoomState: applyState,
@@ -122,8 +100,7 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
       applyState(currentState);
     },
     applyBackground(_id: string) {
-      // v2 removed the four themed backgrounds; the continuous light/dark
-      // atmosphere is CSS. Accepted for contract parity, no scene change.
+      // Optional atmosphere tints live in host CSS, never in the 3D scene.
     },
     refreshVault(_work: number, _experiments: number) {
       // The sphere does not display vault counts; accepted for contract parity.

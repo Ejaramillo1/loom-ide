@@ -3500,6 +3500,7 @@ function renderInspectorStorageStatus() {
 }
 
 function renderAttention(items: AttentionItem[]) {
+  $("#attention-panel").hidden = items.length === 0;
   const list = $("#attention-list");
   list.innerHTML = "";
   $("#att-count").textContent = String(items.length);
@@ -3515,15 +3516,6 @@ function renderAttention(items: AttentionItem[]) {
   const dot = $(".att-dot");
   if (dot) dot.classList.toggle("live", items.length > 0);
 
-  if (items.length === 0) {
-    const li = document.createElement("li");
-    const span = document.createElement("span");
-    span.className = "step-label attention-empty";
-    span.textContent = "Nothing needs a decision.";
-    li.append(span);
-    list.append(li);
-    return;
-  }
   for (const item of items) {
     const li = document.createElement("li");
     const row = document.createElement("button");
@@ -3888,14 +3880,15 @@ function applyRightPane() {
   const contextPane = document.getElementById("inspector-context");
   const chatPane = document.getElementById("chat-panel");
   const spatial = mode === "spatial";
-  const navigation = document.querySelector<HTMLElement>(".workspace-nav");
-  const navigationSlot = document.getElementById("workspace-navigation-slot");
-  const navigationHost = document.getElementById(spatial ? "view-spatial" : "workspace-navigation-slot");
-  if (navigation && navigationHost && navigation.parentElement !== navigationHost) navigationHost.append(navigation);
-  navigation?.classList.toggle("orbital-nav", spatial);
-  if (navigationSlot) navigationSlot.hidden = spatial;
   const destination = document.getElementById(spatial ? "spatial-chat-slot" : "right-col");
-  if (chatPane && destination && chatPane.parentElement !== destination) destination.append(chatPane);
+  if (chatPane && destination && chatPane.parentElement !== destination) {
+    const focused = chatPane.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+    const log = document.getElementById("chat-log");
+    const scrollTop = log?.scrollTop;
+    destination.append(chatPane);
+    if (focused && (spatial || (rightOpen && rightTab === "conversation"))) focused.focus({ preventScroll: true });
+    if (log && scrollTop !== undefined) log.scrollTop = scrollTop;
+  }
   if (contextPane) {
     contextPane.hidden = !spatial && rightTab !== "context";
     contextPane.setAttribute("role", spatial ? "region" : "tabpanel");
@@ -8162,6 +8155,7 @@ function renderStatusPill() {
   const state = currentLoomState();
   pill.title += ` ${CAPTIONS[state]}`;
   pill.dataset.state = state;
+  $("#overview-sphere")?.setAttribute("data-state", state);
   const caption = document.getElementById("spatial-state-caption");
   if (caption) caption.textContent = !loomStatusKnown ? "Checking the connection to Loom…" : `${text.textContent} · ${CAPTIONS[state]}`;
   notifySpatialState(state);
@@ -8195,10 +8189,6 @@ function setMode(next: Mode) {
   // The scene follows the mode: water + full atmosphere only in Experiment.
   document.querySelector(".scene")?.setAttribute("data-mode", next);
   applyRightPane();
-  document.querySelectorAll<HTMLElement>("[data-workspace-mode]").forEach(button => {
-    if (button.dataset.workspaceMode === next) button.setAttribute("aria-current", "page");
-    else button.removeAttribute("aria-current");
-  });
   closeMenus();
 }
 
@@ -8434,6 +8424,7 @@ async function init() {
   });
   installSpatialWorkbench((object) => {
     switch (object) {
+      case "Overview": setMode("spatial"); break;
       case "Work": setMode("work"); break;
       case "Code": setMode("code"); break;
       case "Experiments": setMode("experiment"); break;
@@ -8525,13 +8516,19 @@ async function init() {
     }
   });
 
-  document.querySelectorAll<HTMLButtonElement>("[data-workspace-mode]").forEach(button => {
+  $("#overview-sphere").addEventListener("click", () => {
+    setMode("spatial");
+    $("#spatial-frame").focus();
+  });
+  document.querySelectorAll<HTMLButtonElement>(".orbital-nav [data-workspace-mode]").forEach(button => {
     button.addEventListener("click", () => {
       setMode(button.dataset.workspaceMode as Mode);
-      document.querySelector<HTMLElement>('.workspace-nav [aria-current="page"]')?.focus();
+      if (button.dataset.workspaceSection === "evidence") knowledge?.showEvidence?.();
+      // The clicked shortcut is now hidden; focus the persistent way back.
+      $("#overview-sphere").focus();
     });
   });
-  document.querySelector<HTMLElement>('.workspace-nav [data-workspace-mode="spatial"]')?.setAttribute("aria-current", "page");
+  document.querySelector<HTMLButtonElement>(".spatial-work-open")?.addEventListener("click", () => setMode("work"));
   $("#collaboration-open").addEventListener("click", () => setMode("agents"));
 
   // Header: the objective banner opens the selected work in the Work view.

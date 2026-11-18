@@ -2,6 +2,7 @@
 // wires the postMessage bridge; mirrors spatial-player.js' load/ready/error
 // flow.
 
+import "@babylonjs/core/Culling/ray";
 import { createBench } from "./bench";
 import { startSpatialBridge } from "./bridge";
 
@@ -34,8 +35,27 @@ try {
     bridge.fail("The graphics context was lost. Reload the spatial view to recover.");
     dispose();
   }, { once: true });
-  bridge.ready();
-  if (loading) loading.hidden = true;
+  const fail = (error: unknown) => {
+    const message = `Could not render the sphere: ${String(error)}`;
+    if (status) status.textContent = message;
+    if (loading) loading.hidden = false;
+    bridge.fail(message);
+    dispose();
+  };
+  const overview = () => window.parent.postMessage({ type: "loom-spatial-select", object: "Overview" }, location.origin);
+  canvas.addEventListener("click", event => {
+    const rect = canvas.getBoundingClientRect();
+    if (bench.scene.pick(event.clientX - rect.left, event.clientY - rect.top)?.hit) overview();
+  });
+  canvas.setAttribute("role", "button");
+  canvas.setAttribute("aria-label", "Return to Overview");
+  canvas.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); overview(); }
+  });
+  void bench.ready.then(() => {
+    bridge.ready();
+    if (loading) loading.hidden = true;
+  }).catch(fail);
 } catch (error) {
   const message = String(error);
   if (status) status.textContent = `Could not start the bench: ${message}`;

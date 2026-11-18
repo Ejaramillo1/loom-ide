@@ -29,7 +29,9 @@ const el = (tag = "div") => {
     children: kids,
     append(...items: any[]) {
       for (const item of items) {
+        item.parent?.children.splice(item.parent.children.indexOf(item), 1);
         item.parent = e;
+        item.parentElement = e;
         kids.push(item);
       }
     },
@@ -49,6 +51,8 @@ const el = (tag = "div") => {
     setAttribute(k: string, v: string) {
       e.attrs[k] = v;
     },
+    contains(child: any): boolean { return child === e || kids.some(k => k.contains?.(child)); },
+    removeAttribute(k: string) { delete e.attrs[k]; },
     addEventListener(type: string, fn: any) {
       e.handlers[type] = fn;
     },
@@ -122,7 +126,11 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
   const document = {
     getElementById: node,
     createElement: el,
+    body: el("body"),
+    querySelector: () => null,
+    querySelectorAll: () => [],
   };
+  node("chat-panel").append(node("chat-log"), node("chat-text"));
   const window = { setTimeout: vi.fn() };
   const localStorage = { getItem: vi.fn(() => null), setItem: vi.fn() };
 
@@ -139,11 +147,19 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
       let abtestState = null;
       const renderWorkDetail = () => {}, renderAbtest = () => {};
       let intents = [];
+      let mode="spatial", rightTab="conversation", rightOpen=true, rightWasDrawer=false;
+      let spatialPane={tab:"conversation",open:true}, otherPane={tab:"context",open:true};
+      const ALL_VIEWS=["spatial","code","work","experiment","agents","knowledge","artifacts"];
+      const knowledge={refresh:async()=>{}};
+      const isRightDrawer=()=>false, resetRightColWidth=()=>{}, closeLeftDrawer=()=>{}, closeMenus=()=>{}, updateScrim=()=>{};
+      ${source.slice(source.indexOf("function applyRightPane()"),source.indexOf("/** Open the right pane"))}
+      ${source.slice(source.indexOf("function setMode(next: Mode)"),source.indexOf("// File canvas. Legacy"))}
+      applyRightPane();
       ${source.slice(source.indexOf("const AUTONOMY_LEVELS:"), source.indexOf("};", source.indexOf("const AUTONOMY_LEVELS:")) + 2)}
       ${ownershipCode}
       ${chatCode}
       return {
-        sendChat, handleStreamEvent, finishStream, cancelInFlightForAutonomyLower,
+        setMode, sendChat, handleStreamEvent, finishStream, cancelInFlightForAutonomyLower,
         trackUnaryExecution, captureExecutionOwner,
         setWorkItems: (items) => { workItems = items; },
         setIntents: (items, active = null) => { intents = items; activeIntentId = active; },
@@ -631,4 +647,36 @@ it("a Manual-autonomy send is rejected at the boundary and settles", async () =>
   expect(stubs.addChatError).toHaveBeenCalled();
   const msg = String(stubs.addChatError.mock.calls.at(-1)?.[0] ?? "");
   expect(msg).toContain("Manual autonomy forbids agent chat");
+});
+
+it("keeps streaming tokens, scroll, draft and one settlement while navigating", async () => {
+ const {api,node,stubs}=await shell();
+ api.setSelectedWorkId("w1");
+ void api.sendChat("stream while navigating");
+ const [requestId,state]=[...api.getActiveStreams()][0] as [string,any];
+ const panel=node("chat-panel"), log=node("chat-log");
+ node("chat-text").value="draft during stream";
+ api.handleStreamEvent({requestId,kind:"progress",event:{partial_content:"first "}});
+ api.handleStreamEvent({requestId,kind:"progress",event:{is_tool_started:true,tool_call_id:"tool-1",tool_name:"read"}});
+ const tool=state.toolLines.get("tool-1");
+ log.scrollTop=37;
+ api.setMode("code");
+ expect(panel.parentElement).toBe(node("right-col"));
+ expect(log.scrollTop).toBe(37);
+ api.handleStreamEvent({requestId,kind:"progress",event:{partial_content:"first second "}});
+ api.setMode("spatial");
+ expect(panel.parentElement).toBe(node("spatial-chat-slot"));
+ expect(api.getActiveStreams().get(requestId)).toBe(state);
+ expect(state.text).toBe("first second ");
+ api.handleStreamEvent({requestId,kind:"progress",event:{is_tool_completed:true,tool_call_id:"tool-1",tool_name:"read",tool_success:true}});
+ expect(state.toolLines.get("tool-1")).toBe(tool);
+ expect(tool.textContent).toContain("done");
+ expect(node("chat-text").value).toBe("draft during stream");
+ api.handleStreamEvent({requestId,kind:"progress",event:{partial_content:"first second third"}});
+ api.handleStreamEvent({requestId,kind:"done"});
+ api.handleStreamEvent({requestId,kind:"done"});
+ await tick();
+ expect(stubs.cacheChatMessage).toHaveBeenCalledWith("w1","loom","first second third");
+ expect(stubs.recordRunSettle).toHaveBeenCalledTimes(1);
+ expect(api.getChatInFlight()).toBe(0);
 });

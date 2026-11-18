@@ -18,7 +18,7 @@
         <!-- ======================= Header (row 1) ======================= -->
         <header class="topbar">
           <div class="brand">
-            <span class="brand-ring" aria-hidden="true"></span>
+            <button id="overview-sphere" class="brand-ring" type="button" aria-label="Return to Overview" title="Return to Overview"></button>
             <span class="brand-name">Loom</span>
           </div>
           <details class="application-controls"><summary aria-label="Application menu">Menu</summary><nav id="app-menu" class="app-menu" aria-label="Application"></nav></details>
@@ -47,7 +47,6 @@
           <!-- Left pane: active intent + work catalogue. It is shown in
                Work and Experiment; other modes give their content the room. -->
           <aside class="left-col" id="left-col" aria-label="Work navigation">
-            <details class="intent-disclosure"><summary>Intent &amp; autonomy</summary><div id="intent-header" class="intent-header" aria-label="Active intent"></div></details>
             <section class="work-panel" aria-label="Work">
               <div class="pane-head">
                 <div>
@@ -65,6 +64,7 @@
                 </span></span>
                 <button class="icon-btn small drawer-close" id="left-close" type="button" aria-label="Close work panel">✕</button>
               </div>
+              <details class="intent-disclosure"><summary>Intent &amp; autonomy</summary><div id="intent-header" class="intent-header" aria-label="Active intent"></div></details>
               <ul id="work-list" class="work-list"></ul>
               <p class="list-empty" id="work-empty" hidden>No work matches this search.</p>
               <div id="knowledge-search-results"></div>
@@ -74,20 +74,19 @@
 
           <!-- Center: workspace -->
           <section class="center" aria-label="Workspace">
-            <div id="workspace-navigation-slot" hidden></div>
             <div id="view-spatial" class="view">
               <div id="spatial-load-error" hidden>
                 <p id="spatial-status" role="status"></p>
                 <button id="spatial-load" class="btn" type="button">Retry loading the bench</button>
               </div>
               <iframe id="spatial-frame" title="Loom state sphere" allow="fullscreen"></iframe>
-              <nav class="workspace-nav orbital-nav" aria-label="Workspace modes">
-                <button type="button" data-workspace-mode="spatial">Overview</button>
-                <button type="button" data-workspace-mode="code">Code</button>
-                <button type="button" data-workspace-mode="experiment">Experiment</button>
+              <nav class="orbital-nav" aria-label="Workspace shortcuts">
                 <button type="button" data-workspace-mode="work">Work</button>
+                <button type="button" data-workspace-mode="experiment">Experiments</button>
+                <button type="button" data-workspace-mode="knowledge" data-workspace-section="evidence">Evidence</button>
                 <button type="button" data-workspace-mode="agents">Agents</button>
                 <button type="button" data-workspace-mode="knowledge">Knowledge</button>
+                <button type="button" data-workspace-mode="code">Code</button>
               </nav>
               <p id="spatial-state-caption" class="spatial-state-caption" role="status">Checking Loom…</p>
             </div>
@@ -248,7 +247,7 @@
                 <div id="collaboration-summary" aria-live="polite"></div>
                 <button id="collaboration-open" class="btn ghost small" type="button">Open Agents</button>
               </section>
-              <section class="attention-panel" aria-label="Attention">
+              <section id="attention-panel" class="attention-panel" aria-label="Attention" hidden>
                 <div class="section-title-row">
                   <h3>Attention</h3>
                   <span class="att-count"><span class="att-dot"></span><span id="att-count">0</span></span>

@@ -38,18 +38,18 @@ it("accepts loading failures only from its player and lets the user retry", asyn
   vi.stubGlobal("location", { origin: "http://localhost" });
   vi.stubGlobal("window", { addEventListener: (_: string, handler: typeof receive) => { receive = handler; } });
   installSpatialWorkbench();
-  const event = { source: frame.contentWindow, origin: "http://localhost", data: { type: "loom-spatial-error", message: "Unity failed to start" } };
+  const event = { source: frame.contentWindow, origin: "http://localhost", data: { type: "loom-spatial-error", message: "Sphere shader failed to compile" } };
   await receive!({ ...event, source: {} });
   expect(loadError.hidden).toBe(true);
   await receive!(event);
   expect(loadError.hidden).toBe(false);
-  expect(status.textContent).toBe("Unity failed to start");
+  expect(status.textContent).toBe("Sphere shader failed to compile");
   await load.addEventListener.mock.calls[0][1]();
   expect(frame).toHaveProperty("src", "/spatial-player-babylon.html?theme=dark&background=charcoal");
   expect(loadError.hidden).toBe(true);
 });
 
-it("forwards Unity portal selections to the host and ignores foreign ones", async () => {
+it("forwards sphere Overview selections to the host and ignores foreign ones", async () => {
   const onSelect = vi.fn();
   let receive: (event: unknown) => Promise<void>;
   const player = { postMessage: vi.fn() };
@@ -61,12 +61,12 @@ it("forwards Unity portal selections to the host and ignores foreign ones", asyn
   vi.stubGlobal("document", { querySelector: (selector: string) => selector === "#spatial-frame" ? frame : selector === "#spatial-status" ? status : selector === "#spatial-load-error" ? loadError : load });
   vi.stubGlobal("window", { addEventListener: (_: string, handler: typeof receive) => { receive = handler; } });
   installSpatialWorkbench(onSelect);
-  const event = { source: player, origin: "http://localhost", data: { type: "loom-spatial-select", object: "Work" } };
+  const event = { source: player, origin: "http://localhost", data: { type: "loom-spatial-select", object: "Overview" } };
   await receive!({ ...event, origin: "http://elsewhere" });
   await receive!({ ...event, source: {} });
   expect(onSelect).not.toHaveBeenCalled();
   await receive!(event);
-  expect(onSelect).toHaveBeenCalledWith("Work");
+  expect(onSelect).toHaveBeenCalledWith("Overview");
 });
 
 it("pushes vault counts to the bench on demand and when the player reports ready", async () => {

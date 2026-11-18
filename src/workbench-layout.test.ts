@@ -16,6 +16,7 @@ async function shell(width: number) {
       nodes.set(id, { id, dataset: {}, hidden: false, value: "", attrs: {} as Record<string, string>, handlers: {} as Record<string, (e: any) => void>,
         classList: { contains: (c: string) => classes.has(c), remove: (c: string) => classes.delete(c), add: (c: string) => classes.add(c), toggle: (c: string, on: boolean) => on ? classes.add(c) : classes.delete(c) },
         setAttribute(key: string, value: string) { this.attrs[key] = value; }, removeAttribute(key: string) { delete this.attrs[key]; },
+        contains: () => false,
         append(child: any) { child.parentElement = this; },
         focus() { active = this; }, closest: () => null,
         addEventListener(type: string, fn: (e: any) => void) { this.handlers[type] = fn; },
@@ -91,19 +92,25 @@ it("keeps the inspector tab visible on other modes and the conversation on Spati
   expect(node("body").classList.contains("right-open")).toBe(false);
 });
 
-it("places all six workspace modes in a single sphere navigation", () => {
-  expect(indexHtml).toContain('class="workspace-nav orbital-nav"');
-  expect(indexHtml).toContain('aria-label="Workspace modes"');
-  expect(indexHtml.match(/data-workspace-mode=/g)).toHaveLength(7);
-  expect(source).toContain('button.dataset.workspaceMode as Mode');
+it("uses the sphere for Overview, preserves orbital shortcuts and removes the floating menu", () => {
+  expect(indexHtml).toContain('id="overview-sphere"');
+  expect(indexHtml).toContain('aria-label="Return to Overview"');
+  expect(indexHtml).not.toMatch(/workspace-nav|workspace-navigation-slot/);
+  const orbit = indexHtml.slice(indexHtml.indexOf('<nav class="orbital-nav"'), indexHtml.indexOf('</nav>', indexHtml.indexOf('<nav class="orbital-nav"')));
+  expect([...orbit.matchAll(/>([^<>]+)<\/button>/g)].map(match => match[1])).toEqual(["Work", "Experiments", "Evidence", "Agents", "Knowledge", "Code"]);
+  expect(source).toContain('$("#overview-sphere").addEventListener("click"');
+});
+
+it("keeps intent and autonomy inside the Work panel", () => {
+  const panel = indexHtml.slice(indexHtml.indexOf('<section class="work-panel"'), indexHtml.indexOf('</section>', indexHtml.indexOf('<section class="work-panel"')));
+  expect(panel).toContain('class="intent-disclosure"');
+  expect(panel).toContain('id="intent-header"');
+  expect(indexHtml.match(/id="intent-header"/g)).toHaveLength(1);
 });
 
 it("keeps chat and context visible together in Spatial, including narrow widths", async () => {
   for (const width of [390, 900, 1280, 1600]) {
     const { node, api } = await shell(width);
-    const navigation = node(".workspace-nav");
-    expect(navigation.parentElement).toBe(node("view-spatial"));
-    expect(navigation.classList.contains("orbital-nav")).toBe(true);
     const chat = node("chat-panel");
     expect(chat.parentElement).toBe(node("spatial-chat-slot"));
     expect(chat.hidden).toBe(false);
@@ -112,8 +119,6 @@ it("keeps chat and context visible together in Spatial, including narrow widths"
     expect(chat.hidden).toBe(false);
     expect(api.expandChatOnReply()).toBe(false);
     api.setMode("code");
-    expect(navigation.parentElement).toBe(node("workspace-navigation-slot"));
-    expect(navigation.classList.contains("orbital-nav")).toBe(false);
     expect(chat.parentElement).toBe(node("right-col"));
     api.setMode("spatial");
     expect(node("chat-panel")).toBe(chat);

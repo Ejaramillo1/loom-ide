@@ -1,6 +1,7 @@
 import { ShaderMaterial } from "@babylonjs/core/Materials/shaderMaterial";
 import { Effect } from "@babylonjs/core/Materials/effect";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
+import { STATE_COLORS } from "./state-colors";
 import type { Scene } from "@babylonjs/core/scene";
 
 Effect.ShadersStore.loomPearlVertexShader = `
@@ -14,11 +15,15 @@ varying vec3 vNormal;
 varying vec3 vLocal;
 void main() {
   vPosition = (world * vec4(position, 1.0)).xyz;
+  // The only runtime scale is uniform breathing, so this normal transform is exact.
   vNormal = normalize(mat3(world) * normal);
   vLocal = position;
   gl_Position = worldViewProjection * vec4(position, 1.0);
 }`;
 Effect.ShadersStore.loomPearlFragmentShader = `
+#ifdef GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
 precision highp float;
 varying vec3 vPosition;
 varying vec3 vNormal;
@@ -36,11 +41,15 @@ void main() {
   float longitude = atan(vLocal.z, vLocal.x);
   float latitude = asin(clamp(normalize(vLocal).y, -1.0, 1.0));
   float flow = latitude + 0.34 * sin(longitude + latitude * 1.5 + time * 0.025);
-  float stripe = pow(0.5 + 0.5 * cos(flow * 155.0), 24.0);
+  float phase = flow * 155.0;
+  float footprint = max(fwidth(phase), 0.001);
+  float stripe = (1.0 - smoothstep(0.12, 0.12 + footprint, abs(sin(phase * 0.5))))
+    * clamp(1.0 - footprint / 6.283, 0.0, 1.0);
   pearl += vec3(0.14, 0.12, 0.11) * stripe * (0.4 + 0.6 * facing);
   float rim = pow(1.0 - facing, 2.4);
-  pearl = mix(pearl, vec3(1.0, 0.94, 0.86), rim * 0.78);
-  pearl += stateTint * (0.035 + rim * 0.14);
+  pearl = mix(pearl, vec3(1.0, 0.94, 0.86), rim * 0.35);
+  // Blend pigment into the pearl instead of adding light that clips to white.
+  pearl = mix(pearl, stateTint * (0.72 + light * 0.24), 0.22 + pow(1.0 - facing, 0.7) * 0.58);
   pearl *= 1.0 - dark * 0.08;
   gl_FragColor = vec4(pearl, 1.0);
 }`;
@@ -50,7 +59,7 @@ export function createPearl(scene: Scene): ShaderMaterial {
     attributes: ["position", "normal"],
     uniforms: ["worldViewProjection", "world", "cameraPosition", "stateTint", "dark", "time"],
   });
-  material.setColor3("stateTint", new Color3(0.6, 0.5, 0.7));
+  material.setColor3("stateTint", Color3.FromHexString(STATE_COLORS.idle));
   material.setFloat("dark", 0);
   material.setFloat("time", 0);
   return material;

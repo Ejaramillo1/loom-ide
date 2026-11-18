@@ -41,6 +41,7 @@ export function startSpatialBridge(
   const theme = env.themeFromParams();
   const background = env.backgroundFromParams();
   if (document.body) document.body.dataset.theme = theme;
+  // This canvas-only document must match the iframe's scheme to stay transparent.
   if (document.documentElement) document.documentElement.style.colorScheme = "normal";
 
   let ready = false;
