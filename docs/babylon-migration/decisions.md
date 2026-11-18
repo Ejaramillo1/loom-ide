@@ -49,11 +49,11 @@ Babylon backgrounds are introduced. The player canvas remains transparent.
 
 DOM/CSS/TypeScript. No text or cards in 3D. Babylon renders only the sphere
 and its minimal ambience; background gradient, shadow, reflection and
-typography live in CSS/DOM. The latest layout request places the existing
-conversation below the sphere, centered at up to 900px wide. Its intrinsic
-height grows with reply content, capped at `clamp(180px, 35dvh, 360px)`; longer
-responses scroll inside the log. The sphere stage retains at least 260px.
-No separate resizing observer or alternate conversation is introduced.
+typography live in CSS/DOM. The conversation lives in the right column of the
+Overview, toggled from the header, and extends flush to the bottom of the
+window, leaving the shell gap; longer responses scroll inside the log. The
+sphere stage retains at least 260px. No separate resizing observer or
+alternate conversation is introduced.
 
 The decorative top-right avatar sphere and Agentic Collaboration card are
 removed. Overview has no empty sidebar: the context column appears only when

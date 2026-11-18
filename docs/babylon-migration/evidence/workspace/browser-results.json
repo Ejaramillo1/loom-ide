@@ -1,5 +1,5 @@
 {
-  "base": "http://127.0.0.1:34353",
+  "base": "http://127.0.0.1:46259",
   "network": "Loom HTTP calls blocked: disposable offline UI test; no live turns",
   "reports": [
     {
@@ -11,43 +11,43 @@
       "shortcuts": [
         {
           "label": "Work",
-          "x": 657.1484375,
-          "y": 102.75,
+          "x": 438.578125,
+          "y": 130.953125,
           "w": 51.703125,
           "h": 34
         },
         {
           "label": "Experiments",
-          "x": 758.4453125,
-          "y": 166.640625,
+          "x": 618.28125,
+          "y": 236.03125,
           "w": 92.390625,
           "h": 34
         },
         {
           "label": "Evidence",
-          "x": 771.140625,
-          "y": 271.421875,
+          "x": 633.2734375,
+          "y": 408.328125,
           "w": 74.15625,
           "h": 34
         },
         {
           "label": "Agents",
-          "x": 652.0625,
-          "y": 332.765625,
+          "x": 433.4921875,
+          "y": 509.203125,
           "w": 61.875,
           "h": 34
         },
         {
           "label": "Knowledge",
-          "x": 518.5625,
-          "y": 271.421875,
+          "x": 221.6015625,
+          "y": 408.328125,
           "w": 85.5625,
           "h": 34
         },
         {
           "label": "Code",
-          "x": 531.609375,
-          "y": 166.640625,
+          "x": 232.3515625,
+          "y": 236.03125,
           "w": 52.3125,
           "h": 34
         }
@@ -60,24 +60,24 @@
         "hidden": true
       },
       "chat": {
-        "x": 233,
-        "y": 441.5,
-        "w": 900,
-        "h": 196.5,
+        "x": 928.890625,
+        "y": 76,
+        "w": 409.796875,
+        "h": 562,
         "hidden": false
       },
       "composer": {
-        "x": 248,
+        "x": 943.890625,
         "y": 579,
-        "w": 870,
+        "w": 379.796875,
         "h": 44,
         "hidden": false
       },
       "sphere": {
         "x": 27.3125,
         "y": 76,
-        "w": 1311.375,
-        "h": 323.5,
+        "w": 874.265625,
+        "h": 532,
         "hidden": false
       },
       "context": {
@@ -94,15 +94,23 @@
         "h": 0,
         "hidden": true
       },
-      "canvas": 1311,
+      "canvas": 874,
       "chatGrowth": {
-        "short": 189.296875,
-        "long": 227.5,
-        "capped": 227.5,
+        "short": 562,
+        "long": 562,
+        "capped": 562,
         "overflow": true,
-        "restored": 196.5,
+        "restored": 562,
         "composerBottom": 623,
-        "sphereHeight": 292.5
+        "panelBottom": 638,
+        "sphereHeight": 532
+      },
+      "chatToggle": {
+        "initiallyOpen": true,
+        "closed": {
+          "sphereWidth": 1311.375,
+          "emptySidebar": true
+        }
       }
     },
     {
@@ -114,43 +122,43 @@
       "shortcuts": [
         {
           "label": "Work",
-          "x": 809.6484375,
-          "y": 142.125,
+          "x": 573.6484375,
+          "y": 170.328125,
           "w": 51.703125,
           "h": 34
         },
         {
           "label": "Experiments",
-          "x": 1020.3671875,
-          "y": 263.5,
+          "x": 862.7734375,
+          "y": 332.875,
           "w": 92.390625,
           "h": 34
         },
         {
           "label": "Evidence",
-          "x": 1036.28125,
-          "y": 462.53125,
+          "x": 880.984375,
+          "y": 599.4375,
           "w": 74.15625,
           "h": 34
         },
         {
           "label": "Agents",
-          "x": 804.5625,
-          "y": 579.03125,
+          "x": 568.5625,
+          "y": 755.46875,
           "w": 61.875,
           "h": 34
         },
         {
           "label": "Knowledge",
-          "x": 561.640625,
-          "y": 462.53125,
+          "x": 247.234375,
+          "y": 599.4375,
           "w": 85.5625,
           "h": 34
         },
         {
           "label": "Code",
-          "x": 571.46875,
-          "y": 263.5,
+          "x": 254.765625,
+          "y": 332.875,
           "w": 52.3125,
           "h": 34
         }
@@ -163,24 +171,24 @@
         "hidden": true
       },
       "chat": {
-        "x": 385.5,
-        "y": 732.5,
-        "w": 900,
-        "h": 196.5,
+        "x": 1197.59375,
+        "y": 76,
+        "w": 440,
+        "h": 853,
         "hidden": false
       },
       "composer": {
-        "x": 400.5,
+        "x": 1212.59375,
         "y": 870,
-        "w": 870,
+        "w": 410,
         "h": 44,
         "hidden": false
       },
       "sphere": {
         "x": 33.40625,
         "y": 76,
-        "w": 1604.1875,
-        "h": 614.5,
+        "w": 1132.1875,
+        "h": 823,
         "hidden": false
       },
       "context": {
@@ -197,15 +205,23 @@
         "h": 0,
         "hidden": true
       },
-      "canvas": 1604,
+      "canvas": 1132,
       "chatGrowth": {
-        "short": 189.296875,
-        "long": 329.34375,
-        "capped": 329.34375,
+        "short": 853,
+        "long": 853,
+        "capped": 853,
         "overflow": true,
-        "restored": 196.5,
+        "restored": 853,
         "composerBottom": 914,
-        "sphereHeight": 481.65625
+        "panelBottom": 929,
+        "sphereHeight": 823
+      },
+      "chatToggle": {
+        "initiallyOpen": true,
+        "closed": {
+          "sphereWidth": 1604.1875,
+          "emptySidebar": true
+        }
       }
     },
     {
@@ -218,42 +234,42 @@
         {
           "label": "Work",
           "x": 424.1484375,
-          "y": 111.140625,
+          "y": 139.359375,
           "w": 51.703125,
           "h": 34
         },
         {
           "label": "Experiments",
-          "x": 548.7578125,
-          "y": 187.265625,
+          "x": 627.1484375,
+          "y": 256.671875,
           "w": 92.390625,
           "h": 34
         },
         {
           "label": "Evidence",
-          "x": 562.140625,
-          "y": 312.125,
+          "x": 642.84375,
+          "y": 449.0625,
           "w": 74.15625,
           "h": 34
         },
         {
           "label": "Agents",
           "x": 419.0625,
-          "y": 385.21875,
+          "y": 561.6875,
           "w": 61.875,
           "h": 34
         },
         {
           "label": "Knowledge",
-          "x": 262.25,
-          "y": 312.125,
+          "x": 183.859375,
+          "y": 449.0625,
           "w": 85.5625,
           "h": 34
         },
         {
           "label": "Code",
-          "x": 274.609375,
-          "y": 187.265625,
+          "x": 193.90625,
+          "y": 256.671875,
           "w": 52.3125,
           "h": 34
         }
@@ -266,16 +282,16 @@
         "hidden": true
       },
       "chat": {
-        "x": 18,
-        "y": 503.5,
-        "w": 864,
-        "h": 196.5,
+        "x": 448,
+        "y": 56,
+        "w": 440,
+        "h": 652,
         "hidden": false
       },
       "composer": {
-        "x": 33,
-        "y": 641,
-        "w": 834,
+        "x": 463,
+        "y": 649,
+        "w": 410,
         "h": 44,
         "hidden": false
       },
@@ -283,7 +299,7 @@
         "x": 18,
         "y": 76,
         "w": 864,
-        "h": 385.5,
+        "h": 594,
         "hidden": false
       },
       "context": {
@@ -302,13 +318,21 @@
       },
       "canvas": 864,
       "chatGrowth": {
-        "short": 189.296875,
-        "long": 252,
-        "capped": 252,
+        "short": 652,
+        "long": 652,
+        "capped": 652,
         "overflow": true,
-        "restored": 196.5,
-        "composerBottom": 685,
-        "sphereHeight": 330
+        "restored": 652,
+        "composerBottom": 693,
+        "panelBottom": 708,
+        "sphereHeight": 594
+      },
+      "chatToggle": {
+        "initiallyOpen": false,
+        "closed": {
+          "sphereWidth": 864,
+          "emptySidebar": true
+        }
       }
     },
     {
@@ -321,42 +345,42 @@
         {
           "label": "Work",
           "x": 169.1484375,
-          "y": 106.140625,
+          "y": 139.625,
           "w": 51.703125,
           "h": 34
         },
         {
           "label": "Experiments",
           "x": 270.5234375,
-          "y": 174.96875,
+          "y": 257.328125,
           "w": 92.390625,
           "h": 34
         },
         {
           "label": "Evidence",
           "x": 283.21875,
-          "y": 287.84375,
+          "y": 450.375,
           "w": 74.15625,
           "h": 34
         },
         {
           "label": "Agents",
           "x": 164.0625,
-          "y": 353.921875,
+          "y": 563.375,
           "w": 61.875,
           "h": 34
         },
         {
           "label": "Knowledge",
           "x": 30.484375,
-          "y": 287.84375,
+          "y": 450.375,
           "w": 85.5625,
           "h": 34
         },
         {
           "label": "Code",
           "x": 43.53125,
-          "y": 174.96875,
+          "y": 257.328125,
           "w": 52.3125,
           "h": 34
         }
@@ -369,16 +393,16 @@
         "hidden": true
       },
       "chat": {
-        "x": 16,
-        "y": 484.5,
-        "w": 358,
-        "h": 235.5,
+        "x": 12,
+        "y": 56,
+        "w": 366,
+        "h": 672,
         "hidden": false
       },
       "composer": {
-        "x": 31,
-        "y": 661,
-        "w": 328,
+        "x": 27,
+        "y": 669,
+        "w": 336,
         "h": 44,
         "hidden": false
       },
@@ -386,7 +410,7 @@
         "x": 16,
         "y": 76,
         "w": 358,
-        "h": 348.5,
+        "h": 596,
         "hidden": false
       },
       "context": {
@@ -405,13 +429,21 @@
       },
       "canvas": 358,
       "chatGrowth": {
-        "short": 189.296875,
-        "long": 259,
-        "capped": 259,
+        "short": 672,
+        "long": 672,
+        "capped": 672,
         "overflow": true,
-        "restored": 235.5,
-        "composerBottom": 705,
-        "sphereHeight": 325
+        "restored": 672,
+        "composerBottom": 713,
+        "panelBottom": 728,
+        "sphereHeight": 596
+      },
+      "chatToggle": {
+        "initiallyOpen": false,
+        "closed": {
+          "sphereWidth": 358,
+          "emptySidebar": true
+        }
       }
     }
   ],

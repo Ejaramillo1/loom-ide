@@ -290,3 +290,13 @@ Final verification in `judge/verdicts/20261117-205511.md`: 147 frontend,
 145 Tauri passed / 2 ignored, 22 native, build, scoped fmt, four layouts and
 32 rendered-state captures passed. Live model turns and native-window pixels
 were not checked.
+
+
+## Conversation extends to the window bottom — 17 November 2026
+
+The Overview conversation (right column) now extends flush to the bottom of the
+window, leaving the 12px shell gap, instead of a compact card capped at 60dvh.
+The message log scrolls inside the panel while the composer stays pinned at the
+bottom; the panel height no longer grows or shrinks with reply length. The
+sphere keeps its 260px minimum. Browser smoke now asserts the panel reaches the
+bottom and that its height stays fixed while the log scrolls.

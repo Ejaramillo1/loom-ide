@@ -3903,21 +3903,21 @@ body.right-hidden .scene[data-mode="spatial"] .main {
 body.right-hidden .scene[data-mode="spatial"] .right-col {
   display: none; position: relative; inset: auto; width: auto; order: initial;
   transform: none; visibility: visible; transition: none;
-  align-self: start; max-height: 100%;
+  align-self: stretch;
   background: transparent; border: 0; box-shadow: none; backdrop-filter: none;
 }
 #view-spatial { gap: 12px; overflow: visible; }
 .spatial-stage { position: relative; display: flex; flex: 1; min-height: 260px; }
 #spatial-chat-slot { display: none; }
-.scene[data-mode="spatial"] #spatial-chat-slot { display: flex; flex-shrink: 1; min-height: 0; width: 100%; }
+.scene[data-mode="spatial"] #spatial-chat-slot { display: flex; flex: 1 1 auto; min-height: 0; width: 100%; }
 .scene[data-mode="spatial"] #spatial-chat-slot:has(#chat-panel[hidden]) { display: none; }
 .scene[data-mode="spatial"] .chat-panel {
-  flex: 0 1 auto; height: auto; max-height: clamp(240px, 60dvh, 620px);
+  flex: 1 1 auto; min-height: 0;
   width: 100%; border: 1px solid var(--line); border-radius: 22px;
   background: rgb(var(--theme-surface-rgb) / .35); padding: 14px;
 }
-/* Intrinsic content grows the panel as tokens arrive; overflow stays in the log. */
-.scene[data-mode="spatial"] .chat-log { flex: 0 1 auto; }
+/* The panel fills the column to the bottom; the log scrolls inside it. */
+.scene[data-mode="spatial"] .chat-log { flex: 1 1 auto; }
 .scene[data-mode="spatial"] :is(.right-head, .right-resize, .drawer-close) { display: none; }
 .scene[data-mode="spatial"] #inspector-context { flex: 0 1 auto; padding: 0; }
 .scene[data-mode="spatial"] #inspector-context:not(:has(#attention-panel:not([hidden]))) { display: none; }
@@ -3939,8 +3939,8 @@ body.right-hidden .scene[data-mode="spatial"] .right-col {
   .scene[data-mode="spatial"] .center { height: calc(100dvh - 96px); min-height: 500px; }
   .scene[data-mode="spatial"] .right-col { grid-column: 1; min-height: 220px; overflow: visible; }
   .scene[data-mode="spatial"] .right-col:has(#chat-panel:not([hidden])) {
-    position: fixed; top: var(--header-offset, var(--header-h)); right: 12px; left: auto; bottom: auto;
-    width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - var(--header-h) - 12px);
+    position: fixed; top: var(--header-offset, var(--header-h)); right: 12px; left: auto; bottom: 12px;
+    width: min(440px, calc(100vw - 24px));
     min-height: 0; z-index: 40;
   }
   .scene[data-mode="spatial"] .chat-panel { background: var(--reading); }
