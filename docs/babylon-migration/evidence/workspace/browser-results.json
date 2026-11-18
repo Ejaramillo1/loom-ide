@@ -1,0 +1,253 @@
+{
+  "base": "http://127.0.0.1:4183",
+  "network": "Loom HTTP calls blocked: disposable offline UI test; no live turns",
+  "reports": [
+    {
+      "name": "desktop-dark",
+      "width": 1366,
+      "height": 650,
+      "bodyWidth": 1366,
+      "chatParent": "spatial-chat-slot",
+      "work": {
+        "x": 31.3125,
+        "y": 210.5,
+        "w": 293.609375,
+        "h": 33.21875,
+        "hidden": false
+      },
+      "chat": {
+        "x": 27.3125,
+        "y": 263.71875,
+        "w": 301.609375,
+        "h": 302.78125,
+        "hidden": false
+      },
+      "composer": {
+        "x": 42.3125,
+        "y": 507.5,
+        "w": 271.609375,
+        "h": 44,
+        "hidden": false
+      },
+      "sphere": {
+        "x": 356.234375,
+        "y": 76,
+        "w": 653.53125,
+        "h": 490.5,
+        "hidden": false
+      },
+      "context": {
+        "x": 1037.078125,
+        "y": 76,
+        "w": 301.609375,
+        "h": 490.5,
+        "hidden": false
+      },
+      "collaboration": {
+        "x": 1058.078125,
+        "y": 134,
+        "w": 259.609375,
+        "h": 41.59375,
+        "hidden": false
+      },
+      "attention": {
+        "x": 1058.078125,
+        "y": 307.09375,
+        "w": 259.609375,
+        "h": 22.5,
+        "hidden": false
+      },
+      "nav": {
+        "y": 586.5,
+        "h": 47.5
+      },
+      "canvas": 654
+    },
+    {
+      "name": "reference-light",
+      "width": 1671,
+      "height": 941,
+      "bodyWidth": 1671,
+      "chatParent": "spatial-chat-slot",
+      "work": {
+        "x": 37.40625,
+        "y": 210.5,
+        "w": 360.953125,
+        "h": 103.046875,
+        "hidden": false
+      },
+      "chat": {
+        "x": 33.40625,
+        "y": 333.546875,
+        "w": 368.953125,
+        "h": 523.953125,
+        "hidden": false
+      },
+      "composer": {
+        "x": 48.40625,
+        "y": 798.5,
+        "w": 338.953125,
+        "h": 44,
+        "hidden": false
+      },
+      "sphere": {
+        "x": 434.359375,
+        "y": 76,
+        "w": 802.28125,
+        "h": 781.5,
+        "hidden": false
+      },
+      "context": {
+        "x": 1268.640625,
+        "y": 76,
+        "w": 368.953125,
+        "h": 781.5,
+        "hidden": false
+      },
+      "collaboration": {
+        "x": 1289.640625,
+        "y": 134,
+        "w": 326.953125,
+        "h": 20.796875,
+        "hidden": false
+      },
+      "attention": {
+        "x": 1289.640625,
+        "y": 286.296875,
+        "w": 326.953125,
+        "h": 22.5,
+        "hidden": false
+      },
+      "nav": {
+        "y": 877.5,
+        "h": 47.5
+      },
+      "canvas": 802
+    },
+    {
+      "name": "tablet",
+      "width": 900,
+      "height": 720,
+      "bodyWidth": 900,
+      "chatParent": "spatial-chat-slot",
+      "work": {
+        "x": 22,
+        "y": 210.5,
+        "w": 289.140625,
+        "h": 49.890625,
+        "hidden": false
+      },
+      "chat": {
+        "x": 18,
+        "y": 280.390625,
+        "w": 297.140625,
+        "h": 355.609375,
+        "hidden": false
+      },
+      "composer": {
+        "x": 33,
+        "y": 577,
+        "w": 267.140625,
+        "h": 44,
+        "hidden": false
+      },
+      "sphere": {
+        "x": 333.140625,
+        "y": 76,
+        "w": 533.859375,
+        "h": 380,
+        "hidden": false
+      },
+      "context": {
+        "x": 333.140625,
+        "y": 474,
+        "w": 533.859375,
+        "h": 300,
+        "hidden": false
+      },
+      "collaboration": {
+        "x": 354.140625,
+        "y": 532,
+        "w": 491.859375,
+        "h": 20.796875,
+        "hidden": false
+      },
+      "attention": {
+        "x": 354.140625,
+        "y": 684.296875,
+        "w": 491.859375,
+        "h": 22.5,
+        "hidden": false
+      },
+      "nav": {
+        "y": 658.5,
+        "h": 45.5
+      },
+      "canvas": 534
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "height": 740,
+      "bodyWidth": 390,
+      "chatParent": "spatial-chat-slot",
+      "work": {
+        "x": 20,
+        "y": 582.5,
+        "w": 335,
+        "h": 45.09375,
+        "hidden": false
+      },
+      "chat": {
+        "x": 16,
+        "y": 647.59375,
+        "w": 343,
+        "h": 340.40625,
+        "hidden": false
+      },
+      "composer": {
+        "x": 31,
+        "y": 929,
+        "w": 313,
+        "h": 44,
+        "hidden": false
+      },
+      "sphere": {
+        "x": 16,
+        "y": 76,
+        "w": 343,
+        "h": 360,
+        "hidden": false
+      },
+      "context": {
+        "x": 16,
+        "y": 1000,
+        "w": 343,
+        "h": 300,
+        "hidden": false
+      },
+      "collaboration": {
+        "x": 37,
+        "y": 1058,
+        "w": 301,
+        "h": 20.796875,
+        "hidden": false
+      },
+      "attention": {
+        "x": 37,
+        "y": 1210.296875,
+        "w": 301,
+        "h": 22.5,
+        "hidden": false
+      },
+      "nav": {
+        "y": 654,
+        "h": 76
+      },
+      "canvas": 343
+    }
+  ],
+  "dynamicWorkHeader": true,
+  "qualityAndRecovery": true,
+  "exceptions": []
+}

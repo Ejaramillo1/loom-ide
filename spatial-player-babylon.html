@@ -7,57 +7,13 @@
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/spatial-player.css" />
     <style>
-      /* Babylon sphere stage: continuous atmospheric background, subtle
-         diagonal light, and a soft shadow + reflection under the sphere.
-         The canvas is transparent so this CSS shows through (v2 Stage 1.2). */
-      body { position: relative; }
-      #babylon-stage {
-        position: absolute;
-        inset: 0;
-        background:
-          radial-gradient(120% 90% at 28% 12%, rgb(255 249 243 / 0.85), transparent 58%),
-          linear-gradient(180deg, #f5f0eb, #efe6dd 55%, #e7dcd1);
-      }
-      body[data-theme="dark"] #babylon-stage {
-        background:
-          radial-gradient(120% 90% at 28% 12%, rgb(84 74 67 / 0.5), transparent 58%),
-          linear-gradient(180deg, #1d1b1a, #24201e 55%, #1a1817);
-      }
-      body[data-background="dusk"] #babylon-stage { background: radial-gradient(ellipse at 28% 12%, #e7d2cf, transparent 65%), #b9a7ad; }
-      body[data-background="moss"] #babylon-stage { background: radial-gradient(ellipse at 28% 12%, #e1dfd2, transparent 65%), #9caaa0; }
-      body[data-background="night"] #babylon-stage { background: radial-gradient(ellipse at 28% 12%, #494550, transparent 65%), #24232b; }
-      #babylon-canvas {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        display: block;
-      }
-      #sphere-shadow {
-        position: absolute;
-        left: 50%;
-        top: 62%;
-        width: 46%;
-        height: 6%;
-        transform: translate(-50%, -50%);
-        background: radial-gradient(50% 50% at 50% 50%, rgb(65 48 38 / 0.18), transparent 70%);
-        filter: blur(2px);
-        pointer-events: none;
-      }
-      #sphere-reflection {
-        position: absolute;
-        left: 50%;
-        top: 73%;
-        width: 34%;
-        height: 2%;
-        transform: translate(-50%, -50%);
-        background: linear-gradient(180deg, transparent, rgb(255 249 243 / 0.22));
-        filter: blur(1px);
-        pointer-events: none;
-      }
-      body[data-theme="dark"] #sphere-reflection {
-        background: linear-gradient(180deg, transparent, rgb(240 233 226 / 0.12));
-      }
+      html, body, body[data-theme="dark"] { background: transparent; }
+      body { position: relative; --orb-size: min(60vw, 60vh); }
+      #babylon-stage { position: absolute; inset: 0; }
+      #babylon-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      #sphere-shadow, #sphere-reflection { position: absolute; pointer-events: none; left: 50%; transform: translateX(-50%); border-radius: 50%; }
+      #sphere-shadow { top: calc(50% + var(--orb-size) * .48); width: calc(var(--orb-size) * 1.1); height: calc(var(--orb-size) * .10); background: radial-gradient(ellipse, rgb(50 37 32 / .20), transparent 70%); filter: blur(8px); }
+      #sphere-reflection { top: calc(50% + var(--orb-size) * .57); width: calc(var(--orb-size) * .85); height: calc(var(--orb-size) * .22); background: radial-gradient(ellipse at 50% 0%, rgb(248 238 230 / .17), transparent 70%); filter: blur(10px); }
     </style>
   </head>
   <body>

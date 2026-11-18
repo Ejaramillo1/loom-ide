@@ -2,7 +2,6 @@ import { expect, it, vi } from "vitest";
 import { transformWithOxc } from "vite";
 import source from "./main.ts?raw";
 import indexHtml from "../index.html?raw";
-import styleCss from "./style.css?raw";
 
 // Exercise the existing imperative pane/router code without booting integrations or a browser.
 async function shell(width: number) {
@@ -17,6 +16,7 @@ async function shell(width: number) {
       nodes.set(id, { id, dataset: {}, hidden: false, value: "", attrs: {} as Record<string, string>, handlers: {} as Record<string, (e: any) => void>,
         classList: { contains: (c: string) => classes.has(c), remove: (c: string) => classes.delete(c), add: (c: string) => classes.add(c), toggle: (c: string, on: boolean) => on ? classes.add(c) : classes.delete(c) },
         setAttribute(key: string, value: string) { this.attrs[key] = value; }, removeAttribute(key: string) { delete this.attrs[key]; },
+        append(child: any) { child.parentElement = this; },
         focus() { active = this; }, closest: () => null,
         addEventListener(type: string, fn: (e: any) => void) { this.handlers[type] = fn; },
         style: { setProperty: () => {}, removeProperty: () => {} },
@@ -66,8 +66,9 @@ it("starts Spatial with conversation on desktop and restores the other modes' in
   expect(node("scrim").hidden).toBe(true);
 });
 
-it("keeps the narrow conversation drawer exclusive and returns focus on closing", async () => {
+it("keeps other modes narrow conversation drawer exclusive and returns focus on closing", async () => {
   const { node, api, active } = await shell(900);
+  api.setMode("code");
   expect(node("body").classList.contains("right-open")).toBe(false);
   api.openRight("conversation", node("chat-toggle"));
   expect(active()).toBe(node("chat-text"));
@@ -90,9 +91,28 @@ it("keeps the inspector tab visible on other modes and the conversation on Spati
   expect(node("body").classList.contains("right-open")).toBe(false);
 });
 
-it("leaves no footer markup or mode-nav/mode-btn code anywhere", () => {
-  for (const [name, text] of [["main.ts", source], ["index.html", indexHtml], ["style.css", styleCss]] as const) {
-    expect(text, `${name} must not reference the removed footer`).not.toMatch(/app-footer|mode-nav|mode-btn/);
+it("provides persistent navigation and six accessible orbital shortcuts", () => {
+  expect(indexHtml).toContain('class="workspace-nav"');
+  expect(indexHtml).toContain('aria-label="Workspace shortcuts"');
+  expect(indexHtml.match(/data-workspace-mode=/g)).toHaveLength(13);
+  expect(source).toContain('button.dataset.workspaceMode as Mode');
+});
+
+it("keeps chat and context visible together in Spatial, including narrow widths", async () => {
+  for (const width of [390, 900, 1280, 1600]) {
+    const { node, api } = await shell(width);
+    const chat = node("chat-panel");
+    expect(chat.parentElement).toBe(node("spatial-chat-slot"));
+    expect(chat.hidden).toBe(false);
+    expect(node("inspector-context").hidden).toBe(false);
+    api.openRight("context");
+    expect(chat.hidden).toBe(false);
+    expect(api.expandChatOnReply()).toBe(false);
+    api.setMode("code");
+    expect(chat.parentElement).toBe(node("right-col"));
+    api.setMode("spatial");
+    expect(node("chat-panel")).toBe(chat);
+    expect(chat.parentElement).toBe(node("spatial-chat-slot"));
   }
 });
 
@@ -103,8 +123,10 @@ it("offers Spatial first in the View menu", () => {
   expect(decl.replace(/\s+/g, "")).toContain('["spatial","code","experiment","work","agents","knowledge"');
 });
 
-it("widens the conversation panel once when a reply begins and resets on close", async () => {
-  const { api } = await shell(1280);
+it("widens other modes conversation once when a reply begins and resets on close", async () => {
+  const { api } = await shell(1600);
+  api.setMode("code");
+  api.openRight("conversation");
   expect(api.rightColWidth()).toBeNull();
   expect(api.expandChatOnReply()).toBe(true);
   const expanded = api.rightColWidth();
@@ -124,7 +146,7 @@ it("does not widen unless the conversation is open in the desktop column", async
   expect(desktop.api.rightColWidth()).toBeNull();
 
   const narrow = await shell(900);
-  expect(narrow.api.isRightDrawer()).toBe(true);
+  expect(narrow.api.isRightDrawer()).toBe(false);
   expect(narrow.api.expandChatOnReply()).toBe(false);
   expect(narrow.api.rightColWidth()).toBeNull();
 });
@@ -134,4 +156,16 @@ it("clamps the column width to its supported range", async () => {
   expect(api.clampRightCol(100)).toBe(260);
   expect(api.clampRightCol(400)).toBe(400);
   expect(api.clampRightCol(5000)).toBe(768);
+});
+
+it("draft restoration never overwrites text entered while startup was pending", async () => {
+  const start = source.indexOf("function restoreChatDraft()");
+  const {code} = await transformWithOxc(source.slice(start,source.indexOf("function showChatHint()",start)),"draft-restore-check.ts");
+  const input={value:""};
+  const restore=new Function("$","localStorage","CHAT_DRAFT_KEY", code+";return restoreChatDraft;")(()=>input,{getItem:()=>"saved draft"},"draft");
+  restore();
+  expect(input.value).toBe("saved draft");
+  input.value="new text";
+  restore();
+  expect(input.value).toBe("new text");
 });

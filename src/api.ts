@@ -1020,8 +1020,32 @@ export async function createSession(
   return invokeCmd<Session>("create_session", { name, agentId });
 }
 
+function browserAgent(value: unknown): Agent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Loom returned an invalid agent.");
+  const item = value as Record<string, unknown>;
+  const text = (key: string) => {
+    const field = item[key] ?? "";
+    if (typeof field !== "string") throw new Error(`Loom returned invalid agent ${key}.`);
+    return field;
+  };
+  const integer = (snake: string, camel: string) => {
+    const raw = item[snake] ?? item[camel] ?? 0;
+    const number = typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : raw;
+    if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 0) throw new Error(`Loom returned invalid agent ${camel}.`);
+    return number;
+  };
+  return {
+    id: text("id"), name: text("name"), status: text("status"), error: text("error"),
+    uptime_seconds: integer("uptime_seconds", "uptimeSeconds"), active_sessions: integer("active_sessions", "activeSessions"),
+    total_messages: integer("total_messages", "totalMessages"), created_at: integer("created_at", "createdAt"), updated_at: integer("updated_at", "updatedAt"),
+  };
+}
+
 export async function listAgents(): Promise<Agent[]> {
-  return invokeCmd<Agent[]>("list_agents");
+  if (IN_TAURI) return invokeCmd<Agent[]>("list_agents");
+  const response = await loomRequest("/v1/agents");
+  if (!response || !Array.isArray(response.agents)) throw new Error("Loom returned an invalid agents list.");
+  return response.agents.map(browserAgent);
 }
 
 export async function getSessionHistory(sessionId: string): Promise<HistoryMessage[]> {
@@ -1173,7 +1197,9 @@ export async function listTools(): Promise<ToolDefinition[]> {
 // ---- Agent details (real Loom server) ----
 
 export async function getAgent(agentId: string): Promise<Agent> {
-  return invokeCmd<Agent>("get_agent", { agentId });
+  if (IN_TAURI) return invokeCmd<Agent>("get_agent", { agentId });
+  if (!agentId.trim()) throw new Error("No agent selected.");
+  return browserAgent(await loomRequest(`/v1/agents/${encodeURIComponent(agentId)}`));
 }
 
 // ---- Models + providers (real Loom server) ----

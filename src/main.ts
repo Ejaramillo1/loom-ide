@@ -240,6 +240,7 @@ let sessions: Session[] = [];
 let selectedSessionId: string | null = null;
 let sessionDetail: SessionDetail | null = null;
 let agents: Agent[] = [];
+let agentsLoadError = false;
 let selectedAgentId: string | null = null;
 let selectedAgentDetail: Agent | null = null;
 let tools: ToolDefinition[] = [];
@@ -3185,6 +3186,7 @@ function emptyP(text: string): HTMLElement {
 // ---------------------------------------------------------------------------
 
 function renderInspectorContext() {
+  renderCollaboration();
   renderAttention(attentionItems);
   renderInspectorSessionDetail();
   renderInspectorAgentDetail();
@@ -3194,6 +3196,49 @@ function renderInspectorContext() {
   renderInspectorArtifactStats();
   renderInspectorServerConfig();
   renderInspectorStorageStatus();
+}
+
+/** Only server-reported agent state is shown; no inferred steps or progress. */
+function renderCollaboration() {
+  const host = document.getElementById("collaboration-summary");
+  if (!host) return;
+  host.replaceChildren();
+  if (!loomStatusKnown || agentsLoadError || !loomReachable || agents.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "collaboration-empty";
+    empty.textContent = !loomStatusKnown ? "Checking the connection to Loom…"
+      : !loomReachable ? "Loom is offline. Connect to see agent activity."
+      : agentsLoadError ? "Agent activity is unavailable. Open Agents to retry."
+      : "No agents are registered. Open Agents to configure one.";
+    host.append(empty);
+    return;
+  }
+  for (const agent of agents) {
+    const row = document.createElement("div");
+    row.className = "collaboration-agent";
+    const orb = document.createElement("span");
+    orb.className = "collaboration-orb";
+    orb.setAttribute("aria-hidden", "true");
+    const content = document.createElement("div");
+    const name = document.createElement("button");
+    name.type = "button";
+    name.textContent = agent.name || agent.id;
+    name.addEventListener("click", () => {
+      setMode("agents");
+      void openAgentDetail(agent.id);
+    });
+    const detail = document.createElement("p");
+    const count = agent.active_sessions;
+    detail.textContent = `${agent.status || "State not reported"} · ${count} active session${count === 1 ? "" : "s"}`;
+    content.append(name, detail);
+    if (agent.error) {
+      const error = document.createElement("p");
+      error.textContent = agent.error;
+      content.append(error);
+    }
+    row.append(orb, content);
+    host.append(row);
+  }
 }
 
 function renderInspectorSessionDetail() {
@@ -3814,7 +3859,7 @@ function resetRightColWidth() {
     the conversation tab is open in the desktop column and no manual width is
     set; returns true when it actually expanded. */
 function expandChatOnReply(): boolean {
-  if (rightTab !== "conversation" || !rightOpen || isRightDrawer()) return false;
+  if (mode === "spatial" || rightTab !== "conversation" || !rightOpen || isRightDrawer()) return false;
   if (rightColWidth !== null) return false;
   rightColWidth = rightColExpanded();
   applyRightColWidth();
@@ -3822,11 +3867,11 @@ function expandChatOnReply(): boolean {
 }
 
 function isRightDrawer(): boolean {
-  return !window.matchMedia(mode === "spatial" ? "(min-width: 1100px)" : "(min-width: 1440px)").matches;
+  return mode !== "spatial" && !window.matchMedia("(min-width: 1440px)").matches;
 }
 
 function isLeftDrawer(): boolean {
-  return !window.matchMedia("(min-width: 1100px)").matches;
+  return mode !== "spatial" && !window.matchMedia("(min-width: 1100px)").matches;
 }
 
 
@@ -3842,8 +3887,22 @@ function applyRightPane() {
   document.body.classList.toggle("right-hidden", !rightOpen);
   const contextPane = document.getElementById("inspector-context");
   const chatPane = document.getElementById("chat-panel");
-  if (contextPane) contextPane.hidden = rightTab !== "context";
-  if (chatPane) chatPane.hidden = rightTab !== "conversation";
+  const spatial = mode === "spatial";
+  const destination = document.getElementById(spatial ? "spatial-chat-slot" : "right-col");
+  if (chatPane && destination && chatPane.parentElement !== destination) destination.append(chatPane);
+  if (contextPane) {
+    contextPane.hidden = !spatial && rightTab !== "context";
+    contextPane.setAttribute("role", spatial ? "region" : "tabpanel");
+    contextPane.setAttribute("aria-label", "Collaboration and attention");
+    if (spatial) contextPane.removeAttribute("aria-labelledby");
+    else contextPane.setAttribute("aria-labelledby", "tab-context");
+  }
+  if (chatPane) {
+    chatPane.hidden = !spatial && rightTab !== "conversation";
+    chatPane.setAttribute("role", spatial ? "region" : "tabpanel");
+    if (spatial) chatPane.removeAttribute("aria-labelledby");
+    else chatPane.setAttribute("aria-labelledby", "tab-conversation");
+  }
 
   const contextTab = document.getElementById("tab-context");
   const chatTab = document.getElementById("tab-conversation");
@@ -3854,7 +3913,8 @@ function applyRightPane() {
 
   const chatToggle = document.getElementById("chat-toggle");
   chatToggle?.classList.toggle("active", rightOpen && rightTab === "conversation");
-  chatToggle?.setAttribute("aria-expanded", String(rightOpen));
+  chatToggle?.setAttribute("aria-expanded", String(mode === "spatial" || rightOpen));
+  chatToggle?.setAttribute("aria-controls", mode === "spatial" ? "chat-panel" : "right-col");
   updateScrim();
 }
 
@@ -5448,6 +5508,7 @@ if (!BACKGROUNDS.some((b) => b.id === backgroundId)) backgroundId = "charcoal";
 function setBackground(id: string) {
   if (!BACKGROUNDS.some((b) => b.id === id)) return;
   backgroundId = id;
+  document.documentElement.dataset.background = id;
   localStorage.setItem(BACKGROUND_KEY, id);
   notifySpatialBackground(id);
 }
@@ -5600,7 +5661,7 @@ function saveChatDraft() {
 
 function restoreChatDraft() {
   const input = $("#chat-text") as HTMLInputElement;
-  input.value = localStorage.getItem(CHAT_DRAFT_KEY) ?? "";
+  if (!input.value) input.value = localStorage.getItem(CHAT_DRAFT_KEY) ?? "";
 }
 function showChatHint() {
   const log = $("#chat-log");
@@ -6549,9 +6610,11 @@ async function refreshSessions() {
 async function refreshAgents() {
   try {
     agents = await listAgents();
+    agentsLoadError = false;
     setLoomReachable(true);
   } catch (err) {
     agents = [];
+    agentsLoadError = true;
     if (isLoomConnectionError(err)) setLoomReachable(false);
   }
   renderAgentBar();
@@ -8017,6 +8080,7 @@ function initAppMenu() {
           run: () => {
             layerOn[layer.id] = !layerOn[layer.id];
             applyLayerClasses();
+  document.documentElement.dataset.background = backgroundId;
             saveLayers();
           },
         })),
@@ -8036,6 +8100,8 @@ function initAppMenu() {
 }
 
 function closeMenus() {
+  const controls = document.querySelector<HTMLDetailsElement>(".application-controls");
+  if (controls) controls.open = false;
   appMenu?.close();
   setChatMenu(false);
 }
@@ -8090,6 +8156,8 @@ function renderStatusPill() {
   const state = currentLoomState();
   pill.title += ` ${CAPTIONS[state]}`;
   pill.dataset.state = state;
+  const caption = document.getElementById("spatial-state-caption");
+  if (caption) caption.textContent = !loomStatusKnown ? "Checking the connection to Loom…" : `${text.textContent} · ${CAPTIONS[state]}`;
   notifySpatialState(state);
 }
 
@@ -8121,6 +8189,10 @@ function setMode(next: Mode) {
   // The scene follows the mode: water + full atmosphere only in Experiment.
   document.querySelector(".scene")?.setAttribute("data-mode", next);
   applyRightPane();
+  document.querySelectorAll<HTMLElement>("[data-workspace-mode]").forEach(button => {
+    if (button.dataset.workspaceMode === next) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  });
   closeMenus();
 }
 
@@ -8285,6 +8357,63 @@ async function init() {
   rightWasDrawer = isRightDrawer();
   applyRightPane();
   initAppMenu();
+  document.querySelector(".application-controls")?.addEventListener("click", event => {
+    if ((event.target as HTMLElement).closest(".app-menu-panel button")) {
+      (document.querySelector(".application-controls") as HTMLDetailsElement).open = false;
+    }
+  });
+  renderCollaboration();
+  renderAttention(attentionItems);
+  loadChatCache();
+  loadRunRecords();
+  loadPendingHits();
+  loadOwnershipMaps();
+  // Chat starts empty, with a short hint. A draft typed earlier is
+  // restored, so closing the panel never loses an unsent message.
+  showChatHint();
+  restoreChatDraft();
+  renderStatusPill();
+  $("#chat-text").addEventListener("input", saveChatDraft);
+  $("#chat-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("#chat-text") as HTMLInputElement;
+    const text = input.value;
+    input.value = "";
+    localStorage.removeItem(CHAT_DRAFT_KEY);
+    await sendChat(text);
+  });
+
+  // Streaming weave events arrive over the backend's SSE bridge.
+  if (isTauri) {
+    await listen<LoomStreamEvent>("loom-stream", (event) => {
+      handleStreamEvent(event.payload);
+    });
+    await listen<StreamEnvelope<WorkflowProgressEvent>>("loom-workflow", (event) => {
+      handleWorkflowStreamEvent(event.payload);
+    });
+    await listen<StreamEnvelope<AbTestEvent>>("loom-abtest", (event) => {
+      handleAbtestEvent(event.payload);
+    });
+    await listen<StreamEnvelope<unknown>>("loom-session", (event) => {
+      handleSessionEvent(event.payload);
+    });
+    await listen<StreamEnvelope<unknown>>("loom-tasks", (event) => {
+      handleTaskBoardEvent(event.payload);
+    });
+    await listen<StreamEnvelope<unknown>>("loom-patterns", (event) => {
+      handlePatternEvent(event.payload);
+    });
+    await listen<StreamEnvelope<unknown>>("loom-skills", (event) => {
+      handleSkillImportEvent(event.payload);
+    });
+  }
+  const stopBtn = $("#chat-stop") as HTMLButtonElement | null;
+  if (stopBtn) stopBtn.addEventListener("click", () => {
+    if (activeStreamId) {
+      const st = activeStreams.get(activeStreamId);
+      if (st) requestChatCancellation(activeStreamId, st);
+    }
+  });
   // Initialize local views before any Loom requests finish.
   initCodeEditor();
   // Monaco follows the app's Dark/White appearance (set via data-theme).
@@ -8390,10 +8519,21 @@ async function init() {
     }
   });
 
+  document.querySelectorAll<HTMLButtonElement>("[data-workspace-mode]").forEach(button => {
+    button.addEventListener("click", () => {
+      setMode(button.dataset.workspaceMode as Mode);
+      if (button.dataset.workspaceSection === "evidence") knowledge?.showEvidence?.();
+      document.querySelector<HTMLElement>('.workspace-nav [aria-current="page"]')?.focus();
+    });
+  });
+  document.querySelector<HTMLElement>('.workspace-nav [data-workspace-mode="spatial"]')?.setAttribute("aria-current", "page");
+  $("#collaboration-open").addEventListener("click", () => setMode("agents"));
+
   // Header: the objective banner opens the selected work in the Work view.
   $("#objective-btn").addEventListener("click", () => setMode("work"));
 
   $("#chat-toggle").addEventListener("click", (e) => {
+    if (mode === "spatial") { focusChat(e.currentTarget as HTMLElement); return; }
     if (rightOpen && rightTab === "conversation") closeRight();
     else openRight("conversation", e.currentTarget as HTMLElement);
   });
@@ -8572,10 +8712,6 @@ async function init() {
   // session is the source of truth for the conversation; switch to it.
   await refreshAgents();
   await refreshSessions();
-  loadChatCache();
-  loadRunRecords();
-  loadPendingHits();
-  loadOwnershipMaps();
   syncSessionToWork();
   // Restore the saved session/agent selection when no work item supplies
   // one (the keys were previously written but never read back).
@@ -8665,52 +8801,6 @@ async function init() {
     }
   });
 
-  // Chat starts empty, with a short hint. A draft typed earlier is
-  // restored, so closing the panel never loses an unsent message.
-  showChatHint();
-  restoreChatDraft();
-  renderStatusPill();
-  $("#chat-text").addEventListener("input", saveChatDraft);
-  $("#chat-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const input = $("#chat-text") as HTMLInputElement;
-    const text = input.value;
-    input.value = "";
-    localStorage.removeItem(CHAT_DRAFT_KEY);
-    await sendChat(text);
-  });
-
-  // Streaming weave events arrive over the backend's SSE bridge.
-  if (isTauri) {
-    await listen<LoomStreamEvent>("loom-stream", (event) => {
-      handleStreamEvent(event.payload);
-    });
-    await listen<StreamEnvelope<WorkflowProgressEvent>>("loom-workflow", (event) => {
-      handleWorkflowStreamEvent(event.payload);
-    });
-    await listen<StreamEnvelope<AbTestEvent>>("loom-abtest", (event) => {
-      handleAbtestEvent(event.payload);
-    });
-    await listen<StreamEnvelope<unknown>>("loom-session", (event) => {
-      handleSessionEvent(event.payload);
-    });
-    await listen<StreamEnvelope<unknown>>("loom-tasks", (event) => {
-      handleTaskBoardEvent(event.payload);
-    });
-    await listen<StreamEnvelope<unknown>>("loom-patterns", (event) => {
-      handlePatternEvent(event.payload);
-    });
-    await listen<StreamEnvelope<unknown>>("loom-skills", (event) => {
-      handleSkillImportEvent(event.payload);
-    });
-  }
-  const stopBtn = $("#chat-stop") as HTMLButtonElement | null;
-  if (stopBtn) stopBtn.addEventListener("click", () => {
-    if (activeStreamId) {
-      const st = activeStreams.get(activeStreamId);
-      if (st) requestChatCancellation(activeStreamId, st);
-    }
-  });
   // The header pill is also the re-check control: click to probe again.
   $("#loom-status").addEventListener("click", () => {
     void getLoomStatus().then((s) => setLoomReachable(s.online));

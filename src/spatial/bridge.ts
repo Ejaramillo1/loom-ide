@@ -41,6 +41,7 @@ export function startSpatialBridge(
   const theme = env.themeFromParams();
   const background = env.backgroundFromParams();
   if (document.body) document.body.dataset.theme = theme;
+  if (document.documentElement) document.documentElement.style.colorScheme = "normal";
 
   let ready = false;
   let disposed = false;
@@ -82,6 +83,7 @@ export function startSpatialBridge(
       if (d.theme !== "white" && d.theme !== "dark") return;
       const next = d.theme;
       if (document.body) document.body.dataset.theme = next;
+      if (document.documentElement) document.documentElement.style.colorScheme = "normal";
       if (ready) api.applyTheme(next);
       else pendingTheme = next;
     } else if (type === "loom-vault-changed") {

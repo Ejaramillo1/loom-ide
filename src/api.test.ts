@@ -28,6 +28,8 @@ import {
   getArtifactContent,
   getIntents,
   getLoomStatus,
+  listAgents,
+  getAgent,
   getTrace,
   getWorkItems,
   searchArtifacts,
@@ -482,5 +484,22 @@ describe("trace / model / artifact content / artifact search (Tauri-only wrapper
     await expect(searchArtifacts("memory")).rejects.toThrow(
       /"search_artifacts" needs the Tauri app/,
     );
+  });
+});
+
+describe("browser agent activity", () => {
+  it("uses the real read-only gateway and normalizes protojson fields", async () => {
+    const agent={id:"a1",name:"Agent fixture",status:"running",activeSessions:2,uptimeSeconds:"90",totalMessages:"4"};
+    const request=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({agents:[agent]}))).mockResolvedValueOnce(new Response(JSON.stringify(agent)));
+    vi.stubGlobal("fetch",request);
+    expect(await listAgents()).toEqual([expect.objectContaining({id:"a1",active_sessions:2,uptime_seconds:90,total_messages:4})]);
+    await getAgent("a/1");
+    expect(request).toHaveBeenLastCalledWith("/api/loom/v1/agents/a%2F1",expect.objectContaining({method:"GET"}));
+  });
+  it("refuses malformed activity instead of fabricating counts", async () => {
+    const request=vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({agents:[{id:"a1",activeSessions:"bad"}]}))).mockResolvedValueOnce(new Response(JSON.stringify({agents:{}})));
+    vi.stubGlobal("fetch",request);
+    await expect(listAgents()).rejects.toThrow(/invalid agent activeSessions/);
+    await expect(listAgents()).rejects.toThrow(/invalid agents list/);
   });
 });

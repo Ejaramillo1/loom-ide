@@ -240,3 +240,20 @@ goes with it.
   reopening returns to the default width. Drawer behaviour is unchanged at
   narrow widths.
 
+
+
+## Spatial workspace screenshot repair — 17 November 2026
+
+Replaced the pilot's two-region Spatial shell with visible Work/chat, sphere
+and HTML navigation, and collaboration/attention regions. Chat identity and
+drafts survive routing; narrow layouts scroll instead of hiding the composer.
+The pearl renderer now uses procedural contours and a fading reflection with
+a transparent, theme-compatible iframe. Agent list/detail can be read in the
+browser through the existing gateway. No demo activity is inserted.
+
+Verification: frontend 144 tests / 16 files; Tauri 145 passed / 2 ignored;
+native 22; build, scoped fmt and Tauri release build passed. Browser viewport,
+navigation, draft, quality and recovery evidence is recorded separately in
+`babylon-migration/workspace-repair.md` and `evidence/workspace/`. No native
+window pixel or live model-turn claim. Unity Editor is not running; its legacy
+recompile command returned exit 12 and does not validate the Babylon renderer.

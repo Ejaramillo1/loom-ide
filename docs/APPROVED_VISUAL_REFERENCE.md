@@ -1,3 +1,10 @@
+> **Current composition — 17 November 2026:** the screenshot repair supersedes
+> the historical Unity/Graph/Canvas composition below. Spatial uses Babylon's
+> pearl sphere, HTML orbital shortcuts, Work plus contextual chat on the left,
+> and real agent collaboration plus attention on the right. Narrow layouts
+> stack/scroll; Knowledge remains its own full view. See
+> [workspace repair and visual evidence](babylon-migration/workspace-repair.md).
+
 # Approved unified workbench composition
 
 Eduardo approved this reference on 2026-11-14 in the project chat.

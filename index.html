@@ -21,7 +21,7 @@
             <span class="brand-ring" aria-hidden="true"></span>
             <span class="brand-name">Loom</span>
           </div>
-          <nav id="app-menu" class="app-menu" aria-label="Application"></nav>
+          <details class="application-controls"><summary aria-label="Application menu">Menu</summary><nav id="app-menu" class="app-menu" aria-label="Application"></nav></details>
           <div class="vdiv" aria-hidden="true"></div>
           <button class="objective" id="objective-btn" type="button" title="Open this work in Work view" hidden>
             <span class="obj-label">You are working on:</span>
@@ -47,12 +47,13 @@
           <!-- Left pane: active intent + work catalogue. It is shown in
                Work and Experiment; other modes give their content the room. -->
           <aside class="left-col" id="left-col" aria-label="Work navigation">
-            <div id="intent-header" class="intent-header" aria-label="Active intent"></div>
+            <details class="intent-disclosure"><summary>Intent &amp; autonomy</summary><div id="intent-header" class="intent-header" aria-label="Active intent"></div></details>
             <section class="work-panel" aria-label="Work">
               <div class="pane-head">
                 <div>
                   <h2>Work</h2>
                   <p class="pane-sub" id="work-counts"></p>
+                  <button class="spatial-work-open" type="button" data-workspace-mode="work">Open Work</button>
                 </div>
                 <span id="work-search-slot"><span class="search-wrap">
                   <button class="icon-btn" id="search-btn" type="button" title="Search work and notes" aria-label="Search work and notes" aria-expanded="false">
@@ -68,6 +69,7 @@
               <p class="list-empty" id="work-empty" hidden>No work matches this search.</p>
               <div id="knowledge-search-results"></div>
             </section>
+            <div id="spatial-chat-slot"></div>
           </aside>
 
           <!-- Center: workspace -->
@@ -77,7 +79,16 @@
                 <p id="spatial-status" role="status"></p>
                 <button id="spatial-load" class="btn" type="button">Retry loading the bench</button>
               </div>
-              <iframe id="spatial-frame" title="Resolute Spatial Workbench" allow="fullscreen"></iframe>
+              <iframe id="spatial-frame" title="Loom state sphere" allow="fullscreen"></iframe>
+              <nav class="orbital-nav" aria-label="Workspace shortcuts">
+                <button type="button" data-workspace-mode="work">Work</button>
+                <button type="button" data-workspace-mode="experiment">Experiments</button>
+                <button type="button" data-workspace-mode="knowledge" data-workspace-section="evidence">Evidence</button>
+                <button type="button" data-workspace-mode="agents">Agents</button>
+                <button type="button" data-workspace-mode="knowledge">Knowledge</button>
+                <button type="button" data-workspace-mode="code">Code</button>
+              </nav>
+              <p id="spatial-state-caption" class="spatial-state-caption" role="status">Checking Loom…</p>
             </div>
             <div id="view-experiment" class="view view-experiment" hidden>
               <div class="mode-head">
@@ -231,6 +242,11 @@
             </div>
 
             <div id="inspector-context" class="inspector-pane" role="tabpanel" aria-labelledby="tab-context">
+              <section class="collaboration-panel" aria-label="Agentic Collaboration">
+                <div class="section-title-row"><h3>Agentic Collaboration</h3></div>
+                <div id="collaboration-summary" aria-live="polite"></div>
+                <button id="collaboration-open" class="btn ghost small" type="button">Open Agents</button>
+              </section>
               <section class="attention-panel" aria-label="Attention">
                 <div class="section-title-row">
                   <h3>Attention</h3>
@@ -320,6 +336,14 @@
           <div class="scrim" id="scrim" hidden></div>
         </div>
 
+        <nav class="workspace-nav" aria-label="Workspace modes">
+          <button type="button" data-workspace-mode="spatial">Overview</button>
+          <button type="button" data-workspace-mode="code">Code</button>
+          <button type="button" data-workspace-mode="experiment">Experiment</button>
+          <button type="button" data-workspace-mode="work">Work</button>
+          <button type="button" data-workspace-mode="agents">Agents</button>
+          <button type="button" data-workspace-mode="knowledge">Knowledge</button>
+        </nav>
         <!-- Water reflection band: atmosphere for the Experiment overview only -->
         <div class="water" aria-hidden="true"></div>
       </div>
