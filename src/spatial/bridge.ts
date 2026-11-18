@@ -62,26 +62,41 @@ export function startSpatialBridge(
   window.addEventListener?.("resize", reportSize);
 
   window.addEventListener?.("message", (event: MessageEvent) => {
+    // Origin/source guard (kept from the Unity contract; see src/spatial.ts:28).
     if (event.source !== window.parent || event.origin !== window.location.origin) return;
     const d = event.data as Record<string, unknown> | undefined;
-    if (!d) return;
-    if (d.type === "loom-state" && typeof d.state === "string" && (SPATIAL_STATES as readonly string[]).includes(d.state)) {
+    // Payload shape validation: a plain object with a bounded string type.
+    if (!d || typeof d !== "object" || Array.isArray(d)) return;
+    const type = d.type;
+    if (typeof type !== "string" || type.length > 64) return;
+
+    if (type === "loom-state") {
+      if (typeof d.state !== "string" || d.state.length > 32) return;
+      if (!(SPATIAL_STATES as readonly string[]).includes(d.state)) return;
       if (ready) api.applyLoomState(d.state);
       else pendingState = d.state;
-    } else if (d.type === "loom-theme" && typeof d.theme === "string") {
-      const next = d.theme === "white" ? "white" : "dark";
+    } else if (type === "loom-theme") {
+      if (d.theme !== "white" && d.theme !== "dark") return;
+      const next = d.theme;
       if (document.body) document.body.dataset.theme = next;
       if (ready) api.applyTheme(next);
       else pendingTheme = next;
-    } else if (d.type === "loom-vault-changed" && typeof d.work === "number" && typeof d.experiments === "number") {
-      if (ready) api.refreshVault(d.work, d.experiments);
-      else pendingVault = { work: d.work, experiments: d.experiments };
-    } else if (d.type === "loom-quality" && typeof d.tier === "string") {
+    } else if (type === "loom-vault-changed") {
+      if (typeof d.work !== "number" || typeof d.experiments !== "number") return;
+      if (!Number.isFinite(d.work) || !Number.isFinite(d.experiments)) return;
+      const work = Math.floor(Math.max(0, d.work));
+      const experiments = Math.floor(Math.max(0, d.experiments));
+      if (ready) api.refreshVault(work, experiments);
+      else pendingVault = { work, experiments };
+    } else if (type === "loom-quality") {
+      if (typeof d.tier !== "string" || d.tier.length > 16) return;
       if (ready) api.applyQuality(d.tier);
-    } else if (d.type === "loom-background" && typeof d.background === "string") {
+    } else if (type === "loom-background") {
+      if (typeof d.background !== "string" || d.background.length > 32) return;
       if (ready) api.applyBackground(d.background);
       else pendingBackground = d.background;
     }
+    // Unknown types (including the retired loom-memory) are ignored.
   });
 
   return {

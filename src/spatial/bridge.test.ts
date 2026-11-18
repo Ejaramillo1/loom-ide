@@ -129,4 +129,53 @@ describe("spatial bridge (postMessage contract)", () => {
     dispatch({ type: "loom-state", state: "attention" });
     expect(api.applyLoomState).toHaveBeenCalledWith("attention");
   });
+
+  it("ignores unknown message types (including retired loom-memory)", () => {
+    const { env, api, dispatch } = fakeEnv();
+    const bridge = startSpatialBridge(env, api, vi.fn());
+    bridge.ready();
+    dispatch({ type: "loom-memory", note: "x" });
+    dispatch({ type: "not-a-message" });
+    expect(api.applyLoomState).not.toHaveBeenCalled();
+    expect(api.refreshVault).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-object payloads and oversized fields", () => {
+    const { env, api, dispatch } = fakeEnv();
+    const bridge = startSpatialBridge(env, api, vi.fn());
+    bridge.ready();
+    dispatch("a plain string" as unknown as Record<string, unknown>);
+    dispatch({ type: "loom-state", state: "e".repeat(64) });
+    dispatch({ type: "loom-background", background: "x".repeat(64) });
+    expect(api.applyLoomState).not.toHaveBeenCalled();
+    // ready() applied the default background once; the oversized one must not
+    // add a second call.
+    expect(api.applyBackground).toHaveBeenCalledTimes(1);
+    expect(api.applyBackground).toHaveBeenCalledWith("charcoal");
+  });
+
+  it("rejects an invalid theme value", () => {
+    const { env, api, dispatch } = fakeEnv();
+    const bridge = startSpatialBridge(env, api, vi.fn());
+    bridge.ready();
+    dispatch({ type: "loom-theme", theme: "sepia" });
+    expect(api.applyTheme).toHaveBeenCalledTimes(1);
+    expect(api.applyTheme).toHaveBeenCalledWith("dark");
+  });
+
+  it("clamps negative finite vault counts to zero (Unity parity)", () => {
+    const { env, api, dispatch } = fakeEnv();
+    const bridge = startSpatialBridge(env, api, vi.fn());
+    bridge.ready();
+    dispatch({ type: "loom-vault-changed", work: -3, experiments: 5 });
+    expect(api.refreshVault).toHaveBeenCalledWith(0, 5);
+  });
+
+  it("rejects non-finite vault counts", () => {
+    const { env, api, dispatch } = fakeEnv();
+    const bridge = startSpatialBridge(env, api, vi.fn());
+    bridge.ready();
+    dispatch({ type: "loom-vault-changed", work: Number.NaN, experiments: 5 });
+    expect(api.refreshVault).not.toHaveBeenCalled();
+  });
 });
