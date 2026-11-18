@@ -1,118 +1,113 @@
-# Babylon migration — inventory (Stage 1.1)
+# Babylon migration — contract & visual inventory (v2, Stage 1.1)
 
-Source of truth: `unity-memory-palace/Assets/Loom/MemoryPalaceController.cs`
-(the whole scene is built procedurally at runtime by this one component;
-`Tools/CreateWorkbenchScene.cs` only creates an empty scene + adds it) and
-`public/spatial-player.js` (the iframe contract). No model files exist in
-`Assets/` — only `.mat` materials and skybox shaders — so every object is
-primitives + lathe + generated PBR maps. **Decision: procedural, no glTF.**
+v2 goal: **functional parity with the existing frontend contract** and
+**visual fidelity to the approved Quiet Complexity reference**, not parity
+with the Unity diorama. The Unity implementation is a source of *technical*
+discovery (events, states, APIs), never a source of *style*. The Babylon
+scene renders **only the sphere**; every navigation destination the diorama
+served today is preserved in existing DOM controls.
 
-## Portals (the six objects)
+Verified in the repo at `main` (base `bf11bd3` + `ded26b6` merge).
 
-Placements are local to the bench surface (`y = 0.36`); each object is a
-`MemoryAnchor` that orbits the sphere and carries an accent colour.
+## 1. Host ↔ renderer contract (complete, both directions)
 
-| Portal | Object | Accent | Position | Construction (all Unity primitives) |
-|---|---|---|---|---|
-| Work | toolbox | Amber `217,166,95` | `(0, 0.36, -2.65)` | wood floor/side planks/raised ends + metal corner straps/rivets + wood handle + hammer (wood shaft, metal head) + screwdriver (accent grip, metal shaft) |
-| Code | laptop | Blue `106,145,204` | `(-2.85, 0.36, 1.35)` | metal base + ink keyboard well + 44 metal keys + ink trackpad + hinged lid (metal casing, ink bezel, **accent screen**, ink camera, metal reflection) |
-| Experiments | flask | Green `120,155,137` | `(2.7, 0.36, -0.1)` | glass **lathe** flask + accent tinted-liquid lathe + metal rolled lip ring + paper etched graduations |
-| Evidence | docs + magnifier | Red `184,117,112` | `(2.8, 0.36, -2.55)` | 4 paper documents (rotated) + magnifier (metal ring, lensGlass sphere, metal ferrule, accent handle) + reading light + metal clip |
-| Agents | robot | Purple `161,134,116` | `(2.65, 0.36, 2.05)` | ink boot capsules + metal legs/joints/hands + paper arms + ceramic torso + accent chest + rounded paper head + ink faceplate + accent eye lenses + metal antenna |
-| Notes | notebook | Pearl `235,220,211` | `(-2.8, 0.36, -1.2)` | accent cloth spine + wood leather covers + paper page edges + metal ruled-paper lines + accent ribbon + wood pencil |
+### Host → iframe (postMessage from `window` to `frame.contentWindow`)
 
-Babylon equivalent per primitive: Cube→`CreateBox`, Sphere→`CreateSphere`,
-Cylinder→`CreateCylinder`, Capsule→`CreateCapsule`, Lathe→`CreateLathe`
-(Babylon has `MeshBuilder.CreateLathe`), Plane/Quad→`CreatePlane`/
-`CreateGround`. Shared PBR materials: paper, ink, metal, wood, glass,
-lens, accent (per portal).
+| Message | Payload | Sender | Effect |
+|---|---|---|---|
+| `loom-state` | `{ state }` | `src/spatial.ts` `notifySpatialState` (← `main.ts:8093`) | sphere state tint |
+| `loom-theme` | `{ theme: "white"\|"dark" }` | `src/theme.ts:20` | light/dark palette |
+| `loom-vault-changed` | `{ work, experiments }` | `src/spatial.ts` `notifySpatialVaultChanged` (← `main.ts:269`) | counts (kept for the contract; the sphere does not display them) |
+| `loom-quality` | `{ tier }` | `main.ts:5345` | quality tier |
+| `loom-background` | `{ background }` | `src/spatial.ts` `notifySpatialBackground` (← `main.ts:5452`) | background |
 
-## Materials (shared PBR)
+Theme also arrives via the `?theme=` URL param (`src/spatial.ts:21-24`).
 
-| Material | Colour | smoothness | metallic | notes |
-|---|---|---|---|---|
-| Ivory paper | `229,218,195` | .25 | 0 | 512px paper base+normal (analytic fibre) |
-| Graphite ink | `47,51,54` | .3 | 0 | |
-| Brushed nickel | `150,159,162` | .72 | .88 | 512px brushed base+normal |
-| Oiled walnut | `105,66,39` | .37 | 0 | 512px wood base+normal |
-| Optical glass | LoomGlass template | .85 | .1 | renderQueue 3010 (only large transparent) |
-| Optical lens | `148,166,178` | .95 | .05 | opaque glass fallback |
-| Accent | portal colour | .42 | 0 | emissive `1.35×` |
+### iframe → host (postMessage from `frame.contentWindow` to `window`)
 
-Generated textures are tileable 512px base+normal pairs from analytic
-height fields (wood grain, paper fibre, brushed metal) — no imported
-assets. Babylon can reproduce these with `DynamicTexture`/procedural
-textures (Fase 2 parity item).
+| Message | Payload | Host handler | Effect |
+|---|---|---|---|
+| `loom-spatial-ready` | `{}` | `src/spatial.ts:29` | hide load error; push real vault counts + state + background |
+| `loom-spatial-error` | `{ message }` | `src/spatial.ts:39` | show load error with message |
+| `loom-spatial-select` | `{ object }` | `src/spatial.ts:44` | `onSpatialSelect(object)` → navigation |
+| `loom-memory` | (retired) | `src/spatial.ts:48` | **deliberately ignored** (notes editing lives in the Tauri Notes view) |
 
-## Sphere (state indicator)
+### Validation already in place
 
-Pearl base `248,238,230`, smoothness .55, metallic .12, radius 2.35 at
-`(0, 1.75, 0)`. State tints the base (`Lerp(pearl, colour, .4)`) and the
-emission (`colour × 1.0` HDR). Pulse: scale ±0.4% and emission
-`+0.12·sin(1.1t)`; slow yaw 1.2°/s.
+- Host: `event.source === frame.contentWindow && event.origin === location.origin` (`src/spatial.ts:28`).
+- Player: same check on the other side (`public/spatial-player.js`, my `src/spatial/bridge.ts`).
+- v2 adds **payload shape + size validation** on the player side (Stage 1.3).
 
-| State | Colour |
+### Unity player method surface (reproduced for completeness)
+
+`ApplyLoomState`, `ApplyTheme`, `RefreshVault`, `ApplyQuality`,
+`ApplyBackground`, `ApplyCanvasSize`, `ApplyReducedMotion`.
+
+### Pre-ready semantics (must be reproduced)
+
+`public/spatial-player.js` holds the latest pending value for
+`theme`/`background`/`state`/`vault` and flushes them once the player is
+ready; `quality` sent before ready is dropped; canvas size is reported on
+load and on every resize. `loom-spatial-ready` is emitted only after the
+scene is actually up.
+
+## 2. Navigation destinations (preserve in DOM, not meshes)
+
+The diorama's clickable objects map to views via `onSpatialSelect`
+(`main.ts:8300`):
+
+| Object (was a mesh) | Destination |
 |---|---|
-| attention | Amber `217,166,95` |
-| completed | Green `120,155,137` |
-| error | Red `184,117,112` |
-| exploring / executing | Blue `106,145,204` |
-| idle / listening / processing | Purple `161,134,116` |
+| Work | `setMode("work")` |
+| Code | `setMode("code")` |
+| Experiments | `setMode("experiment")` |
+| Evidence | `setMode("knowledge")` + `knowledge.showEvidence()` |
+| Agents | `setMode("agents")` |
+| Notes | `setMode("knowledge")` |
 
-(Dark theme uses the dark palette: `DarkAmber 217,166,95`, `DarkGreen
-147,177,159`, `DarkRed 211,146,138`, `DarkBlue 139,166,204`, `DarkPurple
-185,164,144`.)
+These six routes already exist in the bottom navigation and the View menu
+(`#view-work`, `#view-code`, `#view-experiment`, `#view-knowledge`,
+`#view-agents`). **Nothing new to build** — the Babylon player simply does
+not emit `loom-spatial-select`, and the host handler stays as-is for the
+Unity fallback. (Confirmed in Phase 2 Stage 2.1, when the composition
+brings these panels back.)
 
-## Palette (design tokens)
+## 3. The sphere (the only Babylon object)
 
-White: Deep `245,240,235`, Reading `248,244,240`, Surface `241,234,229`,
-Text `41,39,37`, Muted `100,93,87`, Pearl `235,220,211`.
-Dark: Deep `29,27,26`, Reading `36,33,31`, Surface `44,40,37`, Text
-`240,233,226`, Muted `178,168,160`; Sky `56,49,44`, Equator `48,42,38`,
-Ground `40,35,32`; floor `58,48,40` (light floor `214,198,188`).
-Lighting: FillCool `133,158,202`, RimWhite `228,236,248`.
+Source: `docs/01-design-philosophy.md` §6-§7, `design-tokens.json`,
+`unity-memory-palace/Assets/Loom/MemoryPalaceController.cs` (technical
+reference only — not style).
 
-## Lighting & atmosphere
+- Large, simple, pearl, **slightly translucent**, ~24–26% of the reference
+  viewport diameter (adjusted to the space between panels).
+- Fine internal curved lines with a sense of flow (`orb-line` `#D8BFB4`).
+- Moderate rim glow; soft shadow and low-intensity reflection below (CSS).
+- Slow, organic, nearly-imperceptible motion at rest; subtle breathing.
+- State = **discreet** emissive tint + equivalent text (DOM), never a loud
+  full recolor. Pearl base `#F8EEE6`, metallic ≈ 0.12.
+- `prefers-reduced-motion` freezes animation.
 
-Three-point rig: warm key directional `255,240,222` (1.15 white / 0.9
-dark, rot 44,-38, soft shadows); cool fill directional `FillCool` (0.42 /
-0.32, rot 30,118); white rim spot `RimWhite` (0.55 / 0.35, range 30,
-spot 60, at `0,2.6,4.2`). Ambient trilight (sky/equator/ground). Evidence
-gets a reading spot. Fog: exponential-squared, Deep colour, density
-.005. Dust: 40 additive particles near the sphere.
+State → tint (white / dark), from `design-tokens.json`:
 
-Post: bloom (threshold 1.15, intensity .3, scatter .7, high quality),
-ACES tonemapping, colour adjustments (postExposure .45, contrast 8,
-saturation -5, filter `1,.95,.9`), shadows lift .07, vignette .18/.4.
-Low quality tier disables bloom.
+| State | Tint |
+|---|---|
+| idle, listening, processing | purple `[161,134,116]` / `[185,164,144]` |
+| exploring, executing | blue `[106,145,204]` / `[139,166,204]` |
+| attention | amber `[217,166,95]` |
+| completed | green `[120,155,137]` / `[147,177,159]` |
+| error | red `[184,117,112]` / `[211,146,138]` |
 
-## Camera
+## 4. Explicitly NOT migrated (superseded)
 
-Target `(0,1.25,0)`, FOV 42°, distance 7.5–15 (default 12.76, scroll),
-`framing = max(1, 1/aspect)`, position
-`(parallax.x·0.25, 1.25 + 4.12·framing + parallax.y·0.12, -distance·framing)`.
-Aspect is driven by the measured canvas size (`ApplyCanvasSize`).
+The six diorama meshes (notebook, flask, toolbox, laptop, robot,
+magnifier), their portals, floating 3D labels, the 10 relation lines, the
+rectangular platform, and the four themed backgrounds (charcoal/dusk/moss/
+night). These were rejected by the visual review; v2 replaces them with the
+Quiet Complexity composition (two coherent themes: light and dark).
 
-## Orbits, labels, motion
+## 5. Loose ends closed by this inventory
 
-Orbits: inner radius 4.1 / height 1.05 (colour `216,191,180`), outer
-5.75 / 1.35 (`221,213,208`), ellipse `z×0.62`, 128-segment loops.
-Labels: screen-space, bold 15px, on a rounded reading plate (0.94 α),
-drawn after the 3D scene so never occluded; skip if behind camera.
-Motion: portals orbit 12°/s (pause on hover/select), sphere pulses;
-reduced-motion freezes all.
-
-## Backgrounds (selectable)
-
-charcoal (default), dusk, moss, night — gradient + panoramic skybox
-shaders. Babylon: `scene.clearColor` gradient or `Layer`/skybox mesh.
-
-## Contract (reproduced verbatim)
-
-See `public/spatial-player.js` — the Babylon player must reproduce the
-same postMessage contract: in `loom-state`/`loom-theme`/
-`loom-vault-changed`/`loom-quality`/`loom-background`; out
-`loom-spatial-ready`/`loom-spatial-error`; `ApplyLoomState`, `ApplyTheme`,
-`RefreshVault`, `ApplyQuality`, `ApplyBackground`, `ApplyCanvasSize`,
-`ApplyReducedMotion`; URL `?theme=`/`?background=`; measured canvas size
-reported on load and resize.
+- `loom-theme` sender: **active** — `src/theme.ts:20`.
+- `loom-spatial-select` destinations: table in §2.
+- `loom-memory`: retired, ignored at `src/spatial.ts:48`.
+- `loom-quality` sender: `main.ts:5345`.
