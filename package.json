@@ -11,12 +11,16 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@babylonjs/inspector": "^9.37.0",
     "@tauri-apps/cli": "^2.12.4",
     "typescript": "~7.0.2",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
   },
   "dependencies": {
+    "@babylonjs/core": "^9.37.0",
+    "@babylonjs/gui": "^9.37.0",
+    "@babylonjs/loaders": "^9.37.0",
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@tauri-apps/api": "^2.12.4",
