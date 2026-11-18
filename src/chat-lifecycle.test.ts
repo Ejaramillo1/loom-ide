@@ -147,19 +147,20 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
       let abtestState = null;
       const renderWorkDetail = () => {}, renderAbtest = () => {};
       let intents = [];
-      let mode="spatial", rightTab="conversation", rightOpen=true, rightWasDrawer=false;
+      let mode="spatial", rightTab="conversation", rightOpen=true, rightWasDrawer=false, lastFocus=null;
       let spatialPane={tab:"conversation",open:true}, otherPane={tab:"context",open:true};
       const ALL_VIEWS=["spatial","code","work","experiment","agents","knowledge","artifacts"];
       const knowledge={refresh:async()=>{}};
       const isRightDrawer=()=>false, resetRightColWidth=()=>{}, closeLeftDrawer=()=>{}, closeMenus=()=>{}, updateScrim=()=>{};
       ${source.slice(source.indexOf("function applyRightPane()"),source.indexOf("/** Open the right pane"))}
+      ${source.slice(source.indexOf("function openRight("),source.indexOf("function selectRightTab("))}
       ${source.slice(source.indexOf("function setMode(next: Mode)"),source.indexOf("// File canvas. Legacy"))}
       applyRightPane();
       ${source.slice(source.indexOf("const AUTONOMY_LEVELS:"), source.indexOf("};", source.indexOf("const AUTONOMY_LEVELS:")) + 2)}
       ${ownershipCode}
       ${chatCode}
       return {
-        setMode, sendChat, handleStreamEvent, finishStream, cancelInFlightForAutonomyLower,
+        setMode, openRight, closeRight, sendChat, handleStreamEvent, finishStream, cancelInFlightForAutonomyLower,
         trackUnaryExecution, captureExecutionOwner,
         setWorkItems: (items) => { workItems = items; },
         setIntents: (items, active = null) => { intents = items; activeIntentId = active; },
@@ -679,4 +680,29 @@ it("keeps streaming tokens, scroll, draft and one settlement while navigating", 
  expect(stubs.cacheChatMessage).toHaveBeenCalledWith("w1","loom","first second third");
  expect(stubs.recordRunSettle).toHaveBeenCalledTimes(1);
  expect(api.getChatInFlight()).toBe(0);
+});
+
+it("keeps an active reply and draft when chat is closed and reopened", async () => {
+  const { api, node, stubs } = await shell();
+  api.setSelectedWorkId("w1");
+  void api.sendChat("continue while closed");
+  const [requestId, state] = [...api.getActiveStreams()][0] as [string, any];
+  const panel = node("chat-panel"), log = node("chat-log");
+  node("chat-text").value = "unsent draft";
+  log.scrollTop = 37;
+  api.closeRight(false);
+  expect(panel.hidden).toBe(true);
+  api.handleStreamEvent({ requestId, kind: "progress", event: { partial_content: "received while closed" } });
+  expect(panel.hidden).toBe(true);
+  api.openRight("conversation");
+  expect(panel.hidden).toBe(false);
+  expect(api.getActiveStreams().get(requestId)).toBe(state);
+  expect(state.bubble.textContent).toBe("received while closed");
+  expect(state.msg.parentElement).toBe(log);
+  expect(node("chat-text").value).toBe("unsent draft");
+  expect(stubs.askLoomStream).toHaveBeenCalledTimes(1);
+  api.handleStreamEvent({ requestId, kind: "done" });
+  await tick();
+  expect(stubs.cacheChatMessage).toHaveBeenCalledWith("w1", "loom", "received while closed");
+  expect(stubs.recordRunSettle).toHaveBeenCalledTimes(1);
 });

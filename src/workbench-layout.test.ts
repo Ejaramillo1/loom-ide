@@ -40,7 +40,7 @@ async function shell(width: number) {
     const closeMenus = () => {};
     ${paneCode}\n${routeCode}
     applyRightPane();
-    return { setMode, openRight, closeRight, closeDrawers, isRightDrawer, applyRightPane,
+    return { setMode, openRight, closeRight, selectRightTab, focusChat, closeDrawers, isRightDrawer, applyRightPane,
       expandChatOnReply, resetRightColWidth, clampRightCol, rightColWidth: () => rightColWidth };
     }
   `, "pane-check.ts");
@@ -109,15 +109,27 @@ it("keeps intent and autonomy inside Work without the Overview Work launcher", (
   expect(indexHtml).not.toContain("spatial-work-open");
 });
 
-it("keeps chat and context visible together in Spatial, including narrow widths", async () => {
+it("toggles the same Overview conversation without reloading it, including narrow widths", async () => {
   for (const width of [390, 900, 1280, 1600]) {
-    const { node, api } = await shell(width);
+    const { node, api, loadChat, active } = await shell(width);
     const chat = node("chat-panel");
     expect(chat.parentElement).toBe(node("spatial-chat-slot"));
+    api.focusChat(node("chat-toggle"));
     expect(chat.hidden).toBe(false);
+    expect(node("chat-toggle").attrs["aria-expanded"]).toBe("true");
+    expect(active()).toBe(node("chat-text"));
+    node("chat-text").value = "draft while toggling";
+    api.closeRight();
+    expect(chat.hidden).toBe(true);
+    expect(node("chat-toggle").attrs["aria-expanded"]).toBe("false");
+    expect(active()).toBe(node("chat-toggle"));
+    expect(node("chat-text").value).toBe("draft while toggling");
     expect(node("inspector-context").hidden).toBe(false);
     api.openRight("context");
-    expect(chat.hidden).toBe(false);
+    expect(chat.hidden).toBe(true);
+    api.openRight("conversation");
+    api.selectRightTab("conversation");
+    expect(loadChat).not.toHaveBeenCalled();
     expect(api.expandChatOnReply()).toBe(false);
     api.setMode("code");
     expect(chat.parentElement).toBe(node("right-col"));
@@ -127,10 +139,11 @@ it("keeps chat and context visible together in Spatial, including narrow widths"
   }
 });
 
-it("places the shared conversation beneath the sphere stage", () => {
+it("places the Overview conversation in the right column", () => {
   const overview = indexHtml.slice(indexHtml.indexOf('id="view-spatial"'), indexHtml.indexOf('id="view-experiment"'));
   expect(overview).toContain('class="spatial-stage"');
-  expect(overview.indexOf('id="spatial-chat-slot"')).toBeGreaterThan(overview.indexOf('id="spatial-frame"'));
+  expect(overview).not.toContain('id="spatial-chat-slot"');
+  expect(indexHtml.indexOf('id="spatial-chat-slot"')).toBeGreaterThan(indexHtml.indexOf('id="right-col"'));
   expect(indexHtml.match(/id="spatial-chat-slot"/g)).toHaveLength(1);
 });
 

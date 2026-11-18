@@ -40,7 +40,7 @@
   --header-h: 56px;
   --left-w: 300px;
   --right-w: 304px;
-  --spatial-chat-w: clamp(250px, 22vw, 320px);
+  --spatial-chat-w: clamp(300px, 30vw, 440px);
   --shell-pad: 18px;
   --shell-gap: 12px;
 
@@ -71,6 +71,9 @@ body {
   margin: 0;
   overflow: hidden;
   background: var(--bg);
+  background-image: url("/backgrounds/sombrero-galaxy.jpg");
+  background-size: cover;
+  background-position: center;
 }
 
 h2 {
@@ -1617,9 +1620,7 @@ button, input, textarea, select { accent-color: var(--agent-deep); }
   -webkit-backdrop-filter: blur(5px);
 }
 
-/* Resize handle on the inner edge (the edge facing the center/bench):
-   on the left for the right-hand panel, on the right when Spatial puts the
-   conversation on the left. Hidden whenever the pane is a drawer. */
+/* Resize from the left edge of the right-hand panel; hidden in drawer mode. */
 .right-resize {
   display: none;
   position: absolute;
@@ -3885,7 +3886,7 @@ body.resizing {
 .knowledge-canvas-card[data-kind="green"] { border-top: 3px solid var(--theme-green); }
 .knowledge-canvas-card[data-kind="blue"] { border-top: 3px solid var(--theme-blue); }
 .knowledge-canvas-card[data-kind="amber"] { border-top: 3px solid var(--theme-amber); }
-/* Overview keeps the same conversation below the sphere; context stays beside it. */
+/* Overview keeps its conversation in the right column, toggled from the header. */
 .scene[data-mode="spatial"] {
   background: radial-gradient(ellipse at 27% 12%, rgb(var(--theme-purple-rgb) / .12), transparent 65%), var(--bg);
 }
@@ -3902,25 +3903,28 @@ body.right-hidden .scene[data-mode="spatial"] .main {
 body.right-hidden .scene[data-mode="spatial"] .right-col {
   display: none; position: relative; inset: auto; width: auto; order: initial;
   transform: none; visibility: visible; transition: none;
+  align-self: start; max-height: 100%;
   background: transparent; border: 0; box-shadow: none; backdrop-filter: none;
 }
 #view-spatial { gap: 12px; overflow: visible; }
 .spatial-stage { position: relative; display: flex; flex: 1; min-height: 260px; }
 #spatial-chat-slot { display: none; }
-.scene[data-mode="spatial"] #spatial-chat-slot { display: flex; flex-shrink: 0; width: 100%; max-width: 900px; margin: 0 auto; }
+.scene[data-mode="spatial"] #spatial-chat-slot { display: flex; flex-shrink: 1; min-height: 0; width: 100%; }
+.scene[data-mode="spatial"] #spatial-chat-slot:has(#chat-panel[hidden]) { display: none; }
 .scene[data-mode="spatial"] .chat-panel {
-  flex: 0 1 auto; height: auto; max-height: clamp(180px, 35dvh, 360px);
+  flex: 0 1 auto; height: auto; max-height: clamp(240px, 60dvh, 620px);
   width: 100%; border: 1px solid var(--line); border-radius: 22px;
   background: rgb(var(--theme-surface-rgb) / .35); padding: 14px;
 }
 /* Intrinsic content grows the panel as tokens arrive; overflow stays in the log. */
 .scene[data-mode="spatial"] .chat-log { flex: 0 1 auto; }
 .scene[data-mode="spatial"] :is(.right-head, .right-resize, .drawer-close) { display: none; }
-.scene[data-mode="spatial"] .inspector-pane { padding: 0; }
+.scene[data-mode="spatial"] #inspector-context { flex: 0 1 auto; padding: 0; }
+.scene[data-mode="spatial"] #inspector-context:not(:has(#attention-panel:not([hidden]))) { display: none; }
 .scene[data-mode="spatial"] .inspector-section { display: none; }
-.scene[data-mode="spatial"] .right-col:has(#attention-panel:not([hidden])) { display: flex; }
+.scene[data-mode="spatial"] .right-col:has(#attention-panel:not([hidden]), #chat-panel:not([hidden])) { display: flex; }
 @media (min-width: 1100px) {
-  .scene[data-mode="spatial"]:has(#attention-panel:not([hidden])) .main { grid-template-columns: minmax(0, 1fr) minmax(250px, 23%); }
+  .scene[data-mode="spatial"]:has(#attention-panel:not([hidden]), #chat-panel:not([hidden])) .main { grid-template-columns: minmax(0, 1fr) var(--spatial-chat-w); }
 }
 .scene[data-mode="spatial"] .attention-panel {
   padding: 20px; border: 1px solid var(--line); border-radius: 22px;
@@ -3934,6 +3938,12 @@ body.right-hidden .scene[data-mode="spatial"] .right-col {
   body.right-hidden .scene[data-mode="spatial"] .main { grid-template-columns: minmax(0, 1fr); }
   .scene[data-mode="spatial"] .center { height: calc(100dvh - 96px); min-height: 500px; }
   .scene[data-mode="spatial"] .right-col { grid-column: 1; min-height: 220px; overflow: visible; }
+  .scene[data-mode="spatial"] .right-col:has(#chat-panel:not([hidden])) {
+    position: fixed; top: var(--header-offset, var(--header-h)); right: 12px; left: auto; bottom: auto;
+    width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - var(--header-h) - 12px);
+    min-height: 0; z-index: 40;
+  }
+  .scene[data-mode="spatial"] .chat-panel { background: var(--reading); }
 }
 @media (max-width: 699px) {
   .scene[data-mode="spatial"] .main,

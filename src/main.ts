@@ -3841,7 +3841,7 @@ function applyRightPane() {
     const log = document.getElementById("chat-log");
     const scrollTop = log?.scrollTop;
     destination.append(chatPane);
-    if (focused && (spatial || (rightOpen && rightTab === "conversation"))) focused.focus({ preventScroll: true });
+    if (focused && rightOpen && rightTab === "conversation") focused.focus({ preventScroll: true });
     if (log && scrollTop !== undefined) log.scrollTop = scrollTop;
   }
   if (contextPane) {
@@ -3852,7 +3852,7 @@ function applyRightPane() {
     else contextPane.setAttribute("aria-labelledby", "tab-context");
   }
   if (chatPane) {
-    chatPane.hidden = !spatial && rightTab !== "conversation";
+    chatPane.hidden = spatial ? !rightOpen || rightTab !== "conversation" : rightTab !== "conversation";
     chatPane.setAttribute("role", spatial ? "region" : "tabpanel");
     if (spatial) chatPane.removeAttribute("aria-labelledby");
     else chatPane.setAttribute("aria-labelledby", "tab-conversation");
@@ -3867,7 +3867,7 @@ function applyRightPane() {
 
   const chatToggle = document.getElementById("chat-toggle");
   chatToggle?.classList.toggle("active", rightOpen && rightTab === "conversation");
-  chatToggle?.setAttribute("aria-expanded", String(mode === "spatial" || rightOpen));
+  chatToggle?.setAttribute("aria-expanded", String(rightOpen && rightTab === "conversation"));
   chatToggle?.setAttribute("aria-controls", mode === "spatial" ? "chat-panel" : "right-col");
   updateScrim();
 }
@@ -3879,13 +3879,10 @@ function openRight(tab: RightTab, opener?: HTMLElement) {
   // One contextual surface at a time: opening the right drawer closes the
   // work catalogue drawer rather than stacking two modal panes.
   if (document.body.classList.contains("left-open")) closeLeftDrawer(false);
-  if (opener && isRightDrawer()) lastFocus = opener;
+  if (opener && (mode === "spatial" || isRightDrawer())) lastFocus = opener;
   rightTab = tab;
   rightOpen = true;
   applyRightPane();
-  if (tab === "conversation" && rightOpen) {
-    loadChatForWork(selectedWorkId, selectedSessionId);
-  }
   if (isRightDrawer()) {
     const target =
       tab === "conversation"
@@ -3899,7 +3896,7 @@ function closeRight(returnFocus = true) {
   rightOpen = false;
   resetRightColWidth();
   applyRightPane();
-  if (returnFocus && isRightDrawer() && lastFocus) {
+  if (returnFocus && (mode === "spatial" || isRightDrawer()) && lastFocus) {
     lastFocus.focus();
   }
   lastFocus = null;
@@ -3909,9 +3906,6 @@ function selectRightTab(tab: RightTab) {
   rightTab = tab;
   rightOpen = true;
   applyRightPane();
-  if (tab === "conversation") {
-    loadChatForWork(selectedWorkId, selectedSessionId);
-  }
 }
 
 /** The Conversation control: opens the shared pane on its conversation tab
@@ -3951,21 +3945,14 @@ function closeDrawers() {
   if (isRightDrawer() && rightOpen) closeRight();
 }
 
-/** Drag + keyboard resize of the right column. The handle lives on the inner
-    edge: the left edge of the right-hand panel, or the right edge when
-    Spatial puts the conversation on the left. Hidden in drawer mode, so the
-    fixed-width drawer is untouched. */
+/** Drag + keyboard resize on the left edge of the right column. Hidden in
+    drawer mode, so the fixed-width drawer is untouched. */
 function installRightResize() {
   const handle = $("#right-resize");
   if (!handle) return;
   let dragging = false;
   let startX = 0;
   let startWidth = 0;
-
-  // Spatial places the conversation on the left; widening there means a
-  // larger positive delta (drag right). Everywhere else the panel is on the
-  // right and widening means a negative delta (drag left).
-  const sign = () => (mode === "spatial" && !isRightDrawer() ? 1 : -1);
 
   handle.addEventListener("pointerdown", (event) => {
     if (isRightDrawer()) return;
@@ -3977,7 +3964,7 @@ function installRightResize() {
   });
   handle.addEventListener("pointermove", (event) => {
     if (!dragging) return;
-    rightColWidth = clampRightCol(startWidth + (event.clientX - startX) * sign());
+    rightColWidth = clampRightCol(startWidth + startX - event.clientX);
     applyRightColWidth();
   });
   const endDrag = () => {
@@ -3991,7 +3978,7 @@ function installRightResize() {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     if (rightColWidth === null) rightColWidth = currentRightColWidth();
-    rightColWidth = clampRightCol(rightColWidth + (event.key === "ArrowLeft" ? -1 : 1) * sign() * 20);
+    rightColWidth = clampRightCol(rightColWidth + (event.key === "ArrowLeft" ? 20 : -20));
     applyRightColWidth();
   });
 }
@@ -8302,7 +8289,7 @@ function initCodeEditor() {
 async function init() {
   loadLayers();
   applyLayerClasses();
-  rightOpen = !isRightDrawer();
+  rightOpen = mode === "spatial" ? window.matchMedia("(min-width: 1100px)").matches : !isRightDrawer();
   rightWasDrawer = isRightDrawer();
   applyRightPane();
   initAppMenu();
@@ -8430,6 +8417,10 @@ async function init() {
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "n") { e.preventDefault(); void knowledge?.newNote(); return; }
     if (e.key === "Escape") {
       if (document.getElementById("decision-dialog-overlay")) return; // handled by its trap
+      if (mode === "spatial" && rightOpen && rightTab === "conversation") {
+        closeRight();
+        return;
+      }
       if (
         document.body.classList.contains("left-open") ||
         (isRightDrawer() && document.body.classList.contains("right-open"))
@@ -8485,9 +8476,8 @@ async function init() {
   $("#objective-btn").addEventListener("click", () => setMode("work"));
 
   $("#chat-toggle").addEventListener("click", (e) => {
-    if (mode === "spatial") { focusChat(e.currentTarget as HTMLElement); return; }
     if (rightOpen && rightTab === "conversation") closeRight();
-    else openRight("conversation", e.currentTarget as HTMLElement);
+    else focusChat(e.currentTarget as HTMLElement);
   });
   $("#left-close").addEventListener("click", () => closeLeftDrawer());
   $("#right-close").addEventListener("click", () => closeRight());

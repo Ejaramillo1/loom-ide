@@ -8,6 +8,7 @@ await mkdir(output, { recursive: true });
 const harness = await startBrowser();
 const { base, command, evaluate, waitFor, errors } = harness;
 const navigateMode = async mode => {
+  if(mode !== 'spatial') await evaluate(`if(innerWidth<1100 && document.querySelector('.scene').dataset.mode==='spatial' && document.getElementById('chat-toggle').getAttribute('aria-expanded')==='true') document.getElementById('chat-toggle').click()`);
   if(mode === 'spatial') await evaluate(`document.getElementById('overview-sphere').click()`);
   else if(await evaluate(`document.querySelector('.scene').dataset.mode === 'spatial'`)) await evaluate(`document.querySelector('.orbital-nav [data-workspace-mode="${mode}"]:not([data-workspace-section])').click()`);
   else await evaluate(`document.querySelector('.application-controls').open=true; document.querySelectorAll('.app-menu-trigger')[2].click(); [...document.querySelectorAll('.app-menu-panel button')].find(button => button.textContent === '${mode === 'code' ? 'Code' : mode === 'work' ? 'Work' : mode === 'experiment' ? 'Experiment' : mode === 'agents' ? 'Agents' : 'Knowledge'}').click()`);
@@ -23,6 +24,10 @@ try {
   await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
   await command('Page.navigate',{url:base});
   await waitFor(`document.querySelector('#chat-panel')?.parentElement?.id === 'spatial-chat-slot' && document.querySelector('#spatial-state-caption')?.textContent.includes('Loom offline')`);
+  const initiallyOpen = await evaluate(`document.getElementById('chat-toggle').getAttribute('aria-expanded')==='true'`);
+  assert.equal(initiallyOpen,width>=1100,'unexpected default conversation visibility');
+  if(!initiallyOpen) await evaluate(`document.getElementById('chat-toggle').click()`);
+  await waitFor(`document.getElementById('chat-panel').checkVisibility()`);
   if(name==='reference-light')await evaluate(`document.querySelector('.application-controls').open=true;document.querySelectorAll('.app-menu-trigger')[2].click(); [...document.querySelectorAll('.app-menu-panel button')].find(b=>b.textContent==='White')?.click();document.querySelector('.application-controls').open=false`);
   await new Promise(r=>setTimeout(r,1200));
   const metrics=await evaluate(`(()=>{
@@ -39,14 +44,12 @@ try {
   assert.ok(await evaluate(`!document.querySelector('.collaboration-panel, .avatar')`),'removed header or collaboration sphere remains');
   assert.ok(metrics.attention.hidden && metrics.attention.h === 0, 'empty Attention panel still occupies space');
   assert.ok(metrics.work.hidden && metrics.work.h === 0, 'Work section still occupies Overview space');
-  assert.ok(metrics.chat.y >= metrics.sphere.y+metrics.sphere.h, 'chat is not below the sphere');
-  assert.ok(Math.abs(metrics.chat.x+metrics.chat.w/2-metrics.sphere.x-metrics.sphere.w/2)<1, 'chat is not centered below the sphere');
+  if(width>=1100) assert.ok(metrics.chat.x>=metrics.sphere.x+metrics.sphere.w,'chat is not to the right of the sphere');
+  else assert.ok(metrics.chat.x>=0 && metrics.chat.x+metrics.chat.w<=width,'floating chat extends beyond the screen');
   assert.ok(await evaluate(`!document.querySelector('.workspace-nav, #workspace-navigation-slot')`), 'floating menu remains');
   assert.deepEqual(metrics.shortcuts.map(s=>s.label),['Work','Experiments','Evidence','Agents','Knowledge','Code']);
   for(const shortcut of metrics.shortcuts) assert.ok(shortcut.x>=metrics.sphere.x && shortcut.y>=metrics.sphere.y && shortcut.x+shortcut.w<=metrics.sphere.x+metrics.sphere.w && shortcut.y+shortcut.h<=metrics.sphere.y+metrics.sphere.h,`${shortcut.label} is outside the sphere region`);
   if(width>=700) assert.ok(metrics.composer.y+metrics.composer.h<=height,'composer clipped');
-  const attentionVisible=await evaluate(`(()=>{const panel=document.getElementById('attention-panel');panel.hidden=false;const visible=document.getElementById('right-col').checkVisibility();panel.hidden=true;return visible})()`);
-  assert.ok(attentionVisible,'attention cannot reveal its context column');
   // Isolated DOM fixture checks intrinsic layout as cumulative reply text grows.
   const chatGrowth = await evaluate(`(()=>{
     const log=document.getElementById('chat-log'),panel=document.getElementById('chat-panel');
@@ -67,7 +70,22 @@ try {
   assert.ok(chatGrowth.restored<chatGrowth.long, 'chat did not shrink after restoring the empty conversation');
   assert.ok(chatGrowth.sphereHeight>=260, 'growing chat squeezed out the sphere');
   if(width>=700)assert.ok(chatGrowth.composerBottom<=height,'growing chat clipped the composer');
+  await evaluate(`window.originalChat=document.getElementById('chat-panel');document.getElementById('chat-text').value='Unsent smoke-test draft';document.getElementById('chat-text').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('chat-toggle').click()`);
+  await waitFor(`!document.getElementById('chat-panel').checkVisibility() && document.getElementById('chat-toggle').getAttribute('aria-expanded')==='false'`);
+  const closed = await evaluate(`(()=>{const r=document.getElementById('spatial-frame').getBoundingClientRect();return {sphereWidth:r.width,emptySidebar:!document.getElementById('right-col').checkVisibility()}})()`);
+  assert.ok(closed.emptySidebar,'closing chat left an empty sidebar');
+  if(width>=1100)assert.ok(closed.sphereWidth>metrics.sphere.w,'closing chat did not return space to the sphere');
+  await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false}).then(r=>writeFile(`${output}/${name}-closed.png`,Buffer.from(r.data,'base64')));
+  const attentionVisible=await evaluate(`(()=>{const panel=document.getElementById('attention-panel');panel.hidden=false;const visible=document.getElementById('right-col').checkVisibility();panel.hidden=true;return visible})()`);
+  assert.ok(attentionVisible,'attention cannot reveal its column while conversation is closed');
+  await evaluate(`document.getElementById('chat-toggle').click()`);
+  await waitFor(`document.getElementById('chat-panel').checkVisibility() && document.getElementById('chat-toggle').getAttribute('aria-expanded')==='true'`);
+  assert.ok(await evaluate(`window.originalChat===document.getElementById('chat-panel') && document.getElementById('chat-text').value==='Unsent smoke-test draft' && document.activeElement.id==='chat-text'`),'opening chat replaced its content, lost the draft or failed to focus');
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+  assert.ok(await evaluate(`!document.getElementById('chat-panel').checkVisibility() && document.activeElement.id==='chat-toggle'`),'Escape did not close chat and return focus');
+  await evaluate(`document.getElementById('chat-toggle').click()`);
   if(width<700){await evaluate(`document.getElementById('chat-text').scrollIntoView({block:'center'})`); assert.ok(await evaluate(`(()=>{const r=document.getElementById('chat-form').getBoundingClientRect();return r.top>=0&&r.bottom<innerHeight})()`),'mobile composer unreachable');await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false}).then(r=>writeFile(`${output}/mobile-chat.png`,Buffer.from(r.data,'base64')));}
+  if(width<1100)await evaluate(`document.getElementById('chat-toggle').click()`);
   // Both pointer picking and keyboard activation of the actual pearl return Overview.
   await evaluate(`window.smokeSphereSelects=0;window.addEventListener('message',e=>{if(e.data?.type==='loom-spatial-select'&&e.data.object==='Overview')window.smokeSphereSelects++});
     const d=document.getElementById('spatial-frame').contentDocument,c=d.querySelector('canvas'),r=c.getBoundingClientRect();
@@ -117,7 +135,7 @@ try {
     await waitFor(`document.getElementById('spatial-frame').contentDocument?.querySelector('#bench-loading')?.hidden`);
     assert.ok(await evaluate(`document.getElementById('spatial-load-error').hidden`), 'renderer retry failed');
   }
-  reports.push({name,...metrics,chatGrowth});
+  reports.push({name,...metrics,chatGrowth,chatToggle:{initiallyOpen,closed}});
  }
  // Exercise real local Work creation in this disposable profile, not seeded production data.
  await navigateMode('work');
