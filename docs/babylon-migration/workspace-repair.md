@@ -1,5 +1,8 @@
 # Spatial workspace repair — 17 November 2026
 
+Historical entries below record each shipped step. The last follow-up defines
+the current navigation, Intent placement and renderer verification gates.
+
 Baseline: `bf95854`. The screenshot at 18:32 showed a renderer pilot in a
 broken two-region shell. This repair implements the user's requested workspace
 around the sphere; it does not declare the entire Unity retirement complete.
@@ -64,3 +67,111 @@ browser evidence was refreshed for desktop, light theme, tablet and mobile.
 Required checks: frontend 144; Tauri 145 passed / 2 ignored; native 22; build and
 src-tauri fmt passed. Legacy Unity recompile remains blocked with exit 12 because
 the Editor is not running; this is not the active renderer.
+
+## Follow-up: keep orbital controls, sphere home and Work intent
+
+This supersedes the six-mode menu described above. The user's clarification
+keeps **Work, Experiments, Evidence, Agents, Knowledge and Code** around the
+sphere and removes the separate floating menu. The main sphere supports pointer
+picking and Enter/Space activation for Overview. A small persistent header
+sphere provides the same return path from views where the main sphere is hidden.
+The routes still use the existing router; Evidence opens its Knowledge tab.
+Intent & Autonomy is now inside the Work panel, using the same editor and
+handlers. Expanding it gives Work more space without overlapping chat. The
+closed Work list retains at least one usable row at all four checked sizes.
+
+### Renderer and verification changes
+
+- State tint now blends pigment into the pearl surface/rim. Derivative filtering
+  reduces subpixel contour aliasing at Low quality. State captions remain.
+- Readiness waits for actual material compilation. A compile failure reaches the
+  host error/retry UI instead of reporting ready with an invisible sphere.
+- The stream/navigation regression exercises the real production chat handlers
+  and router together with a minimal DOM. It preserves token accumulation,
+  request identity, tool rows, draft and scroll across Code/Overview navigation,
+  then asserts one settlement even when a terminal event repeats. It is a
+  deterministic event test, not a live model call.
+- `npm run test:spatial` builds current source, launches an ephemeral Vite preview
+  and its own Chromium profile/incognito context, and disposes its processes.
+  No prestarted browser, debug port or preview is required. Installed Chromium
+  is required; `CHROMIUM_BIN` can select it. No new dependency was added.
+- The browser test asserts restored orbital labels/bounds/routes, sphere picking
+  and keyboard activation, Work/intent containment, expanded layout, composer
+  reachability, draft identity, quality resolution and context-loss recovery at
+  1366×650, 1671×941, 900×720 and 390×740.
+- The visual check freezes motion and captures all eight states in both themes
+  at High and Low quality (32 screenshots). It waits for delivered state messages
+  and rendered frames, measures the actual pixels, requires every state pair's
+  rim means to differ by at least 8 average RGB units, checks red/green/blue/amber
+  meanings, clipping, local pixel contrast and High/Low hue consistency. These
+  are measured assertions rather than a screenshot-hash guarantee across GPUs.
+- A separate injection corrupts the real GLSL at compilation: error must appear,
+  readiness must stay withheld, and a normal retry must recover. Expected compiler
+  errors are recorded separately from unexpected exceptions.
+
+### Current decisions and limits
+
+`decisions.md` §§5 and 10 now explicitly preserve the existing CSS atmosphere
+preferences and define sphere diameter as 60% of the smaller iframe dimension
+(about 25–29% of full desktop width here). Those choices are implemented but do
+not claim exact reference-image proportions. The iframe document uses
+`color-scheme: normal` only to preserve transparency; host forms retain their
+selected theme.
+
+The repository judge and AGENTS now gate on Babylon instead of Unity recompile
+or CheckWorkbench. Run `bash judge/run-judge.sh --verify-only`; it dispatches no
+coding agent, records each gate, and returns a nonzero exit if any gate fails.
+Its outputs stay in this repository's `judge/runs` and `judge/verdicts`.
+The separate `/home/ed/judge` copy was not edited under the repository boundary.
+
+Native Tauri-window pixels, real GPU performance and a live Loom/model stream
+were not exercised. Standalone state captures have a transparent canvas over
+the browser's page background; full-shell dark/light captures separately show
+the actual atmosphere. Historical Unity files remain preserved.
+
+### Attention visibility follow-up
+
+Attention starts hidden and appears only when its current item list is nonempty.
+Clearing the final item removes the panel and its layout space again; existing
+count/badge and decision-dialog behavior remains. A production-renderer unit
+regression covers empty → decision → empty and the decision action. The offline
+browser smoke asserts the panel has zero height at every checked viewport.
+
+### Final verification of this follow-up
+
+The working tree based on `99a1280` was checked with
+`bash judge/run-judge.sh --verify-only`. All six gates passed (exit 0):
+
+| Gate | Result |
+|---|---|
+| Frontend | 147 passed, 17 files |
+| Production build | Passed |
+| Tauri lib | 145 passed, 2 ignored |
+| Native app | 22 passed |
+| rustfmt | Passed, src-tauri manifest scope |
+| Babylon smoke | Four shell viewports, 32 state captures, shader failure/retry passed; zero unexpected exceptions |
+
+The final runner verdict is `judge/verdicts/20261117-194310.md` from the
+repository root; the full capture is `judge/runs/20261117-194310.log`. Earlier successful passes
+are preserved separately. The smoke's compiled-state error injection is expected
+and counted in `evidence/workspace/shader-failure.json`; it is not hidden in the
+unexpected-exception total.
+
+### Local change record
+
+UI/source commit: `12b5759` (the verified source changes from the tree above).
+Files: `index.html`; `src/main.ts`; `src/style.css`; `src/spatial.test.ts`;
+`src/spatial/babylon-player.ts`; `src/spatial/bench.ts`; `src/spatial/bridge.ts`;
+`src/spatial/pearl.ts`; `src/spatial/state-colors.ts`;
+`src/chat-lifecycle.test.ts`; `src/workbench-layout.test.ts`;
+`src/attention.test.ts`.
+
+The accompanying verification/documentation commit contains `AGENTS.md`,
+`package.json`, `scripts/workspace-smoke.mjs`, `scripts/browser-harness.mjs`,
+`scripts/sphere-visual-check.mjs`, `judge/run-judge.sh`,
+`judge/JUDGE_PROMPT_TEMPLATE.md`, the three successful verification logs/prompts/
+verdicts under `judge/`, this report, `docs/DESIGN_PROGRESS.md`, and migration
+`decisions.md`, `inventory.md`, `implementation-repair.md`. Evidence includes
+updated workspace screenshots/metrics, 32 state images, pixel measurements and
+the shader-failure record. Pre-existing gate logs in the workspace evidence
+folder remain historical; the final combined judge log above is current.

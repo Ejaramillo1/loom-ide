@@ -257,3 +257,22 @@ navigation, draft, quality and recovery evidence is recorded separately in
 `babylon-migration/workspace-repair.md` and `evidence/workspace/`. No native
 window pixel or live model-turn claim. Unity Editor is not running; its legacy
 recompile command returned exit 12 and does not validate the Babylon renderer.
+
+
+## Sphere state, navigation and Work follow-up — 17 November 2026
+
+The separate floating mode menu is removed. Work/Experiments/Evidence/Agents/
+Knowledge/Code remain around the sphere per the user's clarification. The
+sphere returns to Overview, with a persistent header sphere available from
+other views. Intent & Autonomy now lives within Work. Pearl state pigment,
+shader readiness/error reporting, stream-through-navigation coverage and a
+self-starting Babylon pixel/workspace smoke are implemented. The repository
+judge uses that smoke instead of retired Unity checks. Size and background
+choices are reconciled in `babylon-migration/decisions.md`; current evidence,
+commands and limitations are in `babylon-migration/workspace-repair.md`.
+
+Attention is now shown only for nonempty attention items. Final follow-up gates:
+147 frontend tests (17 files), 145 Tauri passed / 2 ignored, 22 native passed,
+production build, src-tauri fmt, four browser viewports and 32 rendered-state
+captures passed. Shader failure/retry and empty Attention layout are included.
+See `judge/verdicts/20261117-194310.md` and its log for the actual gate results.

@@ -38,8 +38,15 @@ uninstallation, external judge edits, or dependency additions.
 
 The complete migration is not claimed finished: inspect final dark/narrow/full
 shell screenshots; verify actual Tauri packaging/window and real Loom flows;
-measure idle GPU/memory; add engine-level rendering lifecycle coverage; replace
-external judge Unity checks through its own authorized project workflow; finally
+measure idle GPU/memory; finally
 retire historical Unity source/player files after parity evidence. The critical
 revision's full visual target is not yet demonstrated by the standalone renderer
 screenshot. Unity recompile is no longer a relevant renderer gate for this repair.
+
+## Follow-up status — sphere review repair
+
+The repository judge now uses the self-starting Babylon smoke instead of
+Unity gates. Rendered-state assertions, real shader compilation failure/retry,
+and a stream-through-navigation regression are covered by the follow-up in
+`workspace-repair.md`. `/home/ed/judge` is a separate local copy and was not
+edited; use `bash judge/run-judge.sh --verify-only` from this repository.

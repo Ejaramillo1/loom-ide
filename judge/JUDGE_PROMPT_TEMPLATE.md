@@ -18,7 +18,7 @@ para OpenCode. El prompt siempre tiene estas cinco partes:
 ## Esqueleto del prompt
 
 ```
-Trabajas en /home/ed/loom-ide-tauri, rama tauri-prototype, HEAD <sha>.
+Trabajas en /home/ed/loom-ide-tauri, rama <rama actual>, HEAD <sha>.
 Lee AGENTS.md en la raíz del repo y síguelo: no hagas preguntas, decide
 según los docs, verifica con comandos reales, commits locales solamente,
 nunca push.
@@ -61,10 +61,12 @@ nunca push.
 - <comandos que deben pasar, con los números que el reporte debe mostrar>
 - <evidencia concreta exigida: archivo de log, captura, conteo de tests, bundle size>
 - <prueba de que el cambio se ejecutó de verdad, no solo que compila>
+- npm run test:spatial inicia preview y Chromium propios: sustituye Unity
+  recompile y CheckWorkbench; comprueba estados, temas, calidades y recuperación.
 
 ## Versiones
 
-- OpenCode <versión>, Node <versión>, Rust <versión>, Unity <versión>.
+- OpenCode <versión>, Node <versión>, Rust <versión>, Chromium <versión>.
 - Herramientas instaladas que la tarea puede usar; ninguna instalación nueva.
 
 ## Presupuesto

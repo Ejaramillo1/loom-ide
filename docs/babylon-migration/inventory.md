@@ -7,7 +7,10 @@ discovery (events, states, APIs), never a source of *style*. The Babylon
 scene renders **only the sphere**; every navigation destination the diorama
 served today is preserved in existing DOM controls.
 
-Verified in the repo at `main` (base `bf11bd3` + `ded26b6` merge).
+Initial inventory: `main` (base `bf11bd3` + `ded26b6` merge). The state
+palette below is historical; current colors and size/background/navigation
+decisions are recorded in `decisions.md` §§2, 5, 10–11. The sphere now emits
+`loom-spatial-select` with object `Overview` for pointer or keyboard activation.
 
 ## 1. Host ↔ renderer contract (complete, both directions)
 
@@ -101,9 +104,10 @@ State → tint (white / dark), from `design-tokens.json`:
 
 The six diorama meshes (notebook, flask, toolbox, laptop, robot,
 magnifier), their portals, floating 3D labels, the 10 relation lines, the
-rectangular platform, and the four themed backgrounds (charcoal/dusk/moss/
-night). These were rejected by the visual review; v2 replaces them with the
-Quiet Complexity composition (two coherent themes: light and dark).
+rectangular platform, and the four 3D themed environments. These were
+rejected by the visual review; the renderer has two themes: light and dark.
+The later implementation repair retains Charcoal/Dusk/Moss/Night as **host
+CSS tints only**, per `decisions.md` §5. They are not Babylon environments.
 
 ## 5. Loose ends closed by this inventory
 

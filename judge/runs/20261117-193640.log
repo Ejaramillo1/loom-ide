@@ -1,0 +1,450 @@
+Verification only: no coding agent dispatched.
+
+> loom-ide-tauri@0.0.0 test
+> vitest run --run
+
+
+ RUN  v5.1.0 /home/ed/loom-ide-tauri
+
+
+ Test Files  16 passed (16)
+      Tests  146 passed (146)
+   Start at  19:36:41
+   Duration  3.14s (import 61%, tests 27%, transform 7%, worker 5%)
+
+    Isolate  16 workers spawned · ~257ms startup each (spawn + environment, per file)
+             at least ~1.11s faster with isolate: false — reuses workers across files instead of one per file
+
+
+> loom-ide-tauri@0.0.0 build
+> tsc && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 1581 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/spatial-player-babylon.html                                    2.30 kB │ gzip:     0.92 kB
+dist/assets/jetbrains-mono-greek-400-normal-C190GLew.woff2          4.22 kB
+dist/assets/inter-vietnamese-400-normal-DMkecbls.woff2              4.97 kB
+dist/assets/inter-vietnamese-600-normal-Cc8MFFhd.woff2              5.10 kB
+dist/assets/inter-vietnamese-500-normal-DOriooB6.woff2              5.11 kB
+dist/assets/inter-greek-ext-400-normal-DGGRlc-M.woff2               5.26 kB
+dist/assets/jetbrains-mono-cyrillic-400-normal-BEIGL1Tu.woff2       5.32 kB
+dist/assets/jetbrains-mono-vietnamese-400-normal-CqNFfHCs.woff      5.37 kB
+dist/assets/inter-greek-ext-500-normal-C4iEst2y.woff2               5.42 kB
+dist/assets/inter-greek-ext-600-normal-DRtmH8MT.woff2               5.43 kB
+dist/assets/jetbrains-mono-greek-400-normal-B9oWc5Lo.woff           5.66 kB
+dist/assets/inter-vietnamese-400-normal-Bbgyi5SW.woff               6.50 kB
+dist/assets/inter-vietnamese-500-normal-mJboJaSs.woff               6.59 kB
+dist/assets/inter-vietnamese-600-normal-BuLX-rYi.woff               6.64 kB
+dist/assets/jetbrains-mono-cyrillic-400-normal-ugxPyKxw.woff        6.97 kB
+dist/assets/inter-greek-ext-400-normal-KugGGMne.woff                7.06 kB
+dist/assets/inter-greek-ext-500-normal-2j5mBUwD.woff                7.19 kB
+dist/assets/inter-greek-ext-600-normal-B8X0CLgF.woff                7.21 kB
+dist/assets/jetbrains-mono-latin-ext-400-normal-Bc8Ftmh3.woff2      7.33 kB
+dist/assets/inter-cyrillic-400-normal-obahsSVq.woff2                7.71 kB
+dist/assets/inter-greek-400-normal-B4URO6DV.woff2                   7.77 kB
+dist/assets/inter-cyrillic-500-normal-BasfLYem.woff2                7.90 kB
+dist/assets/inter-greek-500-normal-BIZE56-Y.woff2                   7.92 kB
+dist/assets/inter-greek-600-normal-plRanbMR.woff2                   7.94 kB
+dist/assets/inter-cyrillic-600-normal-CWCymEST.woff2                7.97 kB
+dist/assets/inter-cyrillic-400-normal-HOLc17fK.woff                 9.78 kB
+dist/assets/inter-greek-400-normal-q2sYcFCs.woff                    9.92 kB
+dist/assets/inter-cyrillic-600-normal-4D_pXhcN.woff                 9.93 kB
+dist/assets/inter-cyrillic-500-normal-CxZf_p3X.woff                 9.94 kB
+dist/assets/inter-greek-500-normal-Xzm54t5V.woff                    9.98 kB
+dist/assets/inter-greek-600-normal-BZpKdvQh.woff                   10.03 kB
+dist/assets/jetbrains-mono-latin-ext-400-normal-fXTG6kC5.woff      10.12 kB
+dist/assets/inter-cyrillic-ext-400-normal-BQZuk6qB.woff2           10.23 kB
+dist/assets/inter-cyrillic-ext-500-normal-B0yAr1jD.woff2           10.43 kB
+dist/assets/inter-cyrillic-ext-600-normal-Dfes3d0z.woff2           10.48 kB
+dist/assets/inter-cyrillic-ext-400-normal-DQukG94-.woff            13.33 kB
+dist/assets/inter-cyrillic-ext-500-normal-BmqWE9Dz.woff            13.45 kB
+dist/assets/inter-cyrillic-ext-600-normal-Bcila6Z-.woff            13.46 kB
+dist/assets/jetbrains-mono-latin-400-normal-V6pRDFza.woff2         21.16 kB
+dist/assets/inter-latin-400-normal-C38fXH4l.woff2                  23.66 kB
+dist/assets/inter-latin-500-normal-Cerq10X2.woff2                  24.27 kB
+dist/assets/inter-latin-600-normal-LgqL8muc.woff2                  24.45 kB
+dist/assets/jetbrains-mono-latin-400-normal-6-qcROiO.woff          27.49 kB
+dist/assets/inter-latin-400-normal-CyCys3Eg.woff                   30.69 kB
+dist/assets/inter-latin-600-normal-CiBQ2DWP.woff                   31.26 kB
+dist/assets/inter-latin-500-normal-BL9OpVg8.woff                   31.28 kB
+dist/index.html                                                    32.67 kB │ gzip:     6.90 kB
+dist/assets/inter-latin-ext-400-normal-C1nco2VV.woff2              35.00 kB
+dist/assets/inter-latin-ext-500-normal-CV4jyFjo.woff2              36.02 kB
+dist/assets/inter-latin-ext-600-normal-D2bJ5OIk.woff2              36.26 kB
+dist/assets/inter-latin-ext-400-normal-77YHD8bZ.woff               47.56 kB
+dist/assets/inter-latin-ext-500-normal-BxGbmqWO.woff               48.49 kB
+dist/assets/inter-latin-ext-600-normal-CIVaiw4L.woff               48.66 kB
+dist/assets/codicon-DF1abBS2.ttf                                  153.22 kB
+dist/assets/editor.worker-ZFrxMLYQ.js                             303.69 kB
+dist/assets/json.worker-B21sJuvk.js                               433.89 kB
+dist/assets/html.worker-BcGjYXeC.js                               744.15 kB
+dist/assets/css.worker-ulQ71Gq6.js                              1,079.01 kB
+dist/assets/ts.worker-CpVanOOp.js                               6,927.73 kB
+dist/assets/main-BpNiY--p.css                                     277.67 kB │ gzip:    48.65 kB
+dist/assets/postprocess.vertex-BqZGYzYn.js                          0.45 kB │ gzip:     0.30 kB
+dist/assets/postprocess.vertex-BlZq0bOt.js                          0.58 kB │ gzip:     0.35 kB
+dist/assets/javascript-DTSUlznD.js                                  0.68 kB │ gzip:     0.41 kB
+dist/assets/math.scalar.functions-Bcxiuh2E.js                       0.70 kB │ gzip:     0.39 kB
+dist/assets/azcli-Bc_sGQ0U.js                                       0.70 kB │ gzip:     0.28 kB
+dist/assets/mesh.vertexData.functions-CD4JOR2q.js                   0.93 kB │ gzip:     0.48 kB
+dist/assets/ini-sBoK_t0W.js                                         0.96 kB │ gzip:     0.49 kB
+dist/assets/workers-BgRjURTW.js                                     1.21 kB │ gzip:     0.56 kB
+dist/assets/ddsTextureLoader-xjbn_jJv.js                            1.25 kB │ gzip:     0.62 kB
+dist/assets/csp-bTuwJoIa.js                                         1.27 kB │ gzip:     0.48 kB
+dist/assets/pla-CopQ2nXW.js                                         1.54 kB │ gzip:     0.60 kB
+dist/assets/scheme-BeGwcela.js                                      1.62 kB │ gzip:     0.77 kB
+dist/assets/flow9-C5_-GSwl.js                                       1.66 kB │ gzip:     0.80 kB
+dist/assets/sb-CcwsVR0C.js                                          1.68 kB │ gzip:     0.78 kB
+dist/assets/bat-i0X4ZdIN.js                                         1.69 kB │ gzip:     0.82 kB
+dist/assets/dockerfile-DZFCIeNp.js                                  1.72 kB │ gzip:     0.63 kB
+dist/assets/pascaligo-D-ptJ9y-.js                                   1.85 kB │ gzip:     0.86 kB
+dist/assets/logger-CuBYPcDK.js                                      1.88 kB │ gzip:     0.82 kB
+dist/assets/xml-uZ4PHkXP.js                                         1.91 kB │ gzip:     0.72 kB
+dist/assets/cameligo-DMUM7wLl.js                                    1.97 kB │ gzip:     0.91 kB
+dist/assets/lua-CsQS60Ue.js                                         1.98 kB │ gzip:     0.88 kB
+dist/assets/objective-c-FvmIjYaQ.js                                 2.10 kB │ gzip:     1.01 kB
+dist/assets/graphql-fmXr3nnJ.js                                     2.11 kB │ gzip:     0.99 kB
+dist/assets/sparql-D_Lu-MrJ.js                                      2.21 kB │ gzip:     1.10 kB
+dist/assets/lexon-CfSJPG6W.js                                       2.28 kB │ gzip:     0.88 kB
+dist/assets/preload-helper-BzputcT5.js                              2.28 kB │ gzip:     1.09 kB
+dist/assets/hdrTextureLoader-BQVwkxK1.js                            2.31 kB │ gzip:     1.13 kB
+dist/assets/mips-CIPQ_RoX.js                                        2.32 kB │ gzip:     1.02 kB
+dist/assets/go-C-y9NEjX.js                                          2.35 kB │ gzip:     1.11 kB
+dist/assets/bicep-B5-_aFwp.js                                       2.36 kB │ gzip:     0.91 kB
+dist/assets/iesTextureLoader-DkRm2YN5.js                            2.47 kB │ gzip:     1.08 kB
+dist/assets/sophia-CRfGWb83.js                                      2.48 kB │ gzip:     1.15 kB
+dist/assets/m3-D-oSqn_W.js                                          2.52 kB │ gzip:     1.29 kB
+dist/assets/typespec-B8J7ngcE.js                                    2.62 kB │ gzip:     1.01 kB
+dist/assets/pascal-DrH0SRf2.js                                      2.63 kB │ gzip:     1.35 kB
+dist/assets/fsharp-C8Ef5oNN.js                                      2.65 kB │ gzip:     1.27 kB
+dist/assets/qsharp-DkqhCAOL.js                                      2.72 kB │ gzip:     1.37 kB
+dist/assets/shell-CC2rA5mh.js                                       2.81 kB │ gzip:     1.16 kB
+dist/assets/r-BwWrilGY.js                                           2.83 kB │ gzip:     1.25 kB
+dist/assets/java-BEtHBSE6.js                                        2.90 kB │ gzip:     1.34 kB
+dist/assets/cssMode-DQewmPMh.js                                     2.93 kB │ gzip:     1.12 kB
+dist/assets/redis-ClamHrr6.js                                       3.03 kB │ gzip:     1.41 kB
+dist/assets/kotlin-BOotOW0E.js                                      3.04 kB │ gzip:     1.41 kB
+dist/assets/cypher-CVaqCwHa.js                                      3.04 kB │ gzip:     1.40 kB
+dist/assets/powershell-DmHpPYUd.js                                  3.05 kB │ gzip:     1.33 kB
+dist/assets/tcl-DISqw1ZD.js                                         3.27 kB │ gzip:     1.32 kB
+dist/assets/liquid-B5uw1-eb.js                                      3.33 kB │ gzip:     1.41 kB
+dist/assets/coffee-Ba7i2nA0.js                                      3.36 kB │ gzip:     1.24 kB
+dist/assets/htmlMode-Bt4YGj9x.js                                    3.39 kB │ gzip:     1.23 kB
+dist/assets/tgaTextureLoader-CqhhocF6.js                            3.40 kB │ gzip:     1.35 kB
+dist/assets/hcl-CpzslTdj.js                                         3.44 kB │ gzip:     1.45 kB
+dist/assets/python-YGJDzgGj.js                                      3.44 kB │ gzip:     1.42 kB
+dist/assets/apex-BWPQTe0t.js                                        3.46 kB │ gzip:     1.70 kB
+dist/assets/yaml-MmZCmDkJ.js                                        3.53 kB │ gzip:     1.28 kB
+dist/assets/markdown-Cimd5fb3.js                                    3.63 kB │ gzip:     1.34 kB
+dist/assets/rust-DdL9SqIa.js                                        3.66 kB │ gzip:     1.80 kB
+dist/assets/cubemapToSphericalPolynomial-Ci3SHSuh.js                3.66 kB │ gzip:     1.61 kB
+dist/assets/restructuredtext-BYgofb2h.js                            3.74 kB │ gzip:     1.32 kB
+dist/assets/less-B9JPFI3C.js                                        3.74 kB │ gzip:     1.36 kB
+dist/assets/dart-onAF5SnQ.js                                        3.93 kB │ gzip:     1.60 kB
+dist/assets/csharp-BKxtCVv1.js                                      4.11 kB │ gzip:     1.66 kB
+dist/assets/msdax-DauUninz.js                                       4.27 kB │ gzip:     1.87 kB
+dist/assets/mdx-B1cOedjN.js                                         4.31 kB │ gzip:     1.20 kB
+dist/assets/css-DIMkf-bt.js                                         4.36 kB │ gzip:     1.33 kB
+dist/assets/pug-Z5eAx3Zn.js                                         4.46 kB │ gzip:     1.60 kB
+dist/assets/swift-Bxkupp3x.js                                       4.48 kB │ gzip:     1.99 kB
+dist/assets/ecl-94qehhXe.js                                         4.50 kB │ gzip:     2.17 kB
+dist/assets/html-uALGrReA.js                                        4.51 kB │ gzip:     1.15 kB
+dist/assets/typescript-BW-Q5kNd.js                                  4.66 kB │ gzip:     1.93 kB
+dist/assets/cpp-C7h46wYY.js                                         4.74 kB │ gzip:     2.02 kB
+dist/assets/typeStore-CuqQeP4D.js                                   4.87 kB │ gzip:     1.80 kB
+dist/assets/vb-DV3o63ZY.js                                          5.30 kB │ gzip:     2.01 kB
+dist/assets/twig-De2hgUGE.js                                        5.78 kB │ gzip:     1.48 kB
+dist/assets/scss-gp-XZpBa.js                                        6.26 kB │ gzip:     1.70 kB
+dist/assets/handlebars-Ebf01hzN.js                                  6.27 kB │ gzip:     1.37 kB
+dist/assets/julia-Bri6UV-V.js                                       6.50 kB │ gzip:     2.64 kB
+dist/assets/systemverilog-Bz4Y3fRF.js                               6.85 kB │ gzip:     2.72 kB
+dist/assets/dds.pure-BpDYNlAe.js                                    6.93 kB │ gzip:     2.52 kB
+dist/assets/st-DbInun42.js                                          6.94 kB │ gzip:     2.24 kB
+dist/assets/scala-DHpiXF5c.js                                       7.11 kB │ gzip:     2.07 kB
+dist/assets/rgbdDecode.fragment-CAbElkaa.js                         7.12 kB │ gzip:     2.42 kB
+dist/assets/wgsl-DpFanUEy.js                                        7.18 kB │ gzip:     2.73 kB
+dist/assets/rgbdDecode.fragment-CU_MjVCi.js                         7.33 kB │ gzip:     2.51 kB
+dist/assets/perl-oz_6vUea.js                                        7.35 kB │ gzip:     3.10 kB
+dist/assets/postiats-43DmfD33.js                                    7.36 kB │ gzip:     2.39 kB
+dist/assets/php-nr791fC2.js                                         7.74 kB │ gzip:     2.03 kB
+dist/assets/razor-CnKDFavp.js                                       8.10 kB │ gzip:     2.04 kB
+dist/assets/basisTextureLoader-CCmgl3pM.js                          8.14 kB │ gzip:     3.17 kB
+dist/assets/clojure-Cm7r79vr.js                                     8.21 kB │ gzip:     3.49 kB
+dist/assets/ruby-DezsRK8O.js                                        8.21 kB │ gzip:     2.55 kB
+dist/assets/sql-NEE52Syq.js                                         8.84 kB │ gzip:     3.73 kB
+dist/assets/protobuf-C531GsRP.js                                    8.89 kB │ gzip:     2.04 kB
+dist/assets/mysql-SOo6toE5.js                                       9.65 kB │ gzip:     3.98 kB
+dist/assets/elixir-6RTg0lbw.js                                     10.11 kB │ gzip:     2.50 kB
+dist/assets/redshift-DT7zqm-g.js                                   10.33 kB │ gzip:     4.24 kB
+dist/assets/abap-08VXUWAP.js                                       11.69 kB │ gzip:     5.15 kB
+dist/assets/pgsql-DTj74zXo.js                                      11.91 kB │ gzip:     4.42 kB
+dist/assets/jsonMode-2b5Cfn8G.js                                   12.15 kB │ gzip:     4.43 kB
+dist/assets/exrTextureLoader-BfS2FpIe.js                           13.14 kB │ gzip:     4.82 kB
+dist/assets/powerquery-D3hlyOfw.js                                 15.34 kB │ gzip:     4.73 kB
+dist/assets/freemarker2-yHst39nT.js                                15.54 kB │ gzip:     3.97 kB
+dist/assets/solidity-BEEn4gHE.js                                   15.99 kB │ gzip:     4.39 kB
+dist/assets/ktxTextureLoader-DIAs1c1C.js                           16.69 kB │ gzip:     4.92 kB
+dist/assets/guid-DmuT8ZLz.js                                       18.48 kB │ gzip:     6.42 kB
+dist/assets/tsMode-tZtsEl2Q.js                                     21.80 kB │ gzip:     6.13 kB
+dist/assets/tools.pure-BualMiTJ.js                                 25.52 kB │ gzip:     8.58 kB
+dist/assets/lspLanguageFeatures-Bitmji7S.js                        28.21 kB │ gzip:     7.17 kB
+dist/assets/baseTexture.pure-DG1Eb6bW.js                           30.75 kB │ gzip:     8.32 kB
+dist/assets/envTextureLoader-BjEt8jqV.js                           31.86 kB │ gzip:     8.91 kB
+dist/assets/math.color.pure-DzVywzk0.js                            77.27 kB │ gzip:    18.30 kB
+dist/assets/spatial-G1yMYI3L.js                                   862.94 kB │ gzip:   202.60 kB
+dist/assets/main-Dr8g7JHA.js                                    4,182.99 kB │ gzip: 1,077.51 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 7.73s
+[33m[PLUGIN_TIMINGS] [0mJavaScript callbacks ran for 6.0s of this 7.7s build (77%).
+4 callbacks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
+  - plugin vite:worker load (5 calls)
+  - plugin vite:worker-import-meta-url transform (4 calls)
+  - plugin vite:css transform (102 calls)
+  … and 1 more
+See https://rolldown.rs/reference/InputOptions.checks#bundlertimings for more details.
+
+warning: variable does not need to be mutable
+    --> src/loom_stream.rs:1535:13
+     |
+1535 |         let mut response =
+     |             ----^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `loom-ide` (lib test) generated 1 warning (run `cargo fix --lib -p loom-ide --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.97s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/app_lib-c667a5a1b4fc0d65)
+
+running 147 tests
+test execution_admission_tests::command_matrix_child ... ok
+test experiment::tests::experiment_add_defaults_and_rejects_empty_title ... ok
+test experiment::tests::experiment_add_arm_validates_label_and_starts_defined ... ok
+test experiment::tests::experiment_add_arm_clears_a_previous_decision ... ok
+test experiment::tests::experiment_choose_arm_requires_a_finished_arm ... ok
+test experiment::tests::experiment_awaiting_decision_needs_two_finished_arms ... ok
+test experiment::tests::experiment_clear_decision_keeps_results_and_restores_draft ... ok
+test experiment::tests::experiment_save_load_round_trip_and_corrupt_handling ... ok
+test experiment::tests::experiment_set_arm_result_requires_nonempty_and_marks_done ... ok
+test experiment::tests::experiment_load_resets_running_arms_to_defined ... ok
+test experiment::tests::experiment_set_arm_status_rejects_done_and_unknown ... ok
+test gateway_tests::config_parses_real_gateway_shape_and_minimal_tls_response ... ok
+test gateway_tests::live_gateway_responses_parse ... ignored, requires a live Loom gateway on localhost:5006
+test gateway_tests::base64_matches_rfc4648_vectors_and_rejects_invalid_input ... ok
+test gateway_tests::artifact_content_decodes_both_layers_and_handles_empty_content ... ok
+test gateway_tests::model_and_tool_fields_match_protojson_names ... ok
+test gateway_tests::session_detail_preserves_camel_case_fields_and_fractional_cost ... ok
+test gateway_tests::provider_config_is_nested_and_active_comes_from_response ... ok
+test gateway_tests::providers_mark_only_the_active_provider ... ok
+test gateway_tests::storage_unwraps_status_and_reports_error_and_latency ... ok
+test gateway_tests::trace_and_artifact_stats_preserve_string_int64s ... ok
+test knowledge::tests::agent_overwrites_status_bypass_unsupported_types_and_large_notes_rejected ... ok
+test execution_admission_tests::command_matrix_uses_only_the_disposable_peer ... ok
+test knowledge::tests::create_save_search_history_and_provenance ... ok
+test knowledge::tests::duplicate_ids_invalid_frontmatter_and_oversize_load_preserve_files ... ok
+test knowledge::tests::real_vault_read_only_smoke ... ignored, manual check of the local vault; ordinary unit tests must not depend on user data
+test knowledge::tests::archive_hides_and_restores_without_deleting_the_file ... ok
+test knowledge::tests::fixtures_remain_hidden_and_unchanged_in_notes_edges_activity_and_export ... ok
+test knowledge::tests::recovery_is_idempotent_and_conflicts_preflight_all_files ... ok
+test knowledge::tests::links_backlinks_duplicates_self_links_and_unlink ... ok
+test knowledge::tests::relation_only_edits_change_the_vault_signature ... ok
+test knowledge::tests::stale_ledger_and_external_edits_never_overwritten ... ok
+test knowledge::tests::sync_does_not_duplicate_a_hidden_marker ... ok
+test knowledge::tests::symlink_root_parent_note_history_and_ledger_rejected ... ok
+test knowledge::tests::sync_markers_are_exact_idempotent_and_artifact_content_excluded ... ok
+test knowledge::tests::sync_never_overwrites_a_human_edited_mirror ... ok
+test knowledge::tests::sync_refreshes_a_pristine_mirror_when_server_metadata_changes ... ok
+test loom_stream::tests::cancel_of_an_unknown_request_is_an_error ... ok
+test loom_stream::tests::chunk_size_line_is_bounded ... ok
+test loom_stream::tests::chunked_sse_over_a_real_tcp_socket_is_decoded ... ok
+test loom_stream::tests::chunked_sse_split_across_chunk_boundaries_parses ... ok
+test loom_stream::tests::chunked_with_trailers_and_zero_chunk_reaches_clean_eof ... ok
+test loom_stream::tests::clarification_requires_explicit_acceptance ... ok
+test loom_stream::tests::completion_then_truncation_is_an_error_not_a_success ... ok
+test loom_stream::tests::content_length_sse_parses_events ... ok
+test loom_stream::tests::crlf_split_across_transfer_chunks_keeps_sse_boundaries ... ok
+test loom_stream::tests::eof_framed_bodies_deliver_every_line ... ok
+test loom_stream::tests::error_after_completion_is_an_error_not_a_success ... ok
+test loom_stream::tests::failed_stage_without_error_text_is_an_error ... ok
+test loom_stream::tests::invalid_utf8_lines_are_counted_not_corrupting ... ok
+test loom_stream::tests::loom_stream_eof_without_completion_is_an_error ... ok
+test loom_stream::tests::malformed_json_data_frame_is_counted_not_dropped_silently ... ok
+test loom_stream::tests::ndjson_error_envelope_surfaces_the_message ... ok
+test loom_stream::tests::ndjson_result_envelopes_are_unwrapped ... ok
+test loom_stream::tests::stream_inputs_are_validated_before_any_network_work ... ok
+test knowledge::tests::review_requires_human_proposal_evidence_reason_and_current_draft ... ok
+test loom_stream::tests::truncated_mid_chunk_is_an_explicit_error ... ok
+test loom_stream::tests::weave_requires_completion_and_surfaces_application_errors ... ok
+test loom_stream::tests::weave_stream_body_carries_autonomy_in_snake_case_backend_config ... ok
+test loom_stream::tests::weave_stream_body_carries_budget_as_snake_case_when_positive ... ok
+test loom_stream::tests::weave_stream_body_carries_the_context_pack_when_present ... ok
+test loom_stream::tests::weave_stream_body_omits_blank_optional_fields ... ok
+test loom_stream::tests::weave_stream_body_omits_non_positive_budget ... ok
+test loom_stream::tests::weave_stream_body_uses_the_sse_snake_case_contract ... ok
+test loom_tasks::tests::list_field_reads_each_candidate_key ... ok
+test loom_tasks::tests::ready_and_blocked_lists_read_protojson_keys ... ok
+test loom_tasks::tests::tasks_of_unwraps_tasks_results_and_single_objects ... ok
+test navigation::tests::closed_surface_can_be_started_again ... ok
+test navigation::tests::repeated_launches_activate_one_existing_instance ... ok
+test spatial::tests::saves_native_notes_without_overwriting_and_rejects_invalid_input ... ok
+test store::tests::autonomy_rank_orders_the_four_levels ... ok
+test store::tests::autonomy_rank_rejects_unknown_levels ... ok
+test store::tests::intent_budget_set_update_and_clear_round_trip ... ok
+test store::tests::intent_create_rejects_empty_statement_and_unknown_autonomy ... ok
+test store::tests::intent_create_second_does_not_become_active ... ok
+test store::tests::intent_create_sets_defaults_and_first_becomes_active ... ok
+test store::tests::intent_delete_clears_active_pointer ... ok
+test store::tests::intent_delete_refuses_when_work_references_it ... ok
+test store::tests::intent_load_corrupt_file_moves_it_aside_and_errors ... ok
+test store::tests::intent_load_dedups_and_drops_dangling_active_pointer ... ok
+test store::tests::intent_load_missing_file_starts_empty_and_creates_it ... ok
+test store::tests::intent_load_rejects_unknown_autonomy_and_status ... ok
+test store::tests::intent_raise_requires_justification_lower_is_instant ... ok
+test store::tests::intent_save_load_round_trip_preserves_versions_and_history ... ok
+test store::tests::intent_set_acceptance_does_not_bump_version ... ok
+test store::tests::intent_set_active_switches_and_rejects_unknown ... ok
+test store::tests::intent_update_noop_changes_nothing ... ok
+test store::tests::intent_update_statement_bumps_version_and_snapshots ... ok
+test store::tests::intent_update_status_only_does_not_bump_version ... ok
+test store::tests::intent_update_why_clear_and_rejects ... ok
+test store::tests::work_add_rejects_empty_title ... ok
+test store::tests::work_add_starts_paused_collaborative_with_unique_ids ... ok
+test store::tests::work_autonomy_history_push_records_from_and_to ... ok
+test store::tests::work_load_corrupt_file_moves_it_aside_and_errors ... ok
+test store::tests::work_load_dedups_duplicate_ids_keeping_the_first ... ok
+test store::tests::work_load_legacy_item_without_new_fields_uses_defaults ... ok
+test store::tests::work_load_missing_file_starts_empty_and_creates_it ... ok
+test store::tests::work_load_rejects_unknown_autonomy_and_status ... ok
+test store::tests::work_save_load_round_trip_preserves_everything ... ok
+test store::tests::work_set_artifacts_trims_and_drops_empties ... ok
+test store::tests::work_set_autonomy_validates_levels ... ok
+test store::tests::work_set_session_sets_and_clears ... ok
+test store::tests::work_set_status_validates ... ok
+test store::tests::work_set_success_criteria_trims_and_drops_empties ... ok
+test tests::agent_parses_gateway_json ... ok
+test tests::artifact_parses_gateway_json ... ok
+test tests::de_i64_accepts_number_and_string_forms ... ok
+test tests::de_i64_missing_key_defaults_to_zero ... ok
+test tests::de_i64_rejects_floats_bools_and_garbage ... ok
+test tests::invalid_stored_level_is_rejected ... ok
+test tests::missing_referenced_records_are_rejected ... ok
+test tests::omitted_ownership_is_rejected_and_unscoped_requires_no_active_intent ... ok
+test tests::parse_content_length_finds_the_header_and_ignores_the_rest ... ok
+test tests::percent_encode_keeps_unreserved_and_escapes_the_rest ... ok
+test tests::policy_lowered_before_fallback_is_seen_by_the_recheck ... ok
+test tests::session_parses_gateway_json_camel_and_snake_case ... ok
+test tests::sessions_and_agents_wrappers_parse ... ok
+test tests::stored_manual_intent_rejects_when_no_work_is_referenced ... ok
+test tests::stored_manual_work_rejects_execution_no_matter_what_the_caller_wants ... ok
+test tests::valid_non_manual_policy_passes_and_names_its_owner ... ok
+test tests::weave_unary_body_carries_autonomy_in_camel_case_backend_config ... ok
+test tests::weave_unary_body_carries_budget_as_camel_case_when_positive ... ok
+test tests::weave_unary_body_omits_non_positive_budget ... ok
+test tests::workflow_execution_parses_gateway_json ... ok
+test workspace_tests::autonomy_admission_lets_tightening_through_without_justification ... ok
+test workspace_tests::autonomy_admission_rejects_raising_above_the_intent_ceiling ... ok
+test workspace_tests::autonomy_admission_rejects_unknown_levels_and_ignores_missing_intents ... ok
+test workspace_tests::autonomy_admission_requires_justification_to_raise_within_the_ceiling ... ok
+test workspace_tests::collisions_never_overwrite_files_or_replace_directories ... ok
+test workspace_tests::creates_real_files_and_folders_at_root_and_in_subfolders ... ok
+test workspace_tests::default_workspace_is_empty_and_separate_from_server_and_settings ... ok
+test workspace_tests::edits_save_real_text_and_do_not_leave_temporary_files ... ok
+test workspace_tests::invalid_folder_selection_keeps_the_current_workspace ... ok
+test workspace_tests::invalid_settings_do_not_create_a_replacement_workspace ... ok
+test workspace_tests::migration_preview_detects_task_name_collisions ... ok
+test workspace_tests::migration_preview_rejects_untitled_items ... ok
+test workspace_tests::migration_task_names_are_url_safe_slugs ... ok
+test workspace_tests::missing_selected_folder_is_not_recreated_or_replaced ... ok
+test workspace_tests::rejects_invalid_names_without_creating_anything ... ok
+test workspace_tests::rejects_missing_non_directory_and_outside_parents ... ok
+test workspace_tests::saves_preserve_permissions_and_reject_readonly_files_and_external_symlinks ... ok
+test workspace_tests::saving_refuses_external_changes_deleted_files_and_outside_paths ... ok
+test workspace_tests::selected_folder_is_remembered_without_seeding_or_changing_its_files ... ok
+test workspace_tests::symlinks_cannot_redirect_creations_outside_or_overwrite_targets ... ok
+test loom_stream::tests::timeout_inside_a_line_does_not_corrupt_accumulated_bytes ... ok
+test loom_stream::tests::cancel_after_completion_data_still_reports_cancelled ... ok
+test loom_stream::tests::cancel_during_silence_stops_the_reader ... ok
+
+test result: ok. 145 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.91s
+
+warning: variant `Exploring` is never constructed
+   --> src/knowledge.rs:161:5
+    |
+157 | pub enum State {
+    |          ----- variant in this enum
+...
+161 |     Exploring,
+    |     ^^^^^^^^^
+    |
+    = note: `State` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variant `Comparison` is never constructed
+   --> src/mechanics.rs:117:5
+    |
+114 | pub enum ExperimentStage {
+    |          --------------- variant in this enum
+...
+117 |     Comparison, // 1
+    |     ^^^^^^^^^^
+    |
+    = note: `ExperimentStage` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `living-workbench` (bin "living-workbench" test) generated 2 warnings
+    Finished `test` profile [unoptimized] target(s) in 0.68s
+     Running unittests src/main.rs (native-app/target/debug/deps/living_workbench-bc178028bb1fa907)
+
+running 22 tests
+test knowledge::tests::human_review_and_state ... ok
+test knowledge::tests::links_backlinks_and_search ... ok
+test knowledge::tests::persistence_and_external_conflict ... ok
+test knowledge::tests::recovery_rename_and_permissions ... ok
+test loom_adapter::tests::body_without_length_reads_until_close ... ok
+test loom_adapter::tests::chunked_body_is_decoded ... ok
+test loom_adapter::tests::content_length_bounds_the_body ... ok
+test loom_adapter::tests::extract_text_tries_five_keys_in_order ... ok
+test loom_adapter::tests::parse_json_rejects_bad_json ... ok
+test loom_adapter::tests::request_to_dead_port_returns_error ... ok
+test mechanics::tests::attention_execution_and_input_override_completion ... ok
+test mechanics::tests::manual_chat_preserves_guard_order_and_existing_settings ... ok
+test mechanics::tests::reduced_motion_freezes_geometry_and_illumination ... ok
+test mechanics::tests::strategy_choices_require_review_and_survive_reopening ... ok
+test navigation::tests::closed_surface_can_be_started_again ... ok
+test navigation::tests::repeated_launches_activate_one_existing_instance ... ok
+test scene::tests::preset_round_trip_and_invalid_values_preserve_saved_scene ... ok
+test scene::tests::preview_clock_obeys_pause_stop_and_reduced_motion ... ok
+test visual::theme_tests::appearances_read_the_shared_palette_and_geometry ... ok
+test files::tests::refuses_external_edits_and_preserves_both_versions ... ok
+test knowledge::tests::frontend_starts_empty_and_keeps_real_notes_after_reload ... ok
+test knowledge::tests::frontend_hides_historical_records_without_deleting_or_overwriting_them ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+
+> loom-ide-tauri@0.0.0 test:spatial
+> node scripts/workspace-smoke.mjs
+
+desktop-dark {"width":1366,"height":650,"bodyWidth":1366,"chatParent":"spatial-chat-slot","shortcuts":[{"label":"Work","x":657.1484375,"y":135.03125,"w":51.703125,"h":34},{"label":"Experiments","x":858.9921875,"y":246.03125,"w":92.390625,"h":34},{"label":"Evidence","x":874.65625,"y":428.0625,"w":74.15625,"h":34},{"label":"Agents","x":652.0625,"y":534.625,"w":61.875,"h":34},{"label":"Knowledge","x":418.015625,"y":428.0625,"w":85.5625,"h":34},{"label":"Code","x":428.09375,"y":246.03125,"w":52.3125,"h":34}],"work":{"x":31.3125,"y":194.5,"w":293.609375,"h":12.375,"hidden":false},"chat":{"x":27.3125,"y":226.875,"w":301.609375,"h":411.125,"hidden":false},"composer":{"x":42.3125,"y":579,"w":271.609375,"h":44,"hidden":false},"sphere":{"x":356.234375,"y":76,"w":653.53125,"h":562,"hidden":false},"context":{"x":1037.078125,"y":76,"w":301.609375,"h":562,"hidden":false},"collaboration":{"x":1058.078125,"y":134,"w":259.609375,"h":41.59375,"hidden":false},"attention":{"x":1058.078125,"y":307.09375,"w":259.609375,"h":22.5,"hidden":false},"canvas":654} exceptions []
+reference-light {"width":1671,"height":941,"bodyWidth":1671,"chatParent":"spatial-chat-slot","shortcuts":[{"label":"Work","x":809.6484375,"y":174.40625,"w":51.703125,"h":34},{"label":"Experiments","x":1062.0703125,"y":342.875,"w":92.390625,"h":34},{"label":"Evidence","x":1079.21875,"y":619.171875,"w":74.15625,"h":34},{"label":"Agents","x":804.5625,"y":780.90625,"w":61.875,"h":34},{"label":"Knowledge","x":519.9375,"y":619.171875,"w":85.5625,"h":34},{"label":"Code","x":528.53125,"y":342.875,"w":52.3125,"h":34}],"work":{"x":37.40625,"y":194.5,"w":360.953125,"h":82.21875,"hidden":false},"chat":{"x":33.40625,"y":296.71875,"w":368.953125,"h":632.28125,"hidden":false},"composer":{"x":48.40625,"y":870,"w":338.953125,"h":44,"hidden":false},"sphere":{"x":434.359375,"y":76,"w":802.28125,"h":853,"hidden":false},"context":{"x":1268.640625,"y":76,"w":368.953125,"h":853,"hidden":false},"collaboration":{"x":1289.640625,"y":134,"w":326.953125,"h":20.796875,"hidden":false},"attention":{"x":1289.640625,"y":286.296875,"w":326.953125,"h":22.5,"hidden":false},"canvas":802} exceptions []
+tablet {"width":900,"height":720,"bodyWidth":900,"chatParent":"spatial-chat-slot","shortcuts":[{"label":"Work","x":574.2109375,"y":110.390625,"w":51.703125,"h":34},{"label":"Experiments","x":735.3828125,"y":185.453125,"w":92.390625,"h":34},{"label":"Evidence","x":749.828125,"y":308.546875,"w":74.15625,"h":34},{"label":"Agents","x":569.125,"y":380.59375,"w":61.875,"h":34},{"label":"Knowledge","x":375.765625,"y":308.546875,"w":85.5625,"h":34},{"label":"Code","x":387.0625,"y":185.453125,"w":52.3125,"h":34}],"work":{"x":22,"y":194.5,"w":289.140625,"h":11.890625,"hidden":false},"chat":{"x":18,"y":226.390625,"w":297.140625,"h":409.609375,"hidden":false},"composer":{"x":33,"y":577,"w":267.140625,"h":44,"hidden":false},"sphere":{"x":333.140625,"y":76,"w":533.859375,"h":380,"hidden":false},"context":{"x":333.140625,"y":474,"w":533.859375,"h":300,"hidden":false},"collaboration":{"x":354.140625,"y":532,"w":491.859375,"h":20.796875,"hidden":false},"attention":{"x":354.140625,"y":684.296875,"w":491.859375,"h":22.5,"hidden":false},"canvas":534} exceptions []
+mobile {"width":390,"height":740,"bodyWidth":390,"chatParent":"spatial-chat-slot","shortcuts":[{"label":"Work","x":161.6484375,"y":107.703125,"w":51.703125,"h":34},{"label":"Experiments","x":257.9140625,"y":178.796875,"w":92.390625,"h":34},{"label":"Evidence","x":270.46875,"y":295.40625,"w":74.15625,"h":34},{"label":"Agents","x":156.5625,"y":363.65625,"w":61.875,"h":34},{"label":"Knowledge","x":28.09375,"y":295.40625,"w":85.5625,"h":34},{"label":"Code","x":41.28125,"y":178.796875,"w":52.3125,"h":34}],"work":{"x":20,"y":566.5,"w":335,"h":7.09375,"hidden":false},"chat":{"x":16,"y":593.59375,"w":343,"h":394.40625,"hidden":false},"composer":{"x":31,"y":929,"w":313,"h":44,"hidden":false},"sphere":{"x":16,"y":76,"w":343,"h":360,"hidden":false},"context":{"x":16,"y":1000,"w":343,"h":300,"hidden":false},"collaboration":{"x":37,"y":1058,"w":301,"h":20.796875,"hidden":false},"attention":{"x":37,"y":1210.296875,"w":301,"h":22.5,"hidden":false},"canvas":343} exceptions []
+Visual states: 32 captures passed; shader failure and retry passed.
+{
+  "passed": true,
+  "viewports": [
+    "desktop-dark",
+    "reference-light",
+    "tablet",
+    "mobile"
+  ],
+  "exceptions": 0
+}

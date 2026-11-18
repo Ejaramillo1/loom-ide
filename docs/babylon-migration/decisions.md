@@ -1,7 +1,8 @@
-# Babylon migration — decisions (v2, Stage 1.1)
+# Babylon migration — decisions (v2, updated 17 November 2026)
 
 Recorded 2026-11-17, base `main` (contains `bf11bd3` and the `ded26b6`
-merge). These nine decisions replace the v1 decisions (D1–D5); the v1 plan
+merge). The original nine decisions replace v1 (D1–D5); §§10–11 and the
+updates to §§2, 5 and 8 record the subsequent user requests. The v1 plan
 is superseded by the critical review (`Plan_migracion_…_revision_critica.md`,
 annex AR-01…AR-12).
 
@@ -14,7 +15,9 @@ second 3D frontend; Babylon does not become the UI.
 
 One pearl sphere with procedural curved lines and minimal motion. The
 diorama (six objects, portals, labels, relation lines) **does not migrate**;
-its functional navigation routes stay in DOM.
+its functional navigation routes stay in DOM. The sphere returns to Overview;
+Work, Experiments, Evidence, Agents, Knowledge and Code remain HTML shortcuts
+around it. The separate floating mode menu is removed (latest user instruction).
 
 ## 3 — Dependencies
 
@@ -35,9 +38,12 @@ removed in the first phase.
 
 ## 5 — Backgrounds
 
-Light and dark, coherent with Quiet Complexity. The four inherited themed
-backgrounds (charcoal/dusk/moss/night) go to separate evaluation; they are
-not a migration requirement.
+Light and dark remain the only renderer themes. The implementation repair
+retained the existing Charcoal, Dusk, Moss and Night preferences as subtle
+host CSS atmosphere tints, preserving saved choices. Charcoal uses the base
+atmosphere; the other three change a radial gradient. This supersedes the
+earlier deferral of those controls. No themed 3D scenes, HDRIs or additional
+Babylon backgrounds are introduced. The player canvas remains transparent.
 
 ## 6 — Interface
 
@@ -52,9 +58,12 @@ existing contracts; no code, configuration, schema, or execution changes.
 
 ## 8 — Unity removal
 
-After green tests, approved captures, a verifiable local backup, zero lost
-features, and **explicit approval**. Not automatic. Until then Unity stays
-as a labeled fallback.
+The subsequent user instruction to get rid of Unity authorized retiring it
+as the active renderer: Babylon is now the only loader target. Historical
+Unity files remain preserved; deletion and machine-wide uninstallation are
+outside this repair. `npm run test:spatial` replaces Unity recompile and
+CheckWorkbench in the repository judge and AGENTS gates. No Unity fallback
+view is introduced.
 
 ## 9 — Visual reference
 
@@ -62,9 +71,26 @@ The latest approved Quiet Complexity capture
 (`docs/babylon-migration/reference/agent-memory-experiment-dashboard.png`,
 SHA-256 `413f5ee2…`), not Unity. Frozen in `reference.md`.
 
+## 10 — Sphere size
+
+The sphere diameter is 60% of the **smaller iframe dimension**, not 60% of
+the application width. Camera sizing and CSS shadow/reflection use that same
+rule. With the three-region desktop layout this is about 25–29% of full
+viewport width at the recorded desktop sizes. It is a deliberate compromise
+that leaves room for the restored orbital shortcuts; it does not claim exact
+proportions of the Dashboard reference. No further size change is made here.
+
+## 11 — State appearance
+
+The pearl blends state pigment into its surface and rim instead of adding
+light that clips to white. `src/spatial/state-colors.ts` is the renderer palette
+source. Eight states must have pairwise-distinct rendered rim means in both
+themes at High and Low quality. Motion is frozen for these pixel assertions.
+Colors supplement the existing state text; they do not replace it.
+
 ## Deferred (recorded, not decided here)
 
 - Removing the iframe and integrating the scene directly into `main.ts`.
 - Loom-as-judge driving the Babylon scene directly.
 - Godot stays archived as a discarded alternative.
-- The four themed backgrounds: separate evaluation.
+- New 3D environments/HDRIs; the retained CSS preferences do not authorize them.

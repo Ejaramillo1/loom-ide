@@ -34,7 +34,7 @@ After every change, run the real checks and fix failures yourself:
 - cargo test --offline --locked --manifest-path src-tauri/Cargo.toml --lib
 - cargo test --offline --locked --manifest-path native-app/Cargo.toml
 - cargo fmt --check --manifest-path src-tauri/Cargo.toml
-- Unity recompile (unity recompile --project-path "$PWD/unity-memory-palace" --format json)
+- npm run test:spatial (self-starting Babylon renderer, visual-state and workspace smoke; replaces the retired Unity checks)
 
 If a check fails, fix it and re-run. If the same failure survives three
 genuinely different fix attempts, record the error and what you tried, mark

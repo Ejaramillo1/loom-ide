@@ -1,5 +1,5 @@
 {
-  "base": "http://127.0.0.1:4183",
+  "base": "http://127.0.0.1:45391",
   "network": "Loom HTTP calls blocked: disposable offline UI test; no live turns",
   "reports": [
     {
@@ -8,18 +8,62 @@
       "height": 650,
       "bodyWidth": 1366,
       "chatParent": "spatial-chat-slot",
+      "shortcuts": [
+        {
+          "label": "Work",
+          "x": 657.1484375,
+          "y": 135.03125,
+          "w": 51.703125,
+          "h": 34
+        },
+        {
+          "label": "Experiments",
+          "x": 858.9921875,
+          "y": 246.03125,
+          "w": 92.390625,
+          "h": 34
+        },
+        {
+          "label": "Evidence",
+          "x": 874.65625,
+          "y": 428.0625,
+          "w": 74.15625,
+          "h": 34
+        },
+        {
+          "label": "Agents",
+          "x": 652.0625,
+          "y": 534.625,
+          "w": 61.875,
+          "h": 34
+        },
+        {
+          "label": "Knowledge",
+          "x": 418.015625,
+          "y": 428.0625,
+          "w": 85.5625,
+          "h": 34
+        },
+        {
+          "label": "Code",
+          "x": 428.09375,
+          "y": 246.03125,
+          "w": 52.3125,
+          "h": 34
+        }
+      ],
       "work": {
         "x": 31.3125,
-        "y": 210.5,
+        "y": 194.5,
         "w": 293.609375,
-        "h": 50.375,
+        "h": 57.5,
         "hidden": false
       },
       "chat": {
         "x": 27.3125,
-        "y": 280.875,
+        "y": 272,
         "w": 301.609375,
-        "h": 357.125,
+        "h": 366,
         "hidden": false
       },
       "composer": {
@@ -51,24 +95,11 @@
         "hidden": false
       },
       "attention": {
-        "x": 1058.078125,
-        "y": 307.09375,
-        "w": 259.609375,
-        "h": 22.5,
-        "hidden": false
-      },
-      "nav": {
-        "y": 120.953125,
-        "h": 444,
-        "parent": "view-spatial",
-        "labels": [
-          "Overview",
-          "Code",
-          "Experiment",
-          "Work",
-          "Agents",
-          "Knowledge"
-        ]
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "hidden": true
       },
       "canvas": 654
     },
@@ -78,18 +109,62 @@
       "height": 941,
       "bodyWidth": 1671,
       "chatParent": "spatial-chat-slot",
+      "shortcuts": [
+        {
+          "label": "Work",
+          "x": 809.6484375,
+          "y": 174.40625,
+          "w": 51.703125,
+          "h": 34
+        },
+        {
+          "label": "Experiments",
+          "x": 1062.0703125,
+          "y": 342.875,
+          "w": 92.390625,
+          "h": 34
+        },
+        {
+          "label": "Evidence",
+          "x": 1079.21875,
+          "y": 619.171875,
+          "w": 74.15625,
+          "h": 34
+        },
+        {
+          "label": "Agents",
+          "x": 804.5625,
+          "y": 780.90625,
+          "w": 61.875,
+          "h": 34
+        },
+        {
+          "label": "Knowledge",
+          "x": 519.9375,
+          "y": 619.171875,
+          "w": 85.5625,
+          "h": 34
+        },
+        {
+          "label": "Code",
+          "x": 528.53125,
+          "y": 342.875,
+          "w": 52.3125,
+          "h": 34
+        }
+      ],
       "work": {
         "x": 37.40625,
-        "y": 210.5,
+        "y": 194.5,
         "w": 360.953125,
-        "h": 120.21875,
+        "h": 82.21875,
         "hidden": false
       },
       "chat": {
         "x": 33.40625,
-        "y": 350.71875,
+        "y": 296.71875,
         "w": 368.953125,
-        "h": 578.28125,
+        "h": 632.28125,
         "hidden": false
       },
       "composer": {
@@ -121,24 +196,11 @@
         "hidden": false
       },
       "attention": {
-        "x": 1289.640625,
-        "y": 286.296875,
-        "w": 326.953125,
-        "h": 22.5,
-        "hidden": false
-      },
-      "nav": {
-        "y": 144.234375,
-        "h": 673.890625,
-        "parent": "view-spatial",
-        "labels": [
-          "Overview",
-          "Code",
-          "Experiment",
-          "Work",
-          "Agents",
-          "Knowledge"
-        ]
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "hidden": true
       },
       "canvas": 802
     },
@@ -148,18 +210,62 @@
       "height": 720,
       "bodyWidth": 900,
       "chatParent": "spatial-chat-slot",
+      "shortcuts": [
+        {
+          "label": "Work",
+          "x": 574.2109375,
+          "y": 110.390625,
+          "w": 51.703125,
+          "h": 34
+        },
+        {
+          "label": "Experiments",
+          "x": 735.3828125,
+          "y": 185.453125,
+          "w": 92.390625,
+          "h": 34
+        },
+        {
+          "label": "Evidence",
+          "x": 749.828125,
+          "y": 308.546875,
+          "w": 74.15625,
+          "h": 34
+        },
+        {
+          "label": "Agents",
+          "x": 569.125,
+          "y": 380.59375,
+          "w": 61.875,
+          "h": 34
+        },
+        {
+          "label": "Knowledge",
+          "x": 375.765625,
+          "y": 308.546875,
+          "w": 85.5625,
+          "h": 34
+        },
+        {
+          "label": "Code",
+          "x": 387.0625,
+          "y": 185.453125,
+          "w": 52.3125,
+          "h": 34
+        }
+      ],
       "work": {
         "x": 22,
-        "y": 210.5,
+        "y": 194.5,
         "w": 289.140625,
-        "h": 49.890625,
+        "h": 57.5,
         "hidden": false
       },
       "chat": {
         "x": 18,
-        "y": 280.390625,
+        "y": 272,
         "w": 297.140625,
-        "h": 355.609375,
+        "h": 364,
         "hidden": false
       },
       "composer": {
@@ -191,24 +297,11 @@
         "hidden": false
       },
       "attention": {
-        "x": 354.140625,
-        "y": 684.296875,
-        "w": 491.859375,
-        "h": 22.5,
-        "hidden": false
-      },
-      "nav": {
-        "y": 106.390625,
-        "h": 300.21875,
-        "parent": "view-spatial",
-        "labels": [
-          "Overview",
-          "Code",
-          "Experiment",
-          "Work",
-          "Agents",
-          "Knowledge"
-        ]
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "hidden": true
       },
       "canvas": 534
     },
@@ -218,18 +311,62 @@
       "height": 740,
       "bodyWidth": 390,
       "chatParent": "spatial-chat-slot",
+      "shortcuts": [
+        {
+          "label": "Work",
+          "x": 161.6484375,
+          "y": 107.703125,
+          "w": 51.703125,
+          "h": 34
+        },
+        {
+          "label": "Experiments",
+          "x": 257.9140625,
+          "y": 178.796875,
+          "w": 92.390625,
+          "h": 34
+        },
+        {
+          "label": "Evidence",
+          "x": 270.46875,
+          "y": 295.40625,
+          "w": 74.15625,
+          "h": 34
+        },
+        {
+          "label": "Agents",
+          "x": 156.5625,
+          "y": 363.65625,
+          "w": 61.875,
+          "h": 34
+        },
+        {
+          "label": "Knowledge",
+          "x": 28.09375,
+          "y": 295.40625,
+          "w": 85.5625,
+          "h": 34
+        },
+        {
+          "label": "Code",
+          "x": 41.28125,
+          "y": 178.796875,
+          "w": 52.3125,
+          "h": 34
+        }
+      ],
       "work": {
         "x": 20,
-        "y": 582.5,
+        "y": 566.5,
         "w": 335,
-        "h": 45.09375,
+        "h": 57.5,
         "hidden": false
       },
       "chat": {
         "x": 16,
-        "y": 647.59375,
+        "y": 644,
         "w": 343,
-        "h": 340.40625,
+        "h": 344,
         "hidden": false
       },
       "composer": {
@@ -261,24 +398,11 @@
         "hidden": false
       },
       "attention": {
-        "x": 37,
-        "y": 1210.296875,
-        "w": 301,
-        "h": 22.5,
-        "hidden": false
-      },
-      "nav": {
-        "y": 104.796875,
-        "h": 284.40625,
-        "parent": "view-spatial",
-        "labels": [
-          "Overview",
-          "Code",
-          "Experiment",
-          "Work",
-          "Agents",
-          "Knowledge"
-        ]
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "hidden": true
       },
       "canvas": 343
     }
