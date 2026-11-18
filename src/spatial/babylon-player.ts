@@ -27,6 +27,13 @@ try {
     () => window.parent.postMessage({ type: "loom-spatial-ready" }, window.location.origin),
   );
   if (status) status.textContent = "Preparing the bench…";
+  const dispose = () => { bridge.dispose(); bench.dispose(); };
+  window.addEventListener("pagehide", dispose, { once: true });
+  canvas.addEventListener("webglcontextlost", (event) => {
+    event.preventDefault();
+    bridge.fail("The graphics context was lost. Reload the spatial view to recover.");
+    dispose();
+  }, { once: true });
   bridge.ready();
   if (loading) loading.hidden = true;
 } catch (error) {

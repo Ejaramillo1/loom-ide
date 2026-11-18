@@ -262,7 +262,7 @@ const EXECUTIONS_LIMIT = 500;
 const EXECUTIONS_PAGE = 10;
 let executionsShown = EXECUTIONS_PAGE;
 
-/** Tell the Unity bench the vault changed, so its portal counts update
+/** Tell the spatial bench the vault changed, so its portal counts update
     live without a manual refresh (audit A5). Selection alone does not
     change the counts, so it needs no push. */
 function refreshSpatialVault(): void {
@@ -5434,7 +5434,7 @@ function setQualityTier(tier: "High" | "Balanced" | "Low") {
 
 /** The bench scene background (charcoal/dusk/moss/night), persisted and pushed
     to the player over the spatial bridge so the skybox follows the Settings
-    choice. The IDs are validated again in Unity's ApplyBackground. */
+    choice. The IDs are validated again in the spatial player. */
 const BACKGROUND_KEY = "loom-ide-tauri:background";
 const BACKGROUNDS: { id: string; label: string }[] = [
   { id: "charcoal", label: "Charcoal" },
@@ -8002,7 +8002,7 @@ function initAppMenu() {
         "separator",
         // Scene background (selectable skybox): three procedural gradients and
         // one imported CC0 HDRI. The choice persists and reaches the player
-        // over the spatial bridge; Unity swaps RenderSettings.skybox.
+        // over the spatial bridge; the Babylon atmosphere changes tone.
         ...BACKGROUNDS.map((background) => ({
           label: `Background: ${background.label}`,
           radio: true,
@@ -8307,7 +8307,7 @@ async function init() {
       case "Notes": setMode("knowledge"); break;
       default: break;
     }
-  }, () => ({ work: workItems.length, experiments: experiments.length }), currentLoomState, () => backgroundId);
+  }, () => ({ work: workItems.length, experiments: experiments.length }), currentLoomState, () => backgroundId, () => qualityTier);
   // Right pane tabs.
   $("#tab-context").addEventListener("click", () => {
     selectRightTab("context");

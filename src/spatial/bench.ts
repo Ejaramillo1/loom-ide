@@ -6,19 +6,16 @@
 //
 // The diorama from v1 (notebook, flask, floor, orbit rings) is superseded.
 
-import {
-  ArcRotateCamera,
-  Color3,
-  Color4,
-  DirectionalLight,
-  DynamicTexture,
-  Engine,
-  HemisphericLight,
-  MeshBuilder,
-  Scene,
-  StandardMaterial,
-  Vector3,
-} from "@babylonjs/core";
+import { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
+import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
+import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { Engine } from "@babylonjs/core/Engines/engine";
+import { Scene } from "@babylonjs/core/scene";
+import { CreateSphere } from "@babylonjs/core/Meshes/Builders/sphereBuilder";
 
 // State -> tint colour. From design-tokens.json (white / dark). The tint is
 // applied discreetly (fresnel rim + a whisper of emissive), never a loud
@@ -64,7 +61,7 @@ export interface BenchHandle {
 
 export function createBench(canvas: HTMLCanvasElement): BenchHandle {
   const engine = new Engine(canvas, true, {
-    preserveDrawingBuffer: true,
+    preserveDrawingBuffer: false,
     stencil: true,
   });
   const scene = new Scene(engine);
@@ -72,7 +69,7 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
   scene.clearColor = new Color4(0, 0, 0, 0);
 
   // Sphere at origin; camera frames it at ~25% of viewport height.
-  const camera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2, 10.9, Vector3.Zero(), scene);
+  const camera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2, 5.3, Vector3.Zero(), scene);
   camera.fov = 0.733; // ~42°
   camera.minZ = 0.1;
   camera.maxZ = 80;
@@ -96,10 +93,10 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
   ctx.fillStyle = "#f8eee6";
   ctx.fillRect(0, 0, 1024, 512);
   ctx.strokeStyle = ORB_LINE;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 0.8;
   ctx.globalAlpha = 0.85;
-  for (let i = 0; i < 14; i++) {
-    const baseY = (i + 0.5) * (512 / 14);
+  for (let i = 0; i < 64; i++) {
+    const baseY = (i + 0.5) * (512 / 64);
     ctx.beginPath();
     for (let x = 0; x <= 1024; x += 8) {
       const y = baseY + Math.sin((x / 1024) * Math.PI * 2 * 2.5 + i * 0.9) * 7;
@@ -111,16 +108,16 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
   ctx.globalAlpha = 1;
   lineTexture.update();
 
-  const sphere = MeshBuilder.CreateSphere("sphere", { diameter: 2, segments: 64 }, scene);
+  const sphere = CreateSphere("sphere", { diameter: 2, segments: 64 }, scene);
   sphere.position.set(0, 0, 0);
   const mat = new StandardMaterial("sphereMat", scene);
   mat.diffuseColor = PEARL;
   mat.diffuseTexture = lineTexture;
-  mat.specularColor = new Color3(1, 0.97, 0.93);
+  mat.specularColor = new Color3(0.18, 0.17, 0.16);
   mat.specularPower = 48;
   // Discreet state tint: a uniform emissive glow (never a loud recolor).
   // The pearl albedo stays dominant; the tint reads at the rim and body alike.
-  mat.emissiveColor = STATE_WHITE.idle.scale(0.35);
+  mat.emissiveColor = STATE_WHITE.idle.scale(0.10);
   sphere.material = mat;
 
   let currentState = "idle";
@@ -132,10 +129,10 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
     currentState = state;
     const palette = theme === "white" ? STATE_WHITE : STATE_DARK;
     const tint = palette[state] ?? palette.idle;
-    mat.emissiveColor = tint.scale(0.35);
+    mat.emissiveColor = tint.scale(0.10);
   };
 
-  engine.runRenderLoop(() => {
+  const render = () => {
     const dt = Math.min(engine.getDeltaTime(), 100) / 1000;
     if (!reducedMotion) {
       t += dt;
@@ -144,7 +141,13 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
       sphere.scaling.setAll(breathe);
     }
     scene.render();
-  });
+  };
+  const visibility = () => {
+    engine.stopRenderLoop(render);
+    if (!document.hidden) engine.runRenderLoop(render);
+  };
+  document.addEventListener("visibilitychange", visibility);
+  visibility();
 
   const onResize = () => engine.resize();
   window.addEventListener("resize", onResize);
@@ -164,8 +167,10 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
     refreshVault(_work: number, _experiments: number) {
       // The sphere does not display vault counts; accepted for contract parity.
     },
-    applyQuality(_tier: string) {
-      // The minimal sphere has no tier-dependent effects yet (Stage 2.2).
+    applyQuality(tier: string) {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      engine.setHardwareScalingLevel((tier === "Low" ? 2 : tier === "Balanced" ? 1.4 : 1) / dpr);
+      engine.resize();
     },
     applyCanvasSize(_width: number, _height: number) {
       // ArcRotateCamera keeps the sphere's angular size constant; just resize.
@@ -175,6 +180,7 @@ export function createBench(canvas: HTMLCanvasElement): BenchHandle {
       reducedMotion = reduced;
     },
     dispose() {
+      document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("resize", onResize);
       engine.dispose();
     },

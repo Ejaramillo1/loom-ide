@@ -118,7 +118,7 @@ it("carries the chosen background into the player URL and re-pushes it on ready"
   expect(player.postMessage).toHaveBeenCalledWith({ type: "loom-background", background: "dusk" }, "http://localhost");
 });
 
-it("falls back to the Unity player behind ?player=unity", () => {
+it("keeps Babylon as the renderer even with a legacy Unity query", () => {
   const frame = { contentWindow: {}, addEventListener: vi.fn() };
   const status = { textContent: "" };
   const loadError = { hidden: true };
@@ -127,5 +127,5 @@ it("falls back to the Unity player behind ?player=unity", () => {
   vi.stubGlobal("location", { origin: "http://localhost", search: "?player=unity" });
   vi.stubGlobal("window", { addEventListener: () => {} });
   installSpatialWorkbench();
-  expect(frame).toHaveProperty("src", "/spatial-player.html?theme=dark&background=charcoal");
+  expect(frame).toHaveProperty("src", "/spatial-player-babylon.html?theme=dark&background=charcoal");
 });

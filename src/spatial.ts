@@ -1,16 +1,11 @@
 import type { SphereState } from "./sphere";
 
-/** Which spatial renderer to load. Babylon is the default; the Unity
-    fallback stays behind `?player=unity` (Babylon migration, Stage 2.3). */
-function spatialPlayer(): "babylon" | "unity" {
-  return new URLSearchParams(location.search).get("player") === "unity" ? "unity" : "babylon";
-}
-
 export function installSpatialWorkbench(
   onSpatialSelect?: (object: string) => void,
   getVaultCounts?: () => { work: number; experiments: number },
   getState?: () => SphereState,
   getBackground?: () => string,
+  getQuality?: () => string,
 ) {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame")!;
   const status = document.querySelector<HTMLElement>("#spatial-status")!;
@@ -20,7 +15,7 @@ export function installSpatialWorkbench(
     loadError.hidden = true;
     const theme = document.documentElement?.dataset?.theme === "white" ? "white" : "dark";
     const background = getBackground?.() || "charcoal";
-    const page = spatialPlayer() === "unity" ? "spatial-player.html" : "spatial-player-babylon.html";
+    const page = "spatial-player-babylon.html";
     frame.src = `/${page}?theme=${theme}&background=${encodeURIComponent(background)}`;
   }
   loadButton.addEventListener("click", load);
@@ -33,6 +28,7 @@ export function installSpatialWorkbench(
       const counts = getVaultCounts?.();
       if (counts) notifySpatialVaultChanged(counts.work, counts.experiments);
       if (getState) notifySpatialState(getState());
+      if (getQuality) frame.contentWindow?.postMessage({ type: "loom-quality", tier: getQuality() }, location.origin);
       if (getBackground) notifySpatialBackground(getBackground());
       return;
     }
@@ -54,7 +50,7 @@ export function installSpatialWorkbench(
 
 /** Push the vault's current work/experiment counts to the bench, so its
     portal descriptions update without a manual refresh (audit A5). The
-    player forwards this to Unity's RefreshVault; a push sent before the
+    player receives these counts; a push sent before the
     player is ready is held and flushed on load. */
 export function notifySpatialVaultChanged(work: number, experiments: number): void {
   const frame = document.querySelector<HTMLIFrameElement>("#spatial-frame");

@@ -75,12 +75,12 @@ describe("spatial bridge (postMessage contract)", () => {
     expect(api.refreshVault).toHaveBeenCalledWith(3, 5);
   });
 
-  it("quality before ready is dropped (matches the Unity contract)", () => {
+  it("quality before ready is retained for renderer startup", () => {
     const { env, api, dispatch } = fakeEnv();
     const bridge = startSpatialBridge(env, api, vi.fn());
     dispatch({ type: "loom-quality", tier: "Low" });
     bridge.ready();
-    expect(api.applyQuality).not.toHaveBeenCalled();
+    expect(api.applyQuality).toHaveBeenCalledWith("Low");
   });
 
   it("applies theme/background defaults from params on ready", () => {
@@ -178,4 +178,16 @@ describe("spatial bridge (postMessage contract)", () => {
     dispatch({ type: "loom-vault-changed", work: Number.NaN, experiments: 5 });
     expect(api.refreshVault).not.toHaveBeenCalled();
   });
+});
+
+it("disposal removes listeners and prevents later messages or ready", () => {
+ const {env,api,dispatch}=fakeEnv();
+ const ready=vi.fn();
+ const bridge=startSpatialBridge(env,api,ready);
+ bridge.dispose();
+ dispatch({type:"loom-state",state:"error"});
+ bridge.ready();
+ expect(api.applyLoomState).not.toHaveBeenCalled();
+ expect(ready).not.toHaveBeenCalled();
+ expect(env.window.removeEventListener).toHaveBeenCalledWith("message",expect.any(Function));
 });

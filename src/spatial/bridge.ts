@@ -43,6 +43,8 @@ export function startSpatialBridge(
   if (document.body) document.body.dataset.theme = theme;
 
   let ready = false;
+  let disposed = false;
+  let pendingQuality: string | null = null;
   let pendingTheme: "white" | "dark" | null = null;
   let pendingBackground: string | null = null;
   let pendingState: string | null = null;
@@ -61,7 +63,8 @@ export function startSpatialBridge(
   };
   window.addEventListener?.("resize", reportSize);
 
-  window.addEventListener?.("message", (event: MessageEvent) => {
+  const receive = (event: MessageEvent) => {
+    if (disposed) return;
     // Origin/source guard (kept from the Unity contract; see src/spatial.ts:28).
     if (event.source !== window.parent || event.origin !== window.location.origin) return;
     const d = event.data as Record<string, unknown> | undefined;
@@ -89,20 +92,28 @@ export function startSpatialBridge(
       if (ready) api.refreshVault(work, experiments);
       else pendingVault = { work, experiments };
     } else if (type === "loom-quality") {
-      if (typeof d.tier !== "string" || d.tier.length > 16) return;
-      if (ready) api.applyQuality(d.tier);
+      if (!["High", "Balanced", "Low"].includes(String(d.tier))) return;
+      if (ready) api.applyQuality(d.tier as string);
+      else pendingQuality = d.tier as string;
     } else if (type === "loom-background") {
       if (typeof d.background !== "string" || d.background.length > 32) return;
+      if (document.body) document.body.dataset.background = d.background;
       if (ready) api.applyBackground(d.background);
       else pendingBackground = d.background;
     }
     // Unknown types (including the retired loom-memory) are ignored.
-  });
+  };
+  window.addEventListener?.("message", receive);
+  const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(reportSize) : null;
+  observer?.observe(canvas);
 
   return {
     ready(): void {
+      if (ready || disposed) return;
       ready = true;
+      if (pendingQuality) api.applyQuality(pendingQuality);
       api.applyTheme(pendingTheme ?? theme);
+      if (document.body) document.body.dataset.background = pendingBackground ?? background;
       api.applyBackground(pendingBackground ?? background);
       applyMotion();
       if (pendingState) api.applyLoomState(pendingState);
@@ -111,6 +122,14 @@ export function startSpatialBridge(
       pendingVault = null;
       reportSize();
       readyFn();
+    },
+    dispose(): void {
+      disposed = true;
+      ready = false;
+      observer?.disconnect();
+      window.removeEventListener?.("message", receive);
+      window.removeEventListener?.("resize", reportSize);
+      motion?.removeEventListener?.("change", applyMotion);
     },
     fail(message: string): void {
       window.parent.postMessage({ type: "loom-spatial-error", message }, window.location.origin);
