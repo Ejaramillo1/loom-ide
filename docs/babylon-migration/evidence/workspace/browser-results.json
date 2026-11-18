@@ -1,5 +1,5 @@
 {
-  "base": "http://127.0.0.1:45391",
+  "base": "http://127.0.0.1:38765",
   "network": "Loom HTTP calls blocked: disposable offline UI test; no live turns",
   "reports": [
     {
@@ -53,17 +53,17 @@
         }
       ],
       "work": {
-        "x": 31.3125,
-        "y": 194.5,
-        "w": 293.609375,
-        "h": 57.5,
-        "hidden": false
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "hidden": true
       },
       "chat": {
         "x": 27.3125,
-        "y": 272,
+        "y": 76,
         "w": 301.609375,
-        "h": 366,
+        "h": 562,
         "hidden": false
       },
       "composer": {
@@ -154,17 +154,17 @@
         }
       ],
       "work": {
-        "x": 37.40625,
-        "y": 194.5,
-        "w": 360.953125,
-        "h": 82.21875,
-        "hidden": false
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "hidden": true
       },
       "chat": {
         "x": 33.40625,
-        "y": 296.71875,
+        "y": 76,
         "w": 368.953125,
-        "h": 632.28125,
+        "h": 853,
         "hidden": false
       },
       "composer": {
@@ -255,17 +255,17 @@
         }
       ],
       "work": {
-        "x": 22,
-        "y": 194.5,
-        "w": 289.140625,
-        "h": 57.5,
-        "hidden": false
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "hidden": true
       },
       "chat": {
         "x": 18,
-        "y": 272,
+        "y": 76,
         "w": 297.140625,
-        "h": 364,
+        "h": 560,
         "hidden": false
       },
       "composer": {
@@ -356,17 +356,17 @@
         }
       ],
       "work": {
-        "x": 20,
-        "y": 566.5,
-        "w": 335,
-        "h": 57.5,
-        "hidden": false
+        "x": 0,
+        "y": 0,
+        "w": 0,
+        "h": 0,
+        "hidden": true
       },
       "chat": {
         "x": 16,
-        "y": 644,
+        "y": 448,
         "w": 343,
-        "h": 344,
+        "h": 540,
         "hidden": false
       },
       "composer": {

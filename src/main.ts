@@ -3880,6 +3880,7 @@ function applyRightPane() {
   const contextPane = document.getElementById("inspector-context");
   const chatPane = document.getElementById("chat-panel");
   const spatial = mode === "spatial";
+  document.getElementById("left-col")?.setAttribute("aria-label", spatial ? "Conversation" : "Work navigation");
   const destination = document.getElementById(spatial ? "spatial-chat-slot" : "right-col");
   if (chatPane && destination && chatPane.parentElement !== destination) {
     const focused = chatPane.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
@@ -8528,7 +8529,6 @@ async function init() {
       $("#overview-sphere").focus();
     });
   });
-  document.querySelector<HTMLButtonElement>(".spatial-work-open")?.addEventListener("click", () => setMode("work"));
   $("#collaboration-open").addEventListener("click", () => setMode("agents"));
 
   // Header: the objective banner opens the selected work in the Work view.

@@ -101,17 +101,19 @@ it("uses the sphere for Overview, preserves orbital shortcuts and removes the fl
   expect(source).toContain('$("#overview-sphere").addEventListener("click"');
 });
 
-it("keeps intent and autonomy inside the Work panel", () => {
+it("keeps intent and autonomy inside Work without the Overview Work launcher", () => {
   const panel = indexHtml.slice(indexHtml.indexOf('<section class="work-panel"'), indexHtml.indexOf('</section>', indexHtml.indexOf('<section class="work-panel"')));
   expect(panel).toContain('class="intent-disclosure"');
   expect(panel).toContain('id="intent-header"');
   expect(indexHtml.match(/id="intent-header"/g)).toHaveLength(1);
+  expect(indexHtml).not.toContain("spatial-work-open");
 });
 
 it("keeps chat and context visible together in Spatial, including narrow widths", async () => {
   for (const width of [390, 900, 1280, 1600]) {
     const { node, api } = await shell(width);
     const chat = node("chat-panel");
+    expect(node("left-col").attrs["aria-label"]).toBe("Conversation");
     expect(chat.parentElement).toBe(node("spatial-chat-slot"));
     expect(chat.hidden).toBe(false);
     expect(node("inspector-context").hidden).toBe(false);

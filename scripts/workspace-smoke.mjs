@@ -26,7 +26,7 @@ try {
   if(name==='reference-light')await evaluate(`document.querySelector('.application-controls').open=true;document.querySelectorAll('.app-menu-trigger')[2].click(); [...document.querySelectorAll('.app-menu-panel button')].find(b=>b.textContent==='White')?.click();document.querySelector('.application-controls').open=false`);
   await new Promise(r=>setTimeout(r,1200));
   const metrics=await evaluate(`(()=>{
-    const rect=id=>{const e=document.getElementById(id),r=e.getBoundingClientRect(),s=getComputedStyle(e);return {x:r.x,y:r.y,w:r.width,h:r.height,hidden:e.hidden||s.display==='none'||s.visibility==='hidden'};};
+    const rect=id=>{const e=document.getElementById(id),r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,hidden:!e.checkVisibility()};};
     return {width:innerWidth,height:innerHeight,bodyWidth:document.documentElement.scrollWidth, chatParent:document.getElementById('chat-panel').parentElement.id,
     shortcuts:[...document.querySelectorAll('.orbital-nav button')].map(e=>{const r=e.getBoundingClientRect();return {label:e.textContent,x:r.x,y:r.y,w:r.width,h:r.height}}),
     work:rect('work-list'),chat:rect('chat-panel'),composer:rect('chat-form'),sphere:rect('spatial-frame'),context:rect('inspector-context'),collaboration:rect('collaboration-summary'),attention:rect('attention-panel'),canvas:document.getElementById('spatial-frame').contentDocument.querySelector('canvas')?.getBoundingClientRect().width};})()`);
@@ -34,18 +34,16 @@ try {
   await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false}).then(r=>writeFile(`${output}/${name}.png`,Buffer.from(r.data,'base64')));
   assert.equal(metrics.chatParent,'spatial-chat-slot');
   assert.ok(metrics.bodyWidth<=width+1,'horizontal overflow');
-  for(const key of ['work','chat','context','collaboration'])assert.ok(!metrics[key].hidden && metrics[key].h>0,key+' hidden');
+  for(const key of ['chat','context','collaboration'])assert.ok(!metrics[key].hidden && metrics[key].h>0,key+' hidden');
   assert.ok(metrics.attention.hidden && metrics.attention.h === 0, 'empty Attention panel still occupies space');
-  assert.ok(metrics.work.h>=44, 'Work list is too short to show an item');
+  assert.ok(metrics.work.hidden && metrics.work.h === 0, 'Work section still occupies Overview space');
+  if(width>=700) assert.equal(metrics.chat.y, metrics.sphere.y, 'chat did not fill the removed Work section');
+  else assert.ok(metrics.chat.y >= metrics.sphere.y+metrics.sphere.h && metrics.chat.y <= metrics.sphere.y+metrics.sphere.h+32, 'mobile chat did not fill the removed Work section');
   assert.ok(await evaluate(`!document.querySelector('.workspace-nav, #workspace-navigation-slot')`), 'floating menu remains');
   assert.deepEqual(metrics.shortcuts.map(s=>s.label),['Work','Experiments','Evidence','Agents','Knowledge','Code']);
   for(const shortcut of metrics.shortcuts) assert.ok(shortcut.x>=metrics.sphere.x && shortcut.y>=metrics.sphere.y && shortcut.x+shortcut.w<=metrics.sphere.x+metrics.sphere.w && shortcut.y+shortcut.h<=metrics.sphere.y+metrics.sphere.h,`${shortcut.label} is outside the sphere region`);
   if(width>=700) assert.ok(metrics.composer.y+metrics.composer.h<=height,'composer clipped');
   if(width>=1100){assert.ok(metrics.chat.x<metrics.sphere.x,'chat is not left');assert.ok(metrics.context.x>metrics.sphere.x,'context is not right');assert.ok(metrics.composer.y+metrics.composer.h<=height,'composer clipped');}
-  assert.ok(await evaluate(`document.querySelector('#intent-header').closest('.work-panel') !== null`), 'intent/autonomy escaped Work');
-  await evaluate(`document.querySelector('.intent-disclosure').open=true`);
-  assert.ok(await evaluate(`(()=>{const p=document.querySelector('.work-panel'),h=document.querySelector('#intent-header'),chat=document.querySelector('#chat-panel'),r=p.getBoundingClientRect(),c=chat.getBoundingClientRect();return h.getBoundingClientRect().height>0 && r.bottom<=c.top+1 && c.height>=250})()`), 'expanded intent overlaps chat');
-  await evaluate(`document.querySelector('.intent-disclosure').open=false`);
   if(width<700){await evaluate(`document.getElementById('chat-text').scrollIntoView({block:'center'})`); assert.ok(await evaluate(`(()=>{const r=document.getElementById('chat-form').getBoundingClientRect();return r.top>=0&&r.bottom<innerHeight})()`),'mobile composer unreachable');await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false}).then(r=>writeFile(`${output}/mobile-chat.png`,Buffer.from(r.data,'base64')));}
   // Both pointer picking and keyboard activation of the actual pearl return Overview.
   await evaluate(`window.smokeSphereSelects=0;window.addEventListener('message',e=>{if(e.data?.type==='loom-spatial-select'&&e.data.object==='Overview')window.smokeSphereSelects++});
@@ -66,6 +64,13 @@ try {
   for(const mode of ['work','experiment','agents','knowledge','code']){
    await navigateMode(mode);
    assert.equal(await evaluate(`document.querySelector('.scene').dataset.mode`),mode);
+   if(mode==='work') {
+    if(width<1100) await evaluate(`document.querySelector('.application-controls').open=true;document.querySelectorAll('.app-menu-trigger')[2].click();[...document.querySelectorAll('.app-menu-panel button')].find(b=>b.textContent==='Work panel').click()`);
+    assert.ok(await evaluate(`document.querySelector('.work-panel').checkVisibility()`),'Work catalogue unavailable in Work');
+    await evaluate(`document.querySelector('.intent-disclosure').open=true`);
+    assert.ok(await evaluate(`document.querySelector('#intent-header').checkVisibility()`),'Intent/autonomy unavailable in Work');
+    await evaluate(`document.querySelector('.intent-disclosure').open=false`);
+   }
    await navigateMode('spatial');
   }
   await evaluate(`document.querySelector('.orbital-nav [data-workspace-section="evidence"]').click()`);

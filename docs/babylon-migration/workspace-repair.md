@@ -175,3 +175,36 @@ verdicts under `judge/`, this report, `docs/DESIGN_PROGRESS.md`, and migration
 updated workspace screenshots/metrics, 32 state images, pixel measurements and
 the shader-failure record. Pre-existing gate logs in the workspace evidence
 folder remain historical; the final combined judge log above is current.
+
+
+## Follow-up: remove the Overview Work section — 17 November 2026
+
+The latest screenshot request supersedes the earlier Work-above-chat layout.
+Overview no longer displays the Work heading, counts, catalogue/search,
+Open Work link or Intent & Autonomy disclosure. The existing conversation
+fills the released column space. Mobile retains its sphere-then-chat stack.
+The left region's accessible label now follows its actual conversation role.
+
+The catalogue and intent controls remain usable in Work/Experiment, reachable
+through the existing orbital Work shortcut; saved work/intent data is preserved.
+The redundant Overview-only Open Work button, handler and layout rules were
+removed. The browser smoke now checks that the section has no layout space in
+Overview and that Work navigation still exposes the catalogue and intent editor,
+including via the narrow-screen drawer. No dependencies or Loom changes.
+
+
+Verification: `judge/verdicts/20261117-195355.md` records all six gates passing:
+147 frontend tests / 17 files; 145 Tauri tests passed / 2 ignored; 22 native
+passed; build and src-tauri fmt passed; four browser layouts and 32 state
+captures passed, with zero unexpected browser exceptions. The first smoke
+attempt (`20261117-195258`) failed because its new alignment assertion assumed
+desktop alignment on mobile. The corrected assertion respects the existing
+mobile stack; no product-code change was needed for that failure. Both logs
+and verdicts are preserved. Native-window pixels and live model turns were
+not exercised.
+
+Changed files for this step: `index.html`, `src/main.ts`, `src/style.css`,
+`src/workbench-layout.test.ts`, `scripts/workspace-smoke.mjs`, migration
+`decisions.md` and this report; refreshed workspace screenshots/metrics and
+new judge logs/prompts/verdicts. Decision taken: remove the pictured section
+from Overview while preserving Work editing in its existing workspace.

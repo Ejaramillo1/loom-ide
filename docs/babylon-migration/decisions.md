@@ -49,7 +49,11 @@ Babylon backgrounds are introduced. The player canvas remains transparent.
 
 DOM/CSS/TypeScript. No text or cards in 3D. Babylon renders only the sphere
 and its minimal ambience; background gradient, shadow, reflection and
-typography live in CSS/DOM.
+typography live in CSS/DOM. After the subsequent sidebar-removal request,
+Overview shows conversation alone in its left column. The catalogue, intent
+and autonomy controls remain in Work/Experiment; the Work orbital shortcut
+opens that workspace. Overview does not retain a Work heading, list, search,
+Open Work link or Intent & Autonomy disclosure.
 
 ## 7 — Loom
 
