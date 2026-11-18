@@ -240,7 +240,6 @@ let sessions: Session[] = [];
 let selectedSessionId: string | null = null;
 let sessionDetail: SessionDetail | null = null;
 let agents: Agent[] = [];
-let agentsLoadError = false;
 let selectedAgentId: string | null = null;
 let selectedAgentDetail: Agent | null = null;
 let tools: ToolDefinition[] = [];
@@ -3186,7 +3185,6 @@ function emptyP(text: string): HTMLElement {
 // ---------------------------------------------------------------------------
 
 function renderInspectorContext() {
-  renderCollaboration();
   renderAttention(attentionItems);
   renderInspectorSessionDetail();
   renderInspectorAgentDetail();
@@ -3196,49 +3194,6 @@ function renderInspectorContext() {
   renderInspectorArtifactStats();
   renderInspectorServerConfig();
   renderInspectorStorageStatus();
-}
-
-/** Only server-reported agent state is shown; no inferred steps or progress. */
-function renderCollaboration() {
-  const host = document.getElementById("collaboration-summary");
-  if (!host) return;
-  host.replaceChildren();
-  if (!loomStatusKnown || agentsLoadError || !loomReachable || agents.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "collaboration-empty";
-    empty.textContent = !loomStatusKnown ? "Checking the connection to Loom…"
-      : !loomReachable ? "Loom is offline. Connect to see agent activity."
-      : agentsLoadError ? "Agent activity is unavailable. Open Agents to retry."
-      : "No agents are registered. Open Agents to configure one.";
-    host.append(empty);
-    return;
-  }
-  for (const agent of agents) {
-    const row = document.createElement("div");
-    row.className = "collaboration-agent";
-    const orb = document.createElement("span");
-    orb.className = "collaboration-orb";
-    orb.setAttribute("aria-hidden", "true");
-    const content = document.createElement("div");
-    const name = document.createElement("button");
-    name.type = "button";
-    name.textContent = agent.name || agent.id;
-    name.addEventListener("click", () => {
-      setMode("agents");
-      void openAgentDetail(agent.id);
-    });
-    const detail = document.createElement("p");
-    const count = agent.active_sessions;
-    detail.textContent = `${agent.status || "State not reported"} · ${count} active session${count === 1 ? "" : "s"}`;
-    content.append(name, detail);
-    if (agent.error) {
-      const error = document.createElement("p");
-      error.textContent = agent.error;
-      content.append(error);
-    }
-    row.append(orb, content);
-    host.append(row);
-  }
 }
 
 function renderInspectorSessionDetail() {
@@ -3508,7 +3463,7 @@ function renderAttention(items: AttentionItem[]) {
   if (contextTab) {
     contextTab.title =
       items.length === 0
-        ? "Collaboration and attention"
+        ? "Attention and server details"
         : `${items.length} item${items.length === 1 ? "" : "s"} need attention`;
     contextTab.classList.toggle("has-attention", items.length > 0);
   }
@@ -3880,7 +3835,6 @@ function applyRightPane() {
   const contextPane = document.getElementById("inspector-context");
   const chatPane = document.getElementById("chat-panel");
   const spatial = mode === "spatial";
-  document.getElementById("left-col")?.setAttribute("aria-label", spatial ? "Conversation" : "Work navigation");
   const destination = document.getElementById(spatial ? "spatial-chat-slot" : "right-col");
   if (chatPane && destination && chatPane.parentElement !== destination) {
     const focused = chatPane.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
@@ -3893,7 +3847,7 @@ function applyRightPane() {
   if (contextPane) {
     contextPane.hidden = !spatial && rightTab !== "context";
     contextPane.setAttribute("role", spatial ? "region" : "tabpanel");
-    contextPane.setAttribute("aria-label", "Collaboration and attention");
+    contextPane.setAttribute("aria-label", "Attention and server details");
     if (spatial) contextPane.removeAttribute("aria-labelledby");
     else contextPane.setAttribute("aria-labelledby", "tab-context");
   }
@@ -6610,11 +6564,9 @@ async function refreshSessions() {
 async function refreshAgents() {
   try {
     agents = await listAgents();
-    agentsLoadError = false;
     setLoomReachable(true);
   } catch (err) {
     agents = [];
-    agentsLoadError = true;
     if (isLoomConnectionError(err)) setLoomReachable(false);
   }
   renderAgentBar();
@@ -8359,7 +8311,6 @@ async function init() {
       (document.querySelector(".application-controls") as HTMLDetailsElement).open = false;
     }
   });
-  renderCollaboration();
   renderAttention(attentionItems);
   loadChatCache();
   loadRunRecords();
@@ -8529,7 +8480,6 @@ async function init() {
       $("#overview-sphere").focus();
     });
   });
-  $("#collaboration-open").addEventListener("click", () => setMode("agents"));
 
   // Header: the objective banner opens the selected work in the Work view.
   $("#objective-btn").addEventListener("click", () => setMode("work"));

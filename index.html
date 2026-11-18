@@ -36,7 +36,6 @@
             <span class="status-pill" id="loom-status" title="Loom server status">
               <span class="status-dot"></span><span id="loom-status-text">Checking Loom…</span>
             </span>
-            <span class="avatar" title="You" aria-label="You"></span>
           </div>
         </header>
 
@@ -68,26 +67,28 @@
               <p class="list-empty" id="work-empty" hidden>No work matches this search.</p>
               <div id="knowledge-search-results"></div>
             </section>
-            <div id="spatial-chat-slot"></div>
           </aside>
 
           <!-- Center: workspace -->
           <section class="center" aria-label="Workspace">
             <div id="view-spatial" class="view">
-              <div id="spatial-load-error" hidden>
-                <p id="spatial-status" role="status"></p>
-                <button id="spatial-load" class="btn" type="button">Retry loading the bench</button>
+              <div class="spatial-stage">
+                <div id="spatial-load-error" hidden>
+                  <p id="spatial-status" role="status"></p>
+                  <button id="spatial-load" class="btn" type="button">Retry loading the bench</button>
+                </div>
+                <iframe id="spatial-frame" title="Loom state sphere" allow="fullscreen"></iframe>
+                <nav class="orbital-nav" aria-label="Workspace shortcuts">
+                  <button type="button" data-workspace-mode="work">Work</button>
+                  <button type="button" data-workspace-mode="experiment">Experiments</button>
+                  <button type="button" data-workspace-mode="knowledge" data-workspace-section="evidence">Evidence</button>
+                  <button type="button" data-workspace-mode="agents">Agents</button>
+                  <button type="button" data-workspace-mode="knowledge">Knowledge</button>
+                  <button type="button" data-workspace-mode="code">Code</button>
+                </nav>
               </div>
-              <iframe id="spatial-frame" title="Loom state sphere" allow="fullscreen"></iframe>
-              <nav class="orbital-nav" aria-label="Workspace shortcuts">
-                <button type="button" data-workspace-mode="work">Work</button>
-                <button type="button" data-workspace-mode="experiment">Experiments</button>
-                <button type="button" data-workspace-mode="knowledge" data-workspace-section="evidence">Evidence</button>
-                <button type="button" data-workspace-mode="agents">Agents</button>
-                <button type="button" data-workspace-mode="knowledge">Knowledge</button>
-                <button type="button" data-workspace-mode="code">Code</button>
-              </nav>
               <p id="spatial-state-caption" class="spatial-state-caption" role="status">Checking Loom…</p>
+              <div id="spatial-chat-slot"></div>
             </div>
             <div id="view-experiment" class="view view-experiment" hidden>
               <div class="mode-head">
@@ -241,11 +242,6 @@
             </div>
 
             <div id="inspector-context" class="inspector-pane" role="tabpanel" aria-labelledby="tab-context">
-              <section class="collaboration-panel" aria-label="Agentic Collaboration">
-                <div class="section-title-row"><h3>Agentic Collaboration</h3></div>
-                <div id="collaboration-summary" aria-live="polite"></div>
-                <button id="collaboration-open" class="btn ghost small" type="button">Open Agents</button>
-              </section>
               <section id="attention-panel" class="attention-panel" aria-label="Attention" hidden>
                 <div class="section-title-row">
                   <h3>Attention</h3>

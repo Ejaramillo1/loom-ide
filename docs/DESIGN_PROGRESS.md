@@ -276,3 +276,17 @@ Attention is now shown only for nonempty attention items. Final follow-up gates:
 production build, src-tauri fmt, four browser viewports and 32 rendered-state
 captures passed. Shader failure/retry and empty Attention layout are included.
 See `judge/verdicts/20261117-194310.md` and its log for the actual gate results.
+
+
+## Adaptive chat below the sphere — 17 November 2026
+
+The same chat node now sits beneath the sphere and grows with response content,
+with bounded log scrolling for long replies. Orbit sizing follows stage height.
+The decorative top-right avatar sphere and Agentic Collaboration card are
+removed, and the empty context column collapses. Attention can still reveal it
+when needed; Agents remains available through its orbital route. Full details,
+measured chat heights and limits are in `babylon-migration/workspace-repair.md`.
+Final verification in `judge/verdicts/20261117-205511.md`: 147 frontend,
+145 Tauri passed / 2 ignored, 22 native, build, scoped fmt, four layouts and
+32 rendered-state captures passed. Live model turns and native-window pixels
+were not checked.

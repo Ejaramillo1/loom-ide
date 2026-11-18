@@ -113,7 +113,6 @@ it("keeps chat and context visible together in Spatial, including narrow widths"
   for (const width of [390, 900, 1280, 1600]) {
     const { node, api } = await shell(width);
     const chat = node("chat-panel");
-    expect(node("left-col").attrs["aria-label"]).toBe("Conversation");
     expect(chat.parentElement).toBe(node("spatial-chat-slot"));
     expect(chat.hidden).toBe(false);
     expect(node("inspector-context").hidden).toBe(false);
@@ -126,6 +125,13 @@ it("keeps chat and context visible together in Spatial, including narrow widths"
     expect(node("chat-panel")).toBe(chat);
     expect(chat.parentElement).toBe(node("spatial-chat-slot"));
   }
+});
+
+it("places the shared conversation beneath the sphere stage", () => {
+  const overview = indexHtml.slice(indexHtml.indexOf('id="view-spatial"'), indexHtml.indexOf('id="view-experiment"'));
+  expect(overview).toContain('class="spatial-stage"');
+  expect(overview.indexOf('id="spatial-chat-slot"')).toBeGreaterThan(overview.indexOf('id="spatial-frame"'));
+  expect(indexHtml.match(/id="spatial-chat-slot"/g)).toHaveLength(1);
 });
 
 it("offers Spatial first in the View menu", () => {

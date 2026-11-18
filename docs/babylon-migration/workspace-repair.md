@@ -208,3 +208,62 @@ Changed files for this step: `index.html`, `src/main.ts`, `src/style.css`,
 `decisions.md` and this report; refreshed workspace screenshots/metrics and
 new judge logs/prompts/verdicts. Decision taken: remove the pictured section
 from Overview while preserving Work editing in its existing workspace.
+
+
+## Follow-up: chat beneath the sphere and quieter shell — 17 November 2026
+
+The conversation now sits directly below the sphere on every viewport, centered
+at up to 900px wide. The existing chat node still moves into the inspector in
+other modes; session ownership, draft and streaming handlers are unchanged.
+The empty Work sidebar stays absent from Overview.
+
+Chat uses intrinsic content height and grows as cumulative reply text gains
+lines. The log flexes within a panel capped at `clamp(180px, 35dvh, 360px)` and
+scrolls for longer replies. Clearing or switching to an empty conversation
+returns its compact height. This also covers unary replies, tool/error content
+and restored history without adding a MutationObserver or ResizeObserver.
+The sphere stage keeps a 260px minimum, its orbit scales with stage height,
+and its existing canvas ResizeObserver follows the changing space. Connection
+status has its own row so it does not overlap the orbital controls.
+
+Per the subsequent screenshot requests, the decorative top-right avatar sphere
+and the Agentic Collaboration card are removed, including their styles and
+handlers. Agents still has its dedicated view and orbital control. The context
+column takes space only when an Attention item exists; at narrow widths it
+stacks below the sphere/conversation. This preserves the conditional Attention
+behavior without leaving an empty column.
+
+The browser smoke now checks each viewport's chat placement and centering,
+short-to-long cumulative text growth, height cap/scrolling, compact restoration,
+minimum sphere space, composer reachability and conditional Attention column.
+Growth measurements use clearly labeled DOM fixtures in disposable browser
+storage, not model output. Existing production-handler stream/navigation tests
+remain in place. No live model turn or native Tauri-window inspection is claimed.
+
+
+Final verification: `judge/verdicts/20261117-205511.md` and its full log record
+all six gates passing against the working tree based on `638e7f3`: 147 frontend
+tests / 17 files, 145 Tauri tests passed / 2 ignored, 22 native tests passed,
+production build, src-tauri formatting, four browser viewports and 32 sphere
+state captures. No unexpected browser exceptions were recorded.
+
+Measured short → long chat heights: 189.3 → 227.5px (1366×650),
+189.3 → 329.3px (1671×941), 189.3 → 252px (900×720), and
+189.3 → 259px (390×740). Further text stayed capped and scrollable; restoring
+the initial conversation shrank the panel again. These numbers come from
+`evidence/workspace/browser-results.json` and its labeled layout fixtures.
+
+Earlier records are preserved: `204819` exposed a zero-height narrow-screen
+context container, corrected by retaining its minimum height; `205022` passed
+before the subsequent collaboration-card removal; `205350` caught a now-unused
+collaboration-only flag in TypeScript, which was removed before the final pass.
+
+Changed files: `index.html`, `src/main.ts`, `src/style.css`,
+`src/workbench-layout.test.ts`, `src/collaboration.test.ts`,
+`scripts/workspace-smoke.mjs`; current decisions and progress documentation;
+updated workspace screenshots/metrics; and four judge logs/prompts/verdicts.
+
+Decisions taken: use CSS intrinsic sizing for all response paths without a new
+observer; cap chat height while reserving sphere space; preserve the same
+conversation and dedicated Agents view; collapse the context column whenever
+Attention is empty. No dependency additions, Loom changes or pushes.

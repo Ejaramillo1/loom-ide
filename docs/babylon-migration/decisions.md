@@ -49,11 +49,17 @@ Babylon backgrounds are introduced. The player canvas remains transparent.
 
 DOM/CSS/TypeScript. No text or cards in 3D. Babylon renders only the sphere
 and its minimal ambience; background gradient, shadow, reflection and
-typography live in CSS/DOM. After the subsequent sidebar-removal request,
-Overview shows conversation alone in its left column. The catalogue, intent
-and autonomy controls remain in Work/Experiment; the Work orbital shortcut
-opens that workspace. Overview does not retain a Work heading, list, search,
-Open Work link or Intent & Autonomy disclosure.
+typography live in CSS/DOM. The latest layout request places the existing
+conversation below the sphere, centered at up to 900px wide. Its intrinsic
+height grows with reply content, capped at `clamp(180px, 35dvh, 360px)`; longer
+responses scroll inside the log. The sphere stage retains at least 260px.
+No separate resizing observer or alternate conversation is introduced.
+
+The decorative top-right avatar sphere and Agentic Collaboration card are
+removed. Overview has no empty sidebar: the context column appears only when
+Attention has an item. Agents remains available from its orbital control.
+The catalogue, intent and autonomy controls remain in Work/Experiment via the
+Work shortcut; Overview has no Work list/search or Intent disclosure.
 
 ## 7 — Loom
 
@@ -79,10 +85,11 @@ SHA-256 `413f5ee2…`), not Unity. Frozen in `reference.md`.
 
 The sphere diameter is 60% of the **smaller iframe dimension**, not 60% of
 the application width. Camera sizing and CSS shadow/reflection use that same
-rule. With the three-region desktop layout this is about 25–29% of full
-viewport width at the recorded desktop sizes. It is a deliberate compromise
-that leaves room for the restored orbital shortcuts; it does not claim exact
-proportions of the Dashboard reference. No further size change is made here.
+rule. The iframe now shares vertical space with the conversation, so the
+sphere's share of the full viewport varies with reply length and screen size.
+The earlier 25–29% desktop figures describe the former three-region layout.
+Orbital controls now size from stage height instead of stretching across the
+whole workspace. The layout does not claim exact reference-image proportions.
 
 ## 11 — State appearance
 
