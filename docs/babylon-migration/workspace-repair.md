@@ -49,3 +49,18 @@ pixel identity with the concept image. Actual Tauri-window pixels, hardware GPU
 cost, and live held-tool/model interaction were not exercised. Existing gateway
 and runtime policy work remains in the separate Loom project. Repository cleanup
 and final deletion of historical Unity assets are outside this UI repair.
+
+## Follow-up: modes belong to the sphere — 17 November 2026
+
+At the user's request, the separate bottom bar and old shortcut copy were
+consolidated into one navigation element with exactly Overview, Code, Experiment,
+Work, Agents and Knowledge. In Spatial it is positioned around the sphere. In
+other modes the same element moves above the workspace, preserving a way back
+to Overview. Evidence remains available inside Knowledge. No duplicate menu or
+second set of handlers was added. The shell now has only header/main rows.
+
+Updated tests assert both navigation placements and all six labels. Production
+browser evidence was refreshed for desktop, light theme, tablet and mobile.
+Required checks: frontend 144; Tauri 145 passed / 2 ignored; native 22; build and
+src-tauri fmt passed. Legacy Unity recompile remains blocked with exit 12 because
+the Editor is not running; this is not the active renderer.

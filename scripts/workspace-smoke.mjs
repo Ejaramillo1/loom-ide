@@ -45,12 +45,14 @@ try {
   const metrics=await evaluate(`(()=>{
     const rect=id=>{const e=document.getElementById(id),r=e.getBoundingClientRect(),s=getComputedStyle(e);return {x:r.x,y:r.y,w:r.width,h:r.height,hidden:e.hidden||s.display==='none'||s.visibility==='hidden'};};
     return {width:innerWidth,height:innerHeight,bodyWidth:document.documentElement.scrollWidth, chatParent:document.getElementById('chat-panel').parentElement.id,
-    work:rect('work-list'),chat:rect('chat-panel'),composer:rect('chat-form'),sphere:rect('spatial-frame'),context:rect('inspector-context'),collaboration:rect('collaboration-summary'),attention:rect('attention-list'),nav:(()=>{const r=document.querySelector('.workspace-nav').getBoundingClientRect();return {y:r.y,h:r.height}})(),canvas:document.getElementById('spatial-frame').contentDocument.querySelector('canvas')?.getBoundingClientRect().width};})()`);
+    work:rect('work-list'),chat:rect('chat-panel'),composer:rect('chat-form'),sphere:rect('spatial-frame'),context:rect('inspector-context'),collaboration:rect('collaboration-summary'),attention:rect('attention-list'),nav:(()=>{const e=document.querySelector('.workspace-nav'),r=e.getBoundingClientRect();return {y:r.y,h:r.height,parent:e.parentElement.id,labels:[...e.querySelectorAll('button')].map(b=>b.textContent)}})(),canvas:document.getElementById('spatial-frame').contentDocument.querySelector('canvas')?.getBoundingClientRect().width};})()`);
   console.log(name,JSON.stringify(metrics),'exceptions',JSON.stringify(errors));
   await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false}).then(r=>writeFile(`${output}/${name}.png`,Buffer.from(r.data,'base64')));
   assert.equal(metrics.chatParent,'spatial-chat-slot');
   assert.ok(metrics.bodyWidth<=width+1,'horizontal overflow');
   for(const key of ['work','chat','context','collaboration','attention'])assert.ok(!metrics[key].hidden && metrics[key].h>0,key+' hidden');
+  assert.equal(metrics.nav.parent,'view-spatial','navigation not in sphere view');
+  assert.deepEqual(metrics.nav.labels,['Overview','Code','Experiment','Work','Agents','Knowledge']);
   assert.ok(metrics.nav.y+metrics.nav.h<=height+1,'navigation clipped');
   if(width>=700) assert.ok(metrics.composer.y+metrics.composer.h<=height,'composer clipped');
   if(width>=1100){assert.ok(metrics.chat.x<metrics.sphere.x,'chat is not left');assert.ok(metrics.context.x>metrics.sphere.x,'context is not right');assert.ok(metrics.composer.y+metrics.composer.h<=height,'composer clipped');}
@@ -69,9 +71,6 @@ try {
    assert.equal(await evaluate(`document.querySelector('.scene').dataset.mode`),mode);
    await evaluate(`document.querySelector('.workspace-nav [data-workspace-mode="spatial"]').click()`);
   }
-  await evaluate(`document.querySelector('.orbital-nav [data-workspace-section="evidence"]').click()`);
-  assert.equal(await evaluate(`document.querySelector('.scene').dataset.mode`),'knowledge');
-  await evaluate(`document.querySelector('.workspace-nav [data-workspace-mode="spatial"]').click()`);
   if(name==='mobile') {
     await evaluate(`document.querySelector('#chat-toggle').click()`);
     assert.equal(await evaluate(`document.activeElement.id`), 'chat-text');

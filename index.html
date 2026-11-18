@@ -74,19 +74,20 @@
 
           <!-- Center: workspace -->
           <section class="center" aria-label="Workspace">
+            <div id="workspace-navigation-slot" hidden></div>
             <div id="view-spatial" class="view">
               <div id="spatial-load-error" hidden>
                 <p id="spatial-status" role="status"></p>
                 <button id="spatial-load" class="btn" type="button">Retry loading the bench</button>
               </div>
               <iframe id="spatial-frame" title="Loom state sphere" allow="fullscreen"></iframe>
-              <nav class="orbital-nav" aria-label="Workspace shortcuts">
+              <nav class="workspace-nav orbital-nav" aria-label="Workspace modes">
+                <button type="button" data-workspace-mode="spatial">Overview</button>
+                <button type="button" data-workspace-mode="code">Code</button>
+                <button type="button" data-workspace-mode="experiment">Experiment</button>
                 <button type="button" data-workspace-mode="work">Work</button>
-                <button type="button" data-workspace-mode="experiment">Experiments</button>
-                <button type="button" data-workspace-mode="knowledge" data-workspace-section="evidence">Evidence</button>
                 <button type="button" data-workspace-mode="agents">Agents</button>
                 <button type="button" data-workspace-mode="knowledge">Knowledge</button>
-                <button type="button" data-workspace-mode="code">Code</button>
               </nav>
               <p id="spatial-state-caption" class="spatial-state-caption" role="status">Checking Loom…</p>
             </div>
@@ -336,14 +337,6 @@
           <div class="scrim" id="scrim" hidden></div>
         </div>
 
-        <nav class="workspace-nav" aria-label="Workspace modes">
-          <button type="button" data-workspace-mode="spatial">Overview</button>
-          <button type="button" data-workspace-mode="code">Code</button>
-          <button type="button" data-workspace-mode="experiment">Experiment</button>
-          <button type="button" data-workspace-mode="work">Work</button>
-          <button type="button" data-workspace-mode="agents">Agents</button>
-          <button type="button" data-workspace-mode="knowledge">Knowledge</button>
-        </nav>
         <!-- Water reflection band: atmosphere for the Experiment overview only -->
         <div class="water" aria-hidden="true"></div>
       </div>

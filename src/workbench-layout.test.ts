@@ -91,16 +91,19 @@ it("keeps the inspector tab visible on other modes and the conversation on Spati
   expect(node("body").classList.contains("right-open")).toBe(false);
 });
 
-it("provides persistent navigation and six accessible orbital shortcuts", () => {
-  expect(indexHtml).toContain('class="workspace-nav"');
-  expect(indexHtml).toContain('aria-label="Workspace shortcuts"');
-  expect(indexHtml.match(/data-workspace-mode=/g)).toHaveLength(13);
+it("places all six workspace modes in a single sphere navigation", () => {
+  expect(indexHtml).toContain('class="workspace-nav orbital-nav"');
+  expect(indexHtml).toContain('aria-label="Workspace modes"');
+  expect(indexHtml.match(/data-workspace-mode=/g)).toHaveLength(7);
   expect(source).toContain('button.dataset.workspaceMode as Mode');
 });
 
 it("keeps chat and context visible together in Spatial, including narrow widths", async () => {
   for (const width of [390, 900, 1280, 1600]) {
     const { node, api } = await shell(width);
+    const navigation = node(".workspace-nav");
+    expect(navigation.parentElement).toBe(node("view-spatial"));
+    expect(navigation.classList.contains("orbital-nav")).toBe(true);
     const chat = node("chat-panel");
     expect(chat.parentElement).toBe(node("spatial-chat-slot"));
     expect(chat.hidden).toBe(false);
@@ -109,6 +112,8 @@ it("keeps chat and context visible together in Spatial, including narrow widths"
     expect(chat.hidden).toBe(false);
     expect(api.expandChatOnReply()).toBe(false);
     api.setMode("code");
+    expect(navigation.parentElement).toBe(node("workspace-navigation-slot"));
+    expect(navigation.classList.contains("orbital-nav")).toBe(false);
     expect(chat.parentElement).toBe(node("right-col"));
     api.setMode("spatial");
     expect(node("chat-panel")).toBe(chat);

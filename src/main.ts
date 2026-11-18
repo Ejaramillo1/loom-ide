@@ -3888,6 +3888,12 @@ function applyRightPane() {
   const contextPane = document.getElementById("inspector-context");
   const chatPane = document.getElementById("chat-panel");
   const spatial = mode === "spatial";
+  const navigation = document.querySelector<HTMLElement>(".workspace-nav");
+  const navigationSlot = document.getElementById("workspace-navigation-slot");
+  const navigationHost = document.getElementById(spatial ? "view-spatial" : "workspace-navigation-slot");
+  if (navigation && navigationHost && navigation.parentElement !== navigationHost) navigationHost.append(navigation);
+  navigation?.classList.toggle("orbital-nav", spatial);
+  if (navigationSlot) navigationSlot.hidden = spatial;
   const destination = document.getElementById(spatial ? "spatial-chat-slot" : "right-col");
   if (chatPane && destination && chatPane.parentElement !== destination) destination.append(chatPane);
   if (contextPane) {
@@ -8522,7 +8528,6 @@ async function init() {
   document.querySelectorAll<HTMLButtonElement>("[data-workspace-mode]").forEach(button => {
     button.addEventListener("click", () => {
       setMode(button.dataset.workspaceMode as Mode);
-      if (button.dataset.workspaceSection === "evidence") knowledge?.showEvidence?.();
       document.querySelector<HTMLElement>('.workspace-nav [aria-current="page"]')?.focus();
     });
   });

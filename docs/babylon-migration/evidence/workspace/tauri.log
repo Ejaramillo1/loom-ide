@@ -1,4 +1,3 @@
-    Blocking waiting for file lock on package cache
 warning: variable does not need to be mutable
     --> src/loom_stream.rs:1535:13
      |
@@ -10,7 +9,7 @@ warning: variable does not need to be mutable
      = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
 
 warning: `loom-ide` (lib test) generated 1 warning (run `cargo fix --lib -p loom-ide --tests` to apply 1 suggestion)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.96s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.40s
      Running unittests src/lib.rs (src-tauri/target/debug/deps/app_lib-c667a5a1b4fc0d65)
 
 running 147 tests
@@ -18,8 +17,8 @@ test execution_admission_tests::command_matrix_child ... ok
 test experiment::tests::experiment_add_defaults_and_rejects_empty_title ... ok
 test experiment::tests::experiment_add_arm_validates_label_and_starts_defined ... ok
 test experiment::tests::experiment_awaiting_decision_needs_two_finished_arms ... ok
-test experiment::tests::experiment_add_arm_clears_a_previous_decision ... ok
 test experiment::tests::experiment_choose_arm_requires_a_finished_arm ... ok
+test experiment::tests::experiment_add_arm_clears_a_previous_decision ... ok
 test experiment::tests::experiment_clear_decision_keeps_results_and_restores_draft ... ok
 test experiment::tests::experiment_set_arm_result_requires_nonempty_and_marks_done ... ok
 test experiment::tests::experiment_set_arm_status_rejects_done_and_unknown ... ok
@@ -28,21 +27,21 @@ test gateway_tests::base64_matches_rfc4648_vectors_and_rejects_invalid_input ...
 test gateway_tests::artifact_content_decodes_both_layers_and_handles_empty_content ... ok
 test gateway_tests::live_gateway_responses_parse ... ignored, requires a live Loom gateway on localhost:5006
 test gateway_tests::model_and_tool_fields_match_protojson_names ... ok
-test gateway_tests::config_parses_real_gateway_shape_and_minimal_tls_response ... ok
-test gateway_tests::providers_mark_only_the_active_provider ... ok
-test experiment::tests::experiment_load_resets_running_arms_to_defined ... ok
 test gateway_tests::provider_config_is_nested_and_active_comes_from_response ... ok
-test gateway_tests::session_detail_preserves_camel_case_fields_and_fractional_cost ... ok
+test gateway_tests::config_parses_real_gateway_shape_and_minimal_tls_response ... ok
+test experiment::tests::experiment_load_resets_running_arms_to_defined ... ok
+test gateway_tests::providers_mark_only_the_active_provider ... ok
 test gateway_tests::trace_and_artifact_stats_preserve_string_int64s ... ok
 test gateway_tests::storage_unwraps_status_and_reports_error_and_latency ... ok
+test gateway_tests::session_detail_preserves_camel_case_fields_and_fractional_cost ... ok
+test execution_admission_tests::command_matrix_uses_only_the_disposable_peer ... ok
 test knowledge::tests::agent_overwrites_status_bypass_unsupported_types_and_large_notes_rejected ... ok
 test knowledge::tests::duplicate_ids_invalid_frontmatter_and_oversize_load_preserve_files ... ok
 test knowledge::tests::create_save_search_history_and_provenance ... ok
-test execution_admission_tests::command_matrix_uses_only_the_disposable_peer ... ok
 test knowledge::tests::real_vault_read_only_smoke ... ignored, manual check of the local vault; ordinary unit tests must not depend on user data
 test knowledge::tests::archive_hides_and_restores_without_deleting_the_file ... ok
-test knowledge::tests::recovery_is_idempotent_and_conflicts_preflight_all_files ... ok
 test knowledge::tests::fixtures_remain_hidden_and_unchanged_in_notes_edges_activity_and_export ... ok
+test knowledge::tests::recovery_is_idempotent_and_conflicts_preflight_all_files ... ok
 test knowledge::tests::links_backlinks_duplicates_self_links_and_unlink ... ok
 test knowledge::tests::stale_ledger_and_external_edits_never_overwritten ... ok
 test knowledge::tests::relation_only_edits_change_the_vault_signature ... ok
@@ -162,5 +161,5 @@ test loom_stream::tests::timeout_inside_a_line_does_not_corrupt_accumulated_byte
 test loom_stream::tests::cancel_after_completion_data_still_reports_cancelled ... ok
 test loom_stream::tests::cancel_during_silence_stops_the_reader ... ok
 
-test result: ok. 145 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.77s
+test result: ok. 145 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 4.36s
 
