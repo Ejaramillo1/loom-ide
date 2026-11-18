@@ -4342,7 +4342,94 @@ function renderApps() {
   addApp.className = "btn ghost small";
   addApp.textContent = "Add app…";
   addApp.addEventListener("click", openAppCreateDialog);
-  server.append(tls, renew, migrate, components, register, addApp);
+  const costs = document.createElement("button");
+  costs.type = "button";
+  costs.className = "btn ghost small";
+  costs.textContent = "Costs";
+  costs.addEventListener("click", () => {
+    const dialog = $("#knowledge-dialog") as HTMLDialogElement;
+    dialog.replaceChildren();
+    const h2 = document.createElement("h2");
+    h2.textContent = "Cost report";
+    dialog.append(h2);
+    const body = document.createElement("div");
+    body.className = "mcp-tools";
+    const r = costReport();
+    body.append(Object.assign(document.createElement("p"), {
+      textContent: `IDE-recorded turns: $${r.total.toFixed(4)} USD across ${r.runCount} runs (${r.uncosted} without a recorded cost). Sessions: $${r.sessionTotal.toFixed(4)} USD across ${r.sessionCount} sessions.`,
+    }));
+    const scope = document.createElement("p");
+    scope.className = "wd-sub-label";
+    scope.textContent =
+      "This is the IDE's own record plus the server's per-session totals. Loom exposes no cost-summary endpoint, so this is not complete billing and not an enforceable spending cap.";
+    body.append(scope);
+    if (r.workRows.length > 0) {
+      const h3 = document.createElement("h3");
+      h3.textContent = "Per work item";
+      body.append(h3);
+      for (const [workId, usd] of r.workRows) {
+        const title = workItems.find((w) => w.id === workId)?.title ?? workId;
+        body.append(Object.assign(document.createElement("p"), {
+          textContent: `${title}: $${usd.toFixed(4)} USD`,
+        }));
+      }
+    }
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "btn ghost";
+    close.textContent = "Close";
+    close.addEventListener("click", () => dialog.close());
+    body.append(close);
+    dialog.append(body);
+    dialog.showModal();
+  });
+  const pending = document.createElement("button");
+  pending.type = "button";
+  pending.className = "btn ghost small";
+  pending.textContent = "Pending requests";
+  pending.addEventListener("click", () => {
+    const dialog = $("#knowledge-dialog") as HTMLDialogElement;
+    dialog.replaceChildren();
+    const h2 = document.createElement("h2");
+    h2.textContent = "Pending requests";
+    dialog.append(h2);
+    const body = document.createElement("div");
+    body.className = "mcp-tools";
+    const scope = document.createElement("p");
+    scope.className = "wd-sub-label";
+    scope.textContent =
+      "HITL requests arrive only through the live stream — Loom has no list endpoint. This ledger records every request the IDE observed; answer or approve from the chat card, and the status here updates.";
+    body.append(scope);
+    if (pendingHits.length === 0) {
+      body.append(Object.assign(document.createElement("p"), { textContent: "No requests observed yet." }));
+    }
+    for (const p of [...pendingHits].reverse()) {
+      const row = document.createElement("div");
+      row.className = "mcp-tool";
+      const head = document.createElement("div");
+      head.className = "mcp-tool-head";
+      head.append(Object.assign(document.createElement("strong"), {
+        textContent: `${p.status === "resolved" ? "✓" : "•"} ${p.kind} · ${new Date(p.at).toLocaleString()}`,
+      }));
+      row.append(head);
+      row.append(Object.assign(document.createElement("p"), { textContent: p.summary }));
+      const meta = [p.sessionId ? `session ${p.sessionId.slice(0, 8)}` : null, p.agentId ? `agent ${p.agentId.slice(0, 8)}` : null]
+        .filter(Boolean)
+        .join(" · ");
+      if (meta) row.append(Object.assign(document.createElement("p"), { textContent: meta, className: "wd-sub-label" }));
+      row.append(Object.assign(document.createElement("p"), { textContent: p.key, className: "wd-sub-label" }));
+      body.append(row);
+    }
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "btn ghost";
+    close.textContent = "Close";
+    close.addEventListener("click", () => dialog.close());
+    body.append(close);
+    dialog.append(body);
+    dialog.showModal();
+  });
+  server.append(tls, renew, migrate, components, register, addApp, costs, pending);
   list.append(server);
 }
 
@@ -5766,6 +5853,11 @@ function renderHitlCard(
   const isApproval = hitl.kind === "approval" || hitl.request_type === "approval";
   const isResource = hitl.kind === "resource";
 
+  // Record the observed request in the local pending ledger so it can be
+  // revisited even after the stream ends (QC-07 closure; the server has
+  // no list endpoint).
+  trackPendingHit(hitl, st);
+
   const head = document.createElement("strong");
   head.className = "chat-clarification-title";
   head.textContent = isApproval ? "Approval requested" : isResource ? "Resource hold" : "A question for you";
@@ -5826,6 +5918,7 @@ function renderHitlCard(
       const sid = st.sessionId ?? activeStreamSessionId;
       if (!sid) throw new Error("The conversation session is not known yet — no answer was sent.");
       await answerClarification(sid, hitl.question_id ?? "", answer);
+      resolvePendingHit(hitl.request_id?.trim() || hitl.question_id?.trim() || "");
       finishCard("Answered — the agent continues.", false);
     } catch (err) {
       const text = `Could not deliver the answer: ${err instanceof Error ? err.message : String(err)}`;
@@ -5841,6 +5934,7 @@ function renderHitlCard(
     for (const control of controls) control.disabled = true;
     try {
       await respondHumanRequest(hitl.request_id, status);
+      resolvePendingHit(hitl.request_id?.trim() || "");
       finishCard(status === "approved" ? "Approved — the hold is released." : "Denied — the hold is released.", false);
     } catch (err) {
       const text = `Could not answer the hold: ${err instanceof Error ? err.message : String(err)}`;
@@ -6723,6 +6817,81 @@ function saveRunRecords() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Pending-request ledger (QC-07/W-? closure): HITL requests arrive only
+// through the live stream (Loom exposes no list endpoint), so the IDE
+// records each one it observes and lets the human revisit them here.
+// This is a local, stream-derived ledger — not a server poll.
+// ---------------------------------------------------------------------------
+
+interface PendingHit {
+  key: string;
+  kind: "approval" | "resource" | "question";
+  summary: string;
+  sessionId: string | null;
+  agentId: string | null;
+  at: number;
+  status: "pending" | "resolved";
+}
+
+const PENDING_KEY = "loom-ide-tauri:pending-hits";
+
+let pendingHits: PendingHit[] = [];
+
+function loadPendingHits() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) throw new Error("pending ledger is not an array");
+    pendingHits = (parsed as PendingHit[]).filter(
+      (p) => p && typeof p === "object" && typeof p.key === "string" && typeof p.status === "string",
+    );
+  } catch {
+    pendingHits = [];
+  }
+}
+
+function savePendingHits() {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify(pendingHits.slice(-200)));
+  } catch {
+    /* best-effort */
+  }
+}
+
+function trackPendingHit(
+  hitl: { request_id?: string; question_id?: string; question?: string; summary?: string; kind?: string; request_type?: string },
+  st: { sessionId: string | null; agentId: string | null },
+) {
+  const key = hitl.request_id?.trim() || hitl.question_id?.trim() || "";
+  if (!key || pendingHits.some((p) => p.key === key)) return;
+  const kind =
+    hitl.kind === "approval" || hitl.request_type === "approval"
+      ? "approval"
+      : hitl.kind === "resource"
+        ? "resource"
+        : "question";
+  pendingHits.push({
+    key,
+    kind,
+    summary: hitl.question?.trim() || hitl.summary?.trim() || "(no summary)",
+    sessionId: st.sessionId,
+    agentId: st.agentId,
+    at: Date.now(),
+    status: "pending",
+  });
+  savePendingHits();
+}
+
+function resolvePendingHit(key: string) {
+  const p = pendingHits.find((h) => h.key === key);
+  if (p && p.status === "pending") {
+    p.status = "resolved";
+    savePendingHits();
+  }
+}
+
 function recordRunStart(
   record: Omit<RunRecord, "id" | "endedAt" | "status" | "partial">,
 ): string {
@@ -6747,8 +6916,7 @@ function recordRunSettle(
     traceId?: string | null;
     sessionId?: string | null;
   },
-) {
-  const run = runRecords.find((r) => r.id === id);
+) {  const run = runRecords.find((r) => r.id === id);
   if (!run) return;
   run.status = update.status;
   run.partial = update.partial;
@@ -6765,6 +6933,27 @@ function recordRunSettle(
     turns only — not complete billing, not an enforceable cap. */
 function recordedTotalUsd(): number {
   return runRecords.reduce((sum, r) => sum + (typeof r.costUsd === "number" ? r.costUsd : 0), 0);
+}
+
+/** An aggregate cost report over the IDE's durable run records and the
+    server's per-session totals. Scope is stated in the UI: IDE-recorded
+    turns plus session totals — not complete server billing (Loom exposes
+    no cost-summary endpoint) and not an enforceable spending cap. */
+function costReport() {
+  const costed = runRecords.filter((r) => typeof r.costUsd === "number" && r.costUsd !== null);
+  const uncosted = runRecords.length - costed.length;
+  const total = costed.reduce((sum, r) => sum + (r.costUsd as number), 0);
+  const byWork = new Map<string, number>();
+  for (const r of costed) {
+    const key = r.workId ?? "(no work item)";
+    byWork.set(key, (byWork.get(key) ?? 0) + (r.costUsd as number));
+  }
+  const workRows = [...byWork.entries()].sort((a, b) => b[1] - a[1]);
+  const sessionTotal = sessions.reduce(
+    (sum, s) => sum + (typeof (s as { total_cost_usd?: number }).total_cost_usd === "number" ? (s as { total_cost_usd?: number }).total_cost_usd! : 0),
+    0,
+  );
+  return { total, uncosted, runCount: runRecords.length, workRows, sessionTotal, sessionCount: sessions.length };
 }
 
 function renderChatMessages(msgs: CachedChatMsg[]) {
@@ -8385,6 +8574,7 @@ async function init() {
   await refreshSessions();
   loadChatCache();
   loadRunRecords();
+  loadPendingHits();
   loadOwnershipMaps();
   syncSessionToWork();
   // Restore the saved session/agent selection when no work item supplies

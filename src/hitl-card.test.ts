@@ -83,11 +83,13 @@ async function build() {
   const respondHumanRequest = vi.fn(async () => ({ status: "approved" }));
   const refreshSessions = vi.fn(async () => {});
   const scrollChat = vi.fn();
+  const trackPendingHit = vi.fn();
+  const resolvePendingHit = vi.fn();
   const document = { getElementById: () => el(), createElement: el };
   const api = new Function(
-    "document", "scrollChat", "answerClarification", "respondHumanRequest", "refreshSessions", "activeStreamSessionId",
+    "document", "scrollChat", "answerClarification", "respondHumanRequest", "refreshSessions", "activeStreamSessionId", "trackPendingHit", "resolvePendingHit",
     code + "\nreturn install();",
-  )(document, scrollChat, answerClarification, respondHumanRequest, refreshSessions, null);
+  )(document, scrollChat, answerClarification, respondHumanRequest, refreshSessions, null, trackPendingHit, resolvePendingHit);
   return { api, answerClarification, respondHumanRequest, refreshSessions };
 }
 

@@ -79,6 +79,8 @@ type ChatStubs = {
   askLoom: ReturnType<typeof vi.fn>;
   recordRunStart: ReturnType<typeof vi.fn>;
   recordRunSettle: ReturnType<typeof vi.fn>;
+  trackPendingHit: ReturnType<typeof vi.fn>;
+  resolvePendingHit: ReturnType<typeof vi.fn>;
 };
 
 function defaultStubs(): ChatStubs {
@@ -106,6 +108,8 @@ function defaultStubs(): ChatStubs {
     askLoom: vi.fn(async () => ({ text: "unary reply" })),
     recordRunStart: vi.fn(() => "run-1"),
     recordRunSettle: vi.fn(),
+    trackPendingHit: vi.fn(),
+    resolvePendingHit: vi.fn(),
   };
 }
 
@@ -167,7 +171,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     "refreshSessions", "refreshAgents", "setWorkSession",
     "renderWorkList", "renderSessionBar", "loadWorkArtifacts",
     "getLoomStatus", "answerClarification", "buildChatContext", "expandChatOnReply", "cancelLoomStream",
-    "askLoomStream", "askLoom", "recordRunStart", "recordRunSettle",
+    "askLoomStream", "askLoom", "recordRunStart", "recordRunSettle", "trackPendingHit", "resolvePendingHit",
     code + "\nreturn install();",
   )(
     document, window, (sel: string) => node(sel.slice(1)), localStorage,
@@ -180,7 +184,7 @@ async function shell(stubs: ChatStubs = defaultStubs()) {
     stubs.refreshSessions, stubs.refreshAgents, stubs.setWorkSession,
     stubs.renderWorkList, stubs.renderSessionBar, stubs.loadWorkArtifacts,
     stubs.getLoomStatus, stubs.answerClarification, stubs.buildChatContext, stubs.expandChatOnReply, cancelLoomStream,
-    stubs.askLoomStream, stubs.askLoom, stubs.recordRunStart, stubs.recordRunSettle,
+    stubs.askLoomStream, stubs.askLoom, stubs.recordRunStart, stubs.recordRunSettle, stubs.trackPendingHit, stubs.resolvePendingHit,
   );
   return { api, stubs, node, window, localStorage, cancelLoomStream };
 }
